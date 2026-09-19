@@ -1,0 +1,1 @@
+export default function Home(){return <><h1>Money, organized together.</h1><p>Open the collection link shared by your organizer.</p><p className="notice">Development preview. Digital payments are not enabled.</p></>}
