@@ -1,28 +1,47 @@
-import hashlib, os, uuid
+import hashlib, os, uuid, time
 from fastapi import FastAPI, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import create_engine, select, text, event
 from sqlalchemy.orm import sessionmaker
-from .models import User, Collection, Activity
+from .models import User, Collection, Activity, AuthSession
+from .auth import router, profile
 from .schemas import CollectionInput
 from .service import create_collection, serialize, Conflict
+from .config import load_settings
 
 
 def create_app(database_url=None):
-    if os.getenv('SENDOH_ENV') != 'development':
-        raise RuntimeError('This foundation uses development credentials. Set SENDOH_ENV=development locally; production authentication is not implemented.')
-    app = FastAPI(title='Sendoh foundation API', version='0.1.0')
-    url = database_url or os.getenv('DATABASE_URL', 'sqlite:///./sendoh.db')
-    engine = create_engine(url, connect_args={'check_same_thread': False} if url.startswith('sqlite') else {})
+    settings = load_settings(database_url)
+    app = FastAPI(title='Sendoh API', version='0.2.0')
+    url = settings.database_url
+    engine = create_engine(
+        url,
+        connect_args={'check_same_thread': False} if url.startswith('sqlite') else {},
+        pool_pre_ping=not url.startswith('sqlite'),
+    )
     if url.startswith('sqlite'):
         @event.listens_for(engine, 'connect')
         def foreign_keys(connection, _): connection.execute('PRAGMA foreign_keys=ON')
     sessions = sessionmaker(engine, expire_on_commit=False)
     app.state.engine = engine
-    web_url = os.getenv('PUBLIC_WEB_URL', 'http://localhost:3000').rstrip('/')
+    app.state.settings = settings
+    web_url = settings.public_web_url
     bearer = HTTPBearer(auto_error=False)
+
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_credentials=False,
+            allow_methods=['GET', 'POST'],
+            allow_headers=['Authorization', 'Content-Type', 'Idempotency-Key'],
+        )
+    if settings.allowed_hosts:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
 
     def database():
         with sessions() as db:
@@ -32,7 +51,11 @@ def create_app(database_url=None):
         if not credentials: raise HTTPException(401, 'Authentication required')
         digest = hashlib.sha256(credentials.credentials.encode()).hexdigest()
         user = db.scalar(select(User).where(User.token_hash == digest))
-        if not user: raise HTTPException(401, 'Invalid development credential')
+        if not user:
+            session = db.get(AuthSession, digest)
+            if session and session.expires_at > int(time.time()):
+                user = db.get(User, session.user_id)
+        if not user: raise HTTPException(401, 'Session expired or invalid. Sign in again.')
         return user
 
     @app.middleware('http')
@@ -55,13 +78,15 @@ def create_app(database_url=None):
     @app.get('/health')
     def health(db=Depends(database)):
         db.execute(text('SELECT 1'))
-        return {'status': 'ok', 'stage': 'development-foundation', 'payments_enabled': False}
+        return {'status': 'ok', 'stage': settings.environment,
+                'otp_provider': settings.otp_provider, 'payments_enabled': False}
 
     @app.get('/api/v1/me')
-    def me(user=Depends(actor)): return {'id':user.id, 'display_name':user.display_name, 'auth_mode':'development-token'}
+    def me(user=Depends(actor)): return profile(user, settings.environment)
 
     @app.post('/api/v1/collections', status_code=201)
     def create(data: CollectionInput, idempotency_key: str = Header(min_length=8,max_length=120), user=Depends(actor), db=Depends(database)):
+        if not user.display_name: raise HTTPException(409, 'Complete your profile before creating a collection.')
         try: return create_collection(db, user.id, idempotency_key, data, web_url)
         except Conflict as exc: raise HTTPException(409, str(exc))
 
@@ -84,6 +109,7 @@ def create_app(database_url=None):
     @app.get('/api/v1/me/activity')
     def activity(user=Depends(actor), db=Depends(database)):
         return [dict(id=a.id, message=a.message, created_at=a.created_at.isoformat()) for a in db.scalars(select(Activity).where(Activity.organizer_id==user.id).order_by(Activity.created_at.desc()))]
+    app.include_router(router(database, actor, bearer, settings))
     return app
 
 app = create_app()

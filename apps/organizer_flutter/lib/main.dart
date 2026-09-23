@@ -2,147 +2,768 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api.dart';
+import 'config.dart';
+import 'onboarding.dart';
 import 'create_collection.dart';
+import 'design.dart';
 
-final apiProvider = Provider<SendohApi>((ref) => throw StateError('Development session required'));
+final apiProvider =
+    Provider<SendohApi>((ref) => throw StateError('Session required'));
 void main() => runApp(const ProviderScope(child: SendohApp()));
-String money(dynamic n) => n == null ? 'No target' : '${n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
+String money(dynamic n) => n == null
+    ? 'No target'
+    : '${n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
 
 class SendohApp extends StatelessWidget {
   const SendohApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Sendoh', debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, scaffoldBackgroundColor: const Color(0xFFFAF9F6),
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B3D3B), primary: const Color(0xFF0B3D3B)),
-      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
-      filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(48, 52)))),
-    home: const DevelopmentSession(),
-  );
+      title: 'Sendoh',
+      debugShowCheckedModeBanner: false,
+      theme: sendohTheme(),
+      home: const Onboarding());
 }
+
 class DevelopmentSession extends StatefulWidget {
   const DevelopmentSession({super.key});
   @override
   State<DevelopmentSession> createState() => _DevelopmentSessionState();
 }
+
 class _DevelopmentSessionState extends State<DevelopmentSession> {
-  final url = TextEditingController(text: const String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:8000'));
-  final token = TextEditingController();
+  final url = TextEditingController(
+          text: SendohConfig.apiBaseUrl),
+      token = TextEditingController();
   String? error;
   bool busy = false;
   @override
-  void dispose() { url.dispose(); token.dispose(); super.dispose(); }
+  void dispose() {
+    url.dispose();
+    token.dispose();
+    super.dispose();
+  }
+
   Future<void> connect() async {
-    setState(() { busy = true; error = null; });
-    final api = SendohApi(url.text.trim().replaceAll(RegExp(r'/$'), ''), token.text.trim());
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    final api = SendohApi(
+        url.text.trim().replaceAll(RegExp(r'/$'), ''), token.text.trim());
     try {
       final profile = await api.request('/me');
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProviderScope(
-        overrides: [apiProvider.overrideWithValue(api)], child: Shell(name: profile['display_name'] as String))));
-    } catch (e) { if (mounted) setState(() => error = '$e'); }
-    finally { if (mounted) setState(() => busy = false); }
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => ProviderScope(
+              overrides: [apiProvider.overrideWithValue(api)],
+              child: Shell(name: profile['display_name'] as String))));
+    } catch (e) {
+      if (mounted) setState(() => error = '$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
+
   @override
-  Widget build(BuildContext context) => Scaffold(body: SafeArea(child: Center(child: SingleChildScrollView(
-    padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Icon(Icons.hub_outlined, size: 54, color: Color(0xFF0B3D3B)), const SizedBox(height: 16),
-        Text('SENDOH', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineLarge),
-        const SizedBox(height: 8), const Text('Organize money. Together.', textAlign: TextAlign.center),
-        const SizedBox(height: 32), const Text('Development connection', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8), const Text('Local foundation build. OTP and payments are not connected. This credential stays in memory.'),
-        const SizedBox(height: 24), TextField(controller: url, decoration: const InputDecoration(labelText: 'API URL')),
-        const SizedBox(height: 16), TextField(controller: token, obscureText: true, decoration: const InputDecoration(labelText: 'Development token')),
-        if (error != null) Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Text(error!, style: const TextStyle(color: Colors.red))),
-        const SizedBox(height: 24), FilledButton(onPressed: busy ? null : connect, child: Text(busy ? 'Connecting…' : 'Open organizer app')),
-      ]))))));
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(title: const Text('Development connection')),
+      body: ListView(padding: const EdgeInsets.all(24), children: [
+        const Text('Use your original token to open existing collections.'),
+        const SizedBox(height: 24),
+        TextField(
+            controller: url,
+            decoration: const InputDecoration(labelText: 'API URL')),
+        const SizedBox(height: 16),
+        TextField(
+            controller: token,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Development token')),
+        if (error != null)
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(error!,
+                  style: const TextStyle(color: SendohColors.red))),
+        const SizedBox(height: 24),
+        FilledButton(
+            onPressed: busy ? null : connect,
+            child: Text(busy ? 'Connecting…' : 'Open organizer app'))
+      ]));
 }
+
 class Shell extends ConsumerStatefulWidget {
   const Shell({super.key, required this.name});
   final String name;
   @override
   ConsumerState<Shell> createState() => _ShellState();
 }
+
 class _ShellState extends ConsumerState<Shell> {
   int tab = 0;
   late Future<List<dynamic>> items;
   @override
-  void initState() { super.initState(); items = ref.read(apiProvider).collections(); }
+  void initState() {
+    super.initState();
+    items = ref.read(apiProvider).collections();
+  }
+
   void reload() => setState(() => items = ref.read(apiProvider).collections());
   Future<void> create() async {
     final api = ref.read(apiProvider);
-    final result = await Navigator.of(context).push<Map<String,dynamic>>(MaterialPageRoute(builder: (_) => ProviderScope(overrides: [apiProvider.overrideWithValue(api)], child: const CreateCollection())));
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(
+            builder: (_) => ProviderScope(
+                overrides: [apiProvider.overrideWithValue(api)],
+                child: const CreateCollection())));
     if (!mounted || result == null) return;
     reload();
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CollectionDetail(data: result)));
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => CollectionCreated(data: result, api: api)));
   }
+
+  void open(Map<String, dynamic> data) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) =>
+              CollectionDetail(data: data, api: ref.read(apiProvider))));
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(['Sendoh', 'Activity', 'Profile'][tab])),
-    bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (value) => setState(() => tab = value), destinations: const [
-      NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-      NavigationDestination(icon: Icon(Icons.history), label: 'Activity'),
-      NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile')]),
-    body: tab == 2 ? ListView(padding: const EdgeInsets.all(24), children: [
-      Text(widget.name, style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 12), const Text('Development identity · phone verification pending'),
-      const SizedBox(height: 24), OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Disconnect')),
-    ]) : tab == 1 ? const ActivityView() : RefreshIndicator(onRefresh: () async { reload(); await items; }, child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(20), children: [
-      Text('Let’s organize your next collection', style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 8), const Text('Create a collection, invite people, and keep a clear record.'),
-      const SizedBox(height: 24), FilledButton.icon(onPressed: create, icon: const Icon(Icons.add), label: const Text('Create collection'),
-        style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE8A33D), foregroundColor: const Color(0xFF172C2B))),
-      const SizedBox(height: 28), Text('Your collections', style: Theme.of(context).textTheme.titleLarge), const SizedBox(height: 12),
-      FutureBuilder<List<dynamic>>(future: items, builder: (context, snapshot) {
-        if (snapshot.hasError) return Column(children: [Text('Could not load collections: ${snapshot.error}'), TextButton(onPressed: reload, child: const Text('Retry'))]);
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        if (snapshot.data!.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 32), child: Text('No collections yet. Your first collection will appear here.'));
-        return Column(children: snapshot.data!.map((item) => Card(child: ListTile(
-          contentPadding: const EdgeInsets.all(16), leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
-          title: Text(item['name']), subtitle: Text('${money(item['target_amount'])}\n${item['participants'].length} participants'), isThreeLine: true,
-          trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CollectionDetail(data: Map<String,dynamic>.from(item))))))).toList());
-      }),
-      const SizedBox(height: 24), const Text('Requests and Pay are included in the roadmap and arrive in later increments. Payments are not enabled in this build.'),
-    ])),
-  );
+        appBar: AppBar(
+            title: tab == 0
+                ? const SendohBrand()
+                : Text(tab == 1 ? 'Activity' : 'Profile')),
+        bottomNavigationBar: NavigationBar(
+            selectedIndex: tab,
+            onDestinationSelected: (v) => setState(() => tab = v),
+            destinations: const [
+              NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: 'Home'),
+              NavigationDestination(
+                  icon: Icon(Icons.history), label: 'Activity'),
+              NavigationDestination(
+                  icon: Icon(Icons.person_outline),
+                  selectedIcon: Icon(Icons.person),
+                  label: 'Profile')
+            ]),
+        body: tab == 2
+            ? profile()
+            : tab == 1
+                ? const ActivityView()
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      reload();
+                      await items;
+                    },
+                    child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
+                        children: [
+                          Row(children: [
+                            PersonAvatar(widget.name, radius: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  const Text('Welcome back,',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: SendohColors.secondary)),
+                                  const SizedBox(height: 4),
+                                  Text(widget.name,
+                                      style: const TextStyle(
+                                          fontSize: 21,
+                                          fontWeight: FontWeight.w600))
+                                ]))
+                          ]),
+                          const SizedBox(height: 30),
+                          const Text('Your collections',
+                              style: TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 16),
+                          FutureBuilder<List<dynamic>>(
+                              future: items,
+                              builder: (context, s) {
+                                if (s.hasError) {
+                                  return Column(children: [
+                                    const Text(
+                                        'Couldn’t load your collections.'),
+                                    TextButton(
+                                        onPressed: reload,
+                                        child: const Text('Try again'))
+                                  ]);
+                                }
+                                if (!s.hasData) {
+                                  return const Padding(
+                                      padding: EdgeInsets.all(40),
+                                      child: Center(
+                                          child: CircularProgressIndicator()));
+                                }
+                                if (s.data!.isEmpty) {
+                                  return const EmptyState(
+                                      title:
+                                          'Your first collection starts here',
+                                      message:
+                                          'Bring people together for a shared purpose. Create a collection and share one link.');
+                                }
+                                return Column(
+                                    children: s.data!.asMap().entries.map((e) {
+                                  final c = Map<String, dynamic>.from(e.value);
+                                  return Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 14),
+                                      child: CollectionCard(
+                                          data: c,
+                                          featured: e.key == 0,
+                                          onTap: () => open(c)));
+                                }).toList());
+                              }),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                              onPressed: create,
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: SendohColors.orange,
+                                  foregroundColor: SendohColors.ink),
+                              icon: const Icon(Icons.add, size: 21),
+                              label: const Text('Create collection')),
+                        ])),
+      );
+  Widget profile() => ListView(padding: const EdgeInsets.all(24), children: [
+        Center(child: PersonAvatar(widget.name, radius: 36)),
+        const SizedBox(height: 14),
+        Text(widget.name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 28),
+        SurfaceCard(
+            child: Column(children: [
+          const SummaryRow('Account', 'Sendoh organizer'),
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.history),
+              title: const Text('Activity', style: TextStyle(fontSize: 14)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => setState(() => tab = 1))
+        ])),
+        const SizedBox(height: 28),
+        OutlinedButton(
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+              try {
+                await ref.read(apiProvider).request('/auth/logout', body: {});
+              } catch (_) {
+                if (mounted) {
+                  messenger.showSnackBar(const SnackBar(
+                      content: Text(
+                          'Could not reach server. Your session will expire automatically.')));
+                }
+              }
+              if (mounted) {
+                navigator.pop();
+              }
+            },
+            child: const Text('Sign out'))
+      ]);
 }
+
+class CollectionCard extends StatelessWidget {
+  const CollectionCard(
+      {super.key,
+      required this.data,
+      required this.onTap,
+      this.featured = false});
+  final Map<String, dynamic> data;
+  final VoidCallback onTap;
+  final bool featured;
+  @override
+  Widget build(BuildContext context) {
+    final target = data['target_amount'] as int?;
+    final collected = (data['collected_amount'] as num).toDouble();
+    final color = featured ? Colors.white : SendohColors.ink;
+    return Material(
+        color: featured ? SendohColors.teal : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color:
+                            featured ? SendohColors.teal : SendohColors.border,
+                        width: .7)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text(data['name'],
+                                style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: color))),
+                        const SizedBox(width: 8),
+                        StatusBadge(
+                            data['status'] == 'ACTIVE' ? 'ACTIVE' : 'DRAFT')
+                      ]),
+                      const SizedBox(height: 24),
+                      Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.end,
+                          spacing: 4,
+                          children: [
+                            Text(money(data['collected_amount']),
+                                style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    color: color)),
+                            if (target != null)
+                              Text('/ ${money(target)}',
+                                  style: TextStyle(fontSize: 12, color: color))
+                          ]),
+                      const SizedBox(height: 12),
+                      if (target != null)
+                        ClipRRect(
+                            borderRadius: BorderRadius.circular(5),
+                            child: LinearProgressIndicator(
+                                value: (collected / target)
+                                    .clamp(0.0, 1.0)
+                                    .toDouble(),
+                                minHeight: 7,
+                                backgroundColor: featured
+                                    ? const Color(0xFF316260)
+                                    : SendohColors.tealSoft,
+                                color: collected >= target
+                                    ? SendohColors.green
+                                    : featured
+                                        ? const Color(0xFF5DA59B)
+                                        : SendohColors.teal)),
+                      const SizedBox(height: 14),
+                      Text(
+                          '${(data['participants'] as List).length} participants · ${displayDate(data['deadline_at'])}',
+                          style: TextStyle(fontSize: 12, color: color)),
+                    ]))));
+  }
+}
+
 class ActivityView extends ConsumerStatefulWidget {
   const ActivityView({super.key});
   @override
   ConsumerState<ActivityView> createState() => _ActivityViewState();
 }
+
 class _ActivityViewState extends ConsumerState<ActivityView> {
   late Future<dynamic> activity;
   @override
-  void initState() { super.initState(); activity = ref.read(apiProvider).request('/me/activity'); }
+  void initState() {
+    super.initState();
+    activity = ref.read(apiProvider).request('/me/activity');
+  }
+
   @override
-  Widget build(BuildContext context) => FutureBuilder<dynamic>(future: activity, builder: (context,s) {
-    if(s.hasError) return Center(child: TextButton(onPressed: () => setState(() => activity = ref.read(apiProvider).request('/me/activity')), child: const Text('Could not load activity. Retry')));
-    if(!s.hasData) return const Center(child:CircularProgressIndicator());
-    final entries = s.data as List;
-    if(entries.isEmpty) return const Center(child:Text('No activity yet.'));
-    return ListView(children: entries.map((e) => ListTile(leading: const Icon(Icons.add_circle_outline), title:Text(e['message']), subtitle:Text(e['created_at']))).toList());
-  });
+  Widget build(BuildContext context) => FutureBuilder<dynamic>(
+      future: activity,
+      builder: (context, s) {
+        if (s.hasError) {
+          return Center(
+              child: TextButton(
+                  onPressed: () => setState(() =>
+                      activity = ref.read(apiProvider).request('/me/activity')),
+                  child: const Text('Couldn’t load activity. Try again')));
+        }
+        if (!s.hasData) return const Center(child: CircularProgressIndicator());
+        final entries = s.data as List;
+        if (entries.isEmpty) {
+          return const EmptyState(
+              title: 'No activity yet',
+              message: 'Updates from your collections will appear here.',
+              icon: Icons.history);
+        }
+        return RefreshIndicator(
+            onRefresh: () async {
+              setState(() =>
+                  activity = ref.read(apiProvider).request('/me/activity'));
+              await activity;
+            },
+            child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(22),
+                children: [
+                  const Text('All updates',
+                      style: TextStyle(
+                          fontSize: 13, color: SendohColors.secondary)),
+                  const SizedBox(height: 20),
+                  ...entries.map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const CircleAvatar(
+                                radius: 18,
+                                backgroundColor: SendohColors.tealSoft,
+                                child: Icon(Icons.add,
+                                    size: 20, color: SendohColors.teal)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Text(e['message'],
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500)),
+                                  const SizedBox(height: 5),
+                                  Text(displayDate(e['created_at']),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: SendohColors.muted))
+                                ]))
+                          ])))
+                ]));
+      });
 }
-class CollectionDetail extends StatelessWidget {
-  const CollectionDetail({super.key, required this.data});
-  final Map<String,dynamic> data;
+
+Future<void> copyCollectionLink(BuildContext context, String link) async {
+  await Clipboard.setData(ClipboardData(text: link));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Collection link copied')));
+  }
+}
+
+class CollectionCreated extends StatelessWidget {
+  const CollectionCreated({super.key, required this.data, required this.api});
+  final Map<String, dynamic> data;
+  final SendohApi api;
   @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(data['name'])), body: ListView(padding: const EdgeInsets.all(24), children: [
-    Text(data['status'], style: const TextStyle(color: Color(0xFF0B3D3B), fontWeight: FontWeight.bold)), const SizedBox(height: 16),
-    Text(money(data['collected_amount']), style: Theme.of(context).textTheme.headlineLarge),
-    Text(data['target_amount'] == null ? 'Contributed · no target set' : 'Contributed toward ${money(data['target_amount'])}'),
-    const SizedBox(height: 16), Text(data['description'] as String),
-    const SizedBox(height: 12), Text(data['deadline_at'] == null ? 'No deadline' : 'Deadline: ${data['deadline_at']}'),
-    const SizedBox(height: 24), if (data['share_url'] != null) ...[
-      SelectableText(data['share_url']), const SizedBox(height: 12),
-      OutlinedButton.icon(onPressed: () async { await Clipboard.setData(ClipboardData(text:data['share_url'])); if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Collection link copied'))); }, icon:const Icon(Icons.copy), label:const Text('Copy collection link')),
-    ],
-    const SizedBox(height: 24), Text('Participants',style:Theme.of(context).textTheme.titleLarge),
-    if ((data['participants'] as List).isEmpty) const Padding(padding:EdgeInsets.symmetric(vertical:16),child:Text('No participants added.')),
-    ...(data['participants'] as List).map((p) => ListTile(contentPadding:EdgeInsets.zero, leading: const Icon(Icons.person_outline), title:Text(p['name']),subtitle:Text(p['expected_amount']==null?'Any amount':'Expected: ${money(p['expected_amount'])}'))),
-    const SizedBox(height:24), const Text('Digital contributions, final cash reconciliation, and settlement will be connected in the next increments.'),
-  ]));
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(),
+      body: SafeArea(
+          child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
+              children: [
+            const SizedBox(height: 20),
+            const Center(
+                child: CircleAvatar(
+                    radius: 38,
+                    backgroundColor: SendohColors.teal,
+                    child: Icon(Icons.check, color: Colors.white, size: 40))),
+            const SizedBox(height: 24),
+            const Text('Collection created!',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            const Text('Now invite people to contribute.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: SendohColors.secondary)),
+            const SizedBox(height: 30),
+            SurfaceCard(
+                child: Column(children: [
+              Row(children: [
+                const CollectionSymbol(),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Text(data['name'],
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)))
+              ]),
+              const SizedBox(height: 12),
+              SummaryRow('Target', money(data['target_amount'])),
+              SummaryRow('Deadline', displayDate(data['deadline_at'])),
+              SummaryRow(
+                  'Participants', '${(data['participants'] as List).length}')
+            ])),
+            const SizedBox(height: 24),
+            const Text('One link for everyone',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            SurfaceCard(
+                padding: const EdgeInsets.all(12),
+                child: Row(children: [
+                  Expanded(
+                      child: SelectableText(data['share_url'] ?? '',
+                          style: const TextStyle(
+                              fontSize: 12, color: SendohColors.teal))),
+                  IconButton(
+                      tooltip: 'Copy collection link',
+                      onPressed: () =>
+                          copyCollectionLink(context, data['share_url']),
+                      icon: const Icon(Icons.copy_outlined, size: 19))
+                ])),
+            const SizedBox(height: 22),
+            FilledButton.icon(
+                onPressed: () => copyCollectionLink(context, data['share_url']),
+                icon: const Icon(Icons.link, size: 18),
+                label: const Text('Copy collection link')),
+            const SizedBox(height: 12),
+            OutlinedButton(
+                onPressed: () => Navigator.of(context).pushReplacement(
+                    MaterialPageRoute<void>(
+                        builder: (_) =>
+                            CollectionDetail(data: data, api: api))),
+                child: const Text('View collection')),
+            const SizedBox(height: 18),
+            const Text(
+                'Share the copied link in WhatsApp or any messaging app.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 12, height: 1.6, color: SendohColors.muted))
+          ])));
+}
+
+class CollectionDetail extends StatefulWidget {
+  const CollectionDetail({super.key, required this.data, required this.api});
+  final Map<String, dynamic> data;
+  final SendohApi api;
+  @override
+  State<CollectionDetail> createState() => _CollectionDetailState();
+}
+
+class _CollectionDetailState extends State<CollectionDetail> {
+  late Map<String, dynamic> data;
+  int tab = 0;
+  String filter = 'All';
+  bool busy = false;
+  String? error;
+  @override
+  void initState() {
+    super.initState();
+    data = widget.data;
+  }
+
+  Future<void> refresh() async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final result = await widget.api.request('/collections/${data['id']}');
+      if (mounted) setState(() => data = Map<String, dynamic>.from(result));
+    } catch (_) {
+      if (mounted) setState(() => error = 'Couldn’t refresh this collection.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  void participant(Map<String, dynamic> p) => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+          child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: PersonAvatar(p['name'], radius: 28)),
+                    const SizedBox(height: 14),
+                    Text(p['name'],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 21, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 20),
+                    SummaryRow(
+                        'Expected',
+                        p['expected_amount'] == null
+                            ? 'Any amount'
+                            : money(p['expected_amount'])),
+                    const SummaryRow('Contributed', '0 FCFA'),
+                    if (p['expected_amount'] != null)
+                      SummaryRow('Remaining', money(p['expected_amount'])),
+                    const Center(child: StatusBadge('Pending', pending: true)),
+                    const SizedBox(height: 20),
+                    const Text('No contributions recorded yet.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 13, color: SendohColors.secondary))
+                  ]))));
+  @override
+  Widget build(BuildContext context) {
+    final target = data['target_amount'] as int?;
+    final collected = data['collected_amount'] as int;
+    final people = data['participants'] as List;
+    final pct = target == null ? 0.0 : collected / target * 100;
+    return Scaffold(
+        appBar: AppBar(title: Text(data['name']), actions: [
+          IconButton(
+              tooltip: 'Refresh',
+              onPressed: busy ? null : refresh,
+              icon: const Icon(Icons.refresh, size: 21))
+        ]),
+        body: RefreshIndicator(
+            onRefresh: refresh,
+            child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
+                children: [
+                  Align(
+                      alignment: Alignment.centerRight,
+                      child: StatusBadge(
+                          data['status'] == 'ACTIVE' ? 'ACTIVE' : 'DRAFT')),
+                  const SizedBox(height: 20),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    metric('Target', money(target)),
+                    metric('Collected', money(collected)),
+                    metric(
+                        target != null && collected > target
+                            ? 'Above target'
+                            : 'Remaining',
+                        target == null
+                            ? '—'
+                            : money((target - collected).abs()))
+                  ]),
+                  const SizedBox(height: 28),
+                  if (target != null) ...[
+                    RichText(
+                        text: TextSpan(
+                            style: const TextStyle(
+                                color: SendohColors.secondary, fontSize: 12),
+                            children: [
+                          TextSpan(
+                              text: '${pct.toStringAsFixed(1)}% ',
+                              style: const TextStyle(
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.w600,
+                                  color: SendohColors.teal)),
+                          const TextSpan(text: 'of target collected')
+                        ])),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: LinearProgressIndicator(
+                            value: (pct / 100).clamp(0.0, 1.0).toDouble(),
+                            minHeight: 8,
+                            backgroundColor: SendohColors.border,
+                            color: pct >= 100
+                                ? SendohColors.green
+                                : SendohColors.teal)),
+                    const SizedBox(height: 14)
+                  ],
+                  Text('${people.length} participants',
+                      style: const TextStyle(
+                          fontSize: 12, color: SendohColors.secondary)),
+                  const SizedBox(height: 20),
+                  if (data['share_url'] != null)
+                    OutlinedButton.icon(
+                        onPressed: () =>
+                            copyCollectionLink(context, data['share_url']),
+                        icon: const Icon(Icons.share_outlined, size: 18),
+                        label: const Text('Copy collection link')),
+                  const SizedBox(height: 22),
+                  Row(
+                      children: ['Overview', 'Contributions']
+                          .asMap()
+                          .entries
+                          .map((e) => Expanded(
+                              child: InkWell(
+                                  onTap: () => setState(() => tab = e.key),
+                                  child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
+                                      decoration: BoxDecoration(
+                                          border: Border(
+                                              bottom: BorderSide(
+                                                  color: tab == e.key
+                                                      ? SendohColors.teal
+                                                      : SendohColors.border,
+                                                  width:
+                                                      tab == e.key ? 2 : .7))),
+                                      child: Text(e.value,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: tab == e.key
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                              color: SendohColors.teal))))))
+                          .toList()),
+                  const SizedBox(height: 18),
+                  if (tab == 0) ...[
+                    if ((data['description'] as String).isNotEmpty) ...[
+                      Text(data['description'],
+                          style: const TextStyle(
+                              fontSize: 14,
+                              height: 1.7,
+                              color: SendohColors.secondary)),
+                      const SizedBox(height: 18)
+                    ],
+                    SummaryRow('Deadline', displayDate(data['deadline_at'])),
+                    SummaryRow(
+                        'Contribution',
+                        data['expected_amount'] == null
+                            ? 'Any amount'
+                            : money(data['expected_amount'])),
+                    const Divider(),
+                    const EmptyState(
+                        title: 'No contributions yet',
+                        message: 'Payment collection is not available yet.',
+                        icon: Icons.receipt_long_outlined)
+                  ] else ...[
+                    SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                            children: ['All', 'Pending', 'Partial', 'Paid']
+                                .map((v) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                        label: Text(v,
+                                            style:
+                                                const TextStyle(fontSize: 12)),
+                                        selected: filter == v,
+                                        onSelected: (_) =>
+                                            setState(() => filter = v))))
+                                .toList())),
+                    const SizedBox(height: 16),
+                    if (people.isEmpty ||
+                        filter == 'Paid' ||
+                        filter == 'Partial')
+                      const EmptyState(
+                          title: 'No matching contributions',
+                          message:
+                              'Participant contributions will appear here.')
+                    else
+                      ...people.map((raw) {
+                        final p = Map<String, dynamic>.from(raw);
+                        return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: PersonAvatar(p['name'], radius: 16),
+                            title: Text(p['name'],
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w500)),
+                            subtitle: Text(
+                                p['expected_amount'] == null
+                                    ? 'Any amount'
+                                    : '0 / ${money(p['expected_amount'])}',
+                                style: const TextStyle(fontSize: 12)),
+                            trailing:
+                                const StatusBadge('Pending', pending: true),
+                            onTap: () => participant(p));
+                      })
+                  ],
+                  if (error != null)
+                    Text(error!,
+                        style: const TextStyle(color: SendohColors.red)),
+                ])));
+  }
+
+  Widget metric(String label, String value) => Expanded(
+      child: Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                style:
+                    const TextStyle(fontSize: 11, color: SendohColors.muted)),
+            const SizedBox(height: 7),
+            Text(value,
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))
+          ])));
 }

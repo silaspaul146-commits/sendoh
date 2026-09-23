@@ -51,3 +51,12 @@ jobs:
         with:
           channel: stable
       - run: ./scripts/bootstrap_flutter.sh
+      - name: Build staging Android APK
+        working-directory: apps/organizer_flutter
+        run: flutter build apk --release --dart-define=API_URL=${{ vars.SENDOH_STAGING_API_URL || 'https://sendoh-api-staging.onrender.com' }}
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sendoh-android-staging
+          path: apps/organizer_flutter/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

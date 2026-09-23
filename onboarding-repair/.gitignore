@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+*.db-*
+node_modules/
+.next/
+.dart_tool/
+build/
+*.tsbuildinfo
+.DS_Store
+
+# Local development verification codes
+.dev-otp/

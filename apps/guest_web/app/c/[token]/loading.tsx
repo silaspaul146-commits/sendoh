@@ -1,0 +1,1 @@
+export default function Loading(){return <section className="screen loading-screen" aria-busy="true" aria-label="Loading collection"><div className="skeleton heading"/><div className="skeleton"/><div className="skeleton"/><div className="skeleton large"/><p>Loading collection…</p></section>}

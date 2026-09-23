@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: sendoh-api-staging
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: services/backend
+    buildCommand: pip install -r requirements.lock
+    preDeployCommand: python -m alembic upgrade head
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: SENDOH_ENV
+        value: staging
+      - key: OTP_PROVIDER
+        value: log
+      - key: ALLOW_STAGING_LOG_OTP
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: PUBLIC_WEB_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false

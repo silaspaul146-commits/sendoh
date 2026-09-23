@@ -1,86 +1,438 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'main.dart' show apiProvider, money;
+import 'design.dart';
 
 class CreateCollection extends ConsumerStatefulWidget {
   const CreateCollection({super.key});
   @override
   ConsumerState<CreateCollection> createState() => _CreateCollectionState();
 }
+
 class _CreateCollectionState extends ConsumerState<CreateCollection> {
   final form = GlobalKey<FormState>();
-  final name = TextEditingController();
-  final description = TextEditingController();
-  final target = TextEditingController();
-  final expected = TextEditingController();
-  final participant = TextEditingController();
+  final name = TextEditingController(),
+      description = TextEditingController(),
+      target = TextEditingController(),
+      expected = TextEditingController(),
+      participant = TextEditingController();
   final List<String> people = [];
   String mode = 'ANY_AMOUNT';
   DateTime? deadline;
   int step = 0;
-  bool busy = false;
+  bool busy = false, submitted = false;
   String? error;
-  String key = List.generate(24, (_) => Random.secure().nextInt(16).toRadixString(16)).join();
-  bool submitted = false;
+  String key =
+      List.generate(24, (_) => Random.secure().nextInt(16).toRadixString(16))
+          .join();
   @override
-  void dispose() { for(final c in [name,description,target,expected,participant]) { c.dispose(); } super.dispose(); }
+  void dispose() {
+    for (final c in [name, description, target, expected, participant]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
   String? amount(String? value, {bool required = false}) {
-    if(value == null || value.trim().isEmpty) return required ? 'Enter an amount' : null;
-    final n=int.tryParse(value.trim());
-    return n==null || n<=0 || n>1000000000000 ? 'Enter a positive whole FCFA amount' : null;
+    if (value == null || value.trim().isEmpty) {
+      return required ? 'Enter an amount' : null;
+    }
+    final n = int.tryParse(value.trim());
+    return n == null || n <= 0 || n > 1000000000000
+        ? 'Enter a positive whole FCFA amount'
+        : null;
   }
+
   void changed() {
-    if(submitted) { key=List.generate(24, (_) => Random.secure().nextInt(16).toRadixString(16)).join(); submitted=false; }
+    if (submitted) {
+      key = List.generate(
+          24, (_) => Random.secure().nextInt(16).toRadixString(16)).join();
+      submitted = false;
+    }
   }
+
+  void addPerson() {
+    final value = participant.text.trim();
+    if (value.isEmpty) return;
+    if (people.length >= 200) {
+      setState(() => error = 'You can add up to 200 participants.');
+      return;
+    }
+    changed();
+    setState(() {
+      people.add(value);
+      error = null;
+      participant.clear();
+    });
+  }
+
   Future<void> save() async {
-    setState(() { busy=true; error=null; submitted=true; });
+    setState(() {
+      busy = true;
+      error = null;
+      submitted = true;
+    });
     try {
-      final data=await ref.read(apiProvider).request('/collections',key:key,body:{
-        'name':name.text.trim(),'description':description.text.trim(),'currency':'XAF',
-        'target_amount':target.text.trim().isEmpty?null:int.parse(target.text.trim()),
-        'deadline_at':deadline?.toUtc().toIso8601String(),'mode':mode,
-        'expected_amount':mode=='ANY_AMOUNT'?null:int.parse(expected.text.trim()),
-        'participants':people.map((n)=>{'name':n}).toList(),'publish':true});
-      if(mounted) Navigator.of(context).pop(Map<String,dynamic>.from(data));
-    } catch(e) { if(mounted) setState(()=>error='$e'); }
-    finally { if(mounted) setState(()=>busy=false); }
+      final data =
+          await ref.read(apiProvider).request('/collections', key: key, body: {
+        'name': name.text.trim(),
+        'description': description.text.trim(),
+        'currency': 'XAF',
+        'target_amount':
+            target.text.trim().isEmpty ? null : int.parse(target.text.trim()),
+        'deadline_at': deadline == null
+            ? null
+            : DateTime.utc(
+                    deadline!.year, deadline!.month, deadline!.day, 22, 59)
+                .toIso8601String(),
+        'mode': mode,
+        'expected_amount':
+            mode == 'ANY_AMOUNT' ? null : int.parse(expected.text.trim()),
+        'participants': people.map((n) => {'name': n}).toList(),
+        'publish': true
+      });
+      if (mounted) Navigator.of(context).pop(Map<String, dynamic>.from(data));
+    } catch (e) {
+      if (mounted) setState(() => error = '$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
+
+  Future<void> pickDeadline() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final initial =
+        deadline != null && !deadline!.isBefore(today) ? deadline! : today;
+    final d = await showDatePicker(
+        context: context,
+        initialDate: initial,
+        firstDate: today,
+        lastDate: today.add(const Duration(days: 3650)));
+    if (d != null) {
+      changed();
+      setState(() => deadline = d);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(appBar:AppBar(title:const Text('Create collection')),body:SafeArea(child:Form(key:form,child:ListView(padding:const EdgeInsets.all(24),children:[
-    Text('Step ${step+1} of 3 · ${['Details','Contribution','Review'][step]}'), const SizedBox(height:12),
-    LinearProgressIndicator(value:(step+1)/3),const SizedBox(height:24),
-    if(step==0)...[
-      TextFormField(controller:name,maxLength:120,onChanged:(_)=>changed(),decoration:const InputDecoration(labelText:'Collection name'),validator:(v)=>v==null||v.trim().isEmpty?'Enter a name':null),
-      const SizedBox(height:16),TextFormField(controller:description,maxLength:2000,maxLines:3,onChanged:(_)=>changed(),decoration:const InputDecoration(labelText:'Purpose (optional)')),
-      const SizedBox(height:16),TextFormField(controller:target,keyboardType:TextInputType.number,onChanged:(_)=>changed(),validator:(v)=>amount(v),decoration:const InputDecoration(labelText:'Target in FCFA (optional)')),
-      const SizedBox(height:16),ListTile(contentPadding:EdgeInsets.zero,title:Text(deadline==null?'No deadline':'Deadline: ${deadline!.year}-${deadline!.month}-${deadline!.day}'),
-        trailing:TextButton(onPressed:() async { final d=await showDatePicker(context:context,initialDate:deadline??DateTime.now(),firstDate:DateTime.now().subtract(const Duration(days:1)),lastDate:DateTime.now().add(const Duration(days:3650))); if(d!=null) {changed();setState(()=>deadline=DateTime(d.year,d.month,d.day,23,59));} },child:const Text('Choose'))),
-      if(deadline!=null) TextButton(onPressed:(){changed();setState(()=>deadline=null);},child:const Text('Remove deadline')),
-      const Text('A deadline is a reminder. It does not automatically close the collection.'),
-    ],
-    if(step==1)...[
-      DropdownButtonFormField<String>(value:mode,decoration:const InputDecoration(labelText:'Contribution rule'),items:const [
-        DropdownMenuItem(value:'ANY_AMOUNT',child:Text('Any amount')),
-        DropdownMenuItem(value:'EXPECTED_TOTAL',child:Text('Expected total per person')),
-        DropdownMenuItem(value:'MINIMUM_TOTAL',child:Text('Minimum total per person'))],onChanged:(v){changed();setState(()=>mode=v!);}),
-      if(mode!='ANY_AMOUNT')... [const SizedBox(height:16),TextFormField(controller:expected,onChanged:(_)=>changed(),keyboardType:TextInputType.number,validator:(v)=>amount(v,required:true),decoration:const InputDecoration(labelText:'Amount per person in FCFA'))],
-      const SizedBox(height:24),Text('Participants (optional)',style:Theme.of(context).textTheme.titleMedium),const SizedBox(height:12),
-      TextField(controller:participant,maxLength:120,decoration:InputDecoration(labelText:'Participant name',suffixIcon:IconButton(icon:const Icon(Icons.add),onPressed:(){if(participant.text.trim().isNotEmpty && people.length<200){changed();setState(()=>people.add(participant.text.trim()));participant.clear();}}))),
-      ...people.asMap().entries.map((e)=>ListTile(title:Text(e.value),trailing:IconButton(icon:const Icon(Icons.close),onPressed:(){changed();setState(()=>people.removeAt(e.key));}))),
-      const Text('Participants can contribute in installments. This build supports up to 200 initial participants.'),
-    ],
-    if(step==2)...[
-      Text(name.text,style:Theme.of(context).textTheme.headlineSmall),const SizedBox(height:16),Text(description.text),
-      const SizedBox(height:16),Text('Target: ${target.text.trim().isEmpty?'No target':money(int.parse(target.text.trim()))}'),
-      Text('Deadline: ${deadline==null?'None':deadline.toString()}'),
-      Text('Contribution: ${mode=='ANY_AMOUNT'?'Any amount':money(int.parse(expected.text.trim()))}'),
-      Text('${people.length} participants'),const SizedBox(height:24),
-      const Text('Anyone with the collection link can view its public details. Participant names are not included on the public page.'),
-      const SizedBox(height:12),const Text('Creating a collection is free. Payment and settlement functionality is not enabled in this build.'),
-    ],
-    if(error!=null) Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Text(error!,style:const TextStyle(color:Colors.red))),
-    const SizedBox(height:24),FilledButton(onPressed:busy?null:(){if(step<2){if(form.currentState!.validate()) setState(()=>step++);}else{save();}},child:Text(busy?'Creating…':step==2?'Create collection':'Continue')),
-    if(step>0) TextButton(onPressed:busy?null:()=>setState(()=>step--),child:const Text('Back')),
-  ]))));
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(
+          title: const Text('Create collection'),
+          leading: IconButton(
+              tooltip: 'Back',
+              onPressed: busy
+                  ? null
+                  : () {
+                      if (step > 0) {
+                        setState(() => step--);
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+              icon: const Icon(Icons.arrow_back))),
+      body: SafeArea(
+          child: Form(
+              key: form,
+              child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                              minHeight: (constraints.maxHeight - 24)
+                                  .clamp(0.0, double.infinity)
+                                  .toDouble()),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text('Step ${step + 1} of 3',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: SendohColors.muted)),
+                                const SizedBox(height: 28),
+                                if (step == 0) ...[
+                                  fieldLabel('Collection name'),
+                                  TextFormField(
+                                      controller: name,
+                                      onChanged: (_) => changed(),
+                                      maxLength: 120,
+                                      decoration: const InputDecoration(
+                                          hintText: 'e.g. Department Activity',
+                                          counterText: ''),
+                                      validator: (v) =>
+                                          v == null || v.trim().isEmpty
+                                              ? 'Enter a collection name'
+                                              : null),
+                                  const SizedBox(height: 20),
+                                  fieldLabel('Purpose (optional)'),
+                                  TextFormField(
+                                      controller: description,
+                                      onChanged: (_) => changed(),
+                                      maxLength: 2000,
+                                      maxLines: 2,
+                                      decoration: const InputDecoration(
+                                          hintText:
+                                              'What are you collecting for?',
+                                          counterText: '')),
+                                  const SizedBox(height: 20),
+                                  fieldLabel('Target amount (optional)'),
+                                  TextFormField(
+                                      controller: target,
+                                      onChanged: (_) => changed(),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly
+                                      ],
+                                      validator: (v) => amount(v),
+                                      decoration: const InputDecoration(
+                                          hintText: 'No target',
+                                          suffixText: 'FCFA')),
+                                  const SizedBox(height: 20),
+                                  fieldLabel('Deadline (optional)'),
+                                  OutlinedButton.icon(
+                                      onPressed: pickDeadline,
+                                      icon: const Icon(
+                                          Icons.calendar_today_outlined,
+                                          size: 18),
+                                      label: Text(deadline == null
+                                          ? 'Choose a date'
+                                          : displayDate(DateTime.utc(
+                                                  deadline!.year,
+                                                  deadline!.month,
+                                                  deadline!.day)
+                                              .toIso8601String()))),
+                                  if (deadline != null)
+                                    Align(
+                                        alignment: Alignment.centerRight,
+                                        child: TextButton(
+                                            onPressed: () {
+                                              changed();
+                                              setState(() => deadline = null);
+                                            },
+                                            child:
+                                                const Text('Remove deadline'))),
+                                  const SizedBox(height: 20),
+                                  fieldLabel('Contribution rule'),
+                                  DropdownButtonFormField<String>(
+                                      value: mode,
+                                      isExpanded: true,
+                                      items: const [
+                                        DropdownMenuItem(
+                                            value: 'ANY_AMOUNT',
+                                            child: Text('Any amount')),
+                                        DropdownMenuItem(
+                                            value: 'EXPECTED_TOTAL',
+                                            child: Text(
+                                                'Expected total per person')),
+                                        DropdownMenuItem(
+                                            value: 'MINIMUM_TOTAL',
+                                            child: Text(
+                                                'Minimum total per person'))
+                                      ],
+                                      onChanged: (v) {
+                                        changed();
+                                        setState(() => mode = v!);
+                                      }),
+                                  if (mode != 'ANY_AMOUNT') ...[
+                                    const SizedBox(height: 20),
+                                    fieldLabel('Suggested contribution'),
+                                    TextFormField(
+                                        controller: expected,
+                                        onChanged: (_) => changed(),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.digitsOnly
+                                        ],
+                                        validator: (v) =>
+                                            amount(v, required: true),
+                                        decoration: const InputDecoration(
+                                            hintText: '3,000',
+                                            suffixText: 'FCFA'))
+                                  ],
+                                ],
+                                if (step == 1) ...[
+                                  const Text('Who should contribute?',
+                                      style: TextStyle(
+                                          fontSize: 23,
+                                          fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                      'Add participants now, or share the collection link after creating it.',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          height: 1.7,
+                                          color: SendohColors.secondary)),
+                                  const SizedBox(height: 24),
+                                  fieldLabel('Participant name'),
+                                  TextField(
+                                      controller: participant,
+                                      maxLength: 120,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      onSubmitted: (_) => addPerson(),
+                                      decoration: InputDecoration(
+                                          hintText: 'Full name',
+                                          suffixIcon: IconButton(
+                                              tooltip: 'Add participant',
+                                              onPressed: addPerson,
+                                              icon: const Icon(Icons.add,
+                                                  color: SendohColors.teal)))),
+                                  ...people.asMap().entries.map((e) => ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading:
+                                          PersonAvatar(e.value, radius: 17),
+                                      title: Text(e.value,
+                                          style: const TextStyle(fontSize: 14)),
+                                      subtitle: Text(
+                                          mode == 'ANY_AMOUNT'
+                                              ? 'Any amount'
+                                              : money(
+                                                  int.tryParse(expected.text)),
+                                          style: const TextStyle(fontSize: 12)),
+                                      trailing: IconButton(
+                                          tooltip: 'Remove ${e.value}',
+                                          icon:
+                                              const Icon(Icons.close, size: 19),
+                                          onPressed: () {
+                                            changed();
+                                            setState(
+                                                () => people.removeAt(e.key));
+                                          }))),
+                                  if (people.isEmpty)
+                                    const EmptyState(
+                                        title: 'No participants added',
+                                        message:
+                                            'You can still create a collection and share its link.'),
+                                  const SizedBox(height: 16),
+                                  Text('${people.length} participants',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: SendohColors.muted)),
+                                ],
+                                if (step == 2) ...[
+                                  SurfaceCard(
+                                      child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                        Row(children: [
+                                          const CollectionSymbol(),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                              child: Text(name.text.trim(),
+                                                  style: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.w600)))
+                                        ]),
+                                        const Divider(),
+                                        SummaryRow(
+                                            'Target',
+                                            target.text.trim().isEmpty
+                                                ? 'No target'
+                                                : money(int.parse(
+                                                    target.text.trim()))),
+                                        SummaryRow(
+                                            'Deadline',
+                                            deadline == null
+                                                ? 'No deadline'
+                                                : displayDate(DateTime.utc(
+                                                        deadline!.year,
+                                                        deadline!.month,
+                                                        deadline!.day)
+                                                    .toIso8601String())),
+                                        SummaryRow(
+                                            mode == 'MINIMUM_TOTAL'
+                                                ? 'Minimum total per person'
+                                                : 'Suggested contribution',
+                                            mode == 'ANY_AMOUNT'
+                                                ? 'Any amount'
+                                                : money(int.parse(
+                                                    expected.text.trim()))),
+                                        SummaryRow(
+                                            'Participants', '${people.length}'),
+                                        const SummaryRow('Who can view?',
+                                            'Anyone with the link'),
+                                        if (description.text
+                                            .trim()
+                                            .isNotEmpty) ...[
+                                          const Divider(),
+                                          Text(description.text.trim(),
+                                              style: const TextStyle(
+                                                  fontSize: 13,
+                                                  height: 1.6,
+                                                  color:
+                                                      SendohColors.secondary))
+                                        ]
+                                      ])),
+                                  const SizedBox(height: 22),
+                                  const Text('You will be the organizer.',
+                                      style: TextStyle(fontSize: 13)),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                      'Creating a collection is free. Participant names stay private. Payments are not available yet.',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          height: 1.7,
+                                          color: SendohColors.secondary)),
+                                ],
+                                if (error != null)
+                                  Padding(
+                                      padding: const EdgeInsets.only(top: 18),
+                                      child: Text(error!,
+                                          style: const TextStyle(
+                                              color: SendohColors.red))),
+                                const SizedBox(height: 36),
+                                Row(children: [
+                                  if (step > 0) ...[
+                                    Expanded(
+                                        child: OutlinedButton(
+                                            onPressed: busy
+                                                ? null
+                                                : () => setState(() => step--),
+                                            child: const Text('Back'))),
+                                    const SizedBox(width: 12)
+                                  ],
+                                  Expanded(
+                                      flex: 2,
+                                      child: FilledButton(
+                                          style: FilledButton.styleFrom(
+                                              backgroundColor: step == 2
+                                                  ? SendohColors.orange
+                                                  : SendohColors.teal,
+                                              foregroundColor: step == 2
+                                                  ? SendohColors.ink
+                                                  : Colors.white),
+                                          onPressed: busy
+                                              ? null
+                                              : () {
+                                                  if (step < 2) {
+                                                    if (form.currentState!
+                                                        .validate()) {
+                                                      if (step == 1 &&
+                                                          participant.text
+                                                              .trim()
+                                                              .isNotEmpty) {
+                                                        addPerson();
+                                                      }
+                                                      setState(() => step++);
+                                                    }
+                                                  } else {
+                                                    save();
+                                                  }
+                                                },
+                                          child: Text(busy
+                                              ? 'Creating…'
+                                              : step == 2
+                                                  ? 'Create collection'
+                                                  : 'Continue')))
+                                ]),
+                              ])))))));
+  Widget fieldLabel(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(text,
+          style: const TextStyle(fontSize: 12, color: SendohColors.secondary)));
 }

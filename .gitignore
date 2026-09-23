@@ -12,3 +12,15 @@ node_modules/
 build/
 *.tsbuildinfo
 .DS_Store
+
+# Local development verification codes
+.dev-otp/
+manual-backup/
+proposed-update/
+sendoh-backup-*/
+Sendoh_*_Update.py
+*.apk
+*.aab
+*.jks
+*.keystore
+android/key.properties
