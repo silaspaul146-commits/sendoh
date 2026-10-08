@@ -12,11 +12,13 @@ from .auth import router, profile
 from .schemas import CollectionInput
 from .service import create_collection, serialize, Conflict
 from .config import load_settings
+from .request_limits import RequestSizeLimit
 
 
 def create_app(database_url=None):
     settings = load_settings(database_url)
     app = FastAPI(title='Sendoh API', version='0.2.0')
+    app.add_middleware(RequestSizeLimit)
     url = settings.database_url
     engine = create_engine(
         url,
@@ -50,7 +52,8 @@ def create_app(database_url=None):
     def actor(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db=Depends(database)):
         if not credentials: raise HTTPException(401, 'Authentication required')
         digest = hashlib.sha256(credentials.credentials.encode()).hexdigest()
-        user = db.scalar(select(User).where(User.token_hash == digest))
+        # Legacy developer tokens must never authenticate a cloud deployment.
+        user = db.scalar(select(User).where(User.token_hash == digest)) if settings.environment == 'development' else None
         if not user:
             session = db.get(AuthSession, digest)
             if session and session.expires_at > int(time.time()):
@@ -63,6 +66,8 @@ def create_app(database_url=None):
         request.state.request_id = str(uuid.uuid4())
         response = await call_next(request)
         response.headers['X-Request-ID'] = request.state.request_id
+        if request.url.path.startswith(('/api/v1/auth', '/api/v1/me')):
+            response.headers['Cache-Control'] = 'no-store'
         return response
 
     @app.exception_handler(HTTPException)
@@ -95,7 +100,7 @@ def create_app(database_url=None):
 
     @app.post('/api/v1/collections', status_code=201)
     def create(data: CollectionInput, idempotency_key: str = Header(min_length=8,max_length=120), user=Depends(actor), db=Depends(database)):
-        if not user.display_name: raise HTTPException(409, 'Complete your profile before creating a collection.')
+        if not user.display_name or not user.username: raise HTTPException(409, 'Complete your name and username before creating a collection.')
         try: return create_collection(db, user.id, idempotency_key, data, web_url)
         except Conflict as exc: raise HTTPException(409, str(exc))
 

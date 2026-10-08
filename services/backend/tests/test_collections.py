@@ -11,7 +11,7 @@ def client(tmp_path):
     application=create_app(os.getenv('TEST_DATABASE_URL',f'sqlite:///{tmp_path}/test.db'))
     Base.metadata.create_all(application.state.engine)
     with Session(application.state.engine) as db:
-        db.add_all([User(display_name=n,token_hash=hashlib.sha256(n.encode()).hexdigest()) for n in ('alice','bob')]);db.commit()
+        db.add_all([User(display_name=n,username=n,token_hash=hashlib.sha256(n.encode()).hexdigest()) for n in ('alice','bob')]);db.commit()
     with TestClient(application) as c: yield c
     Base.metadata.drop_all(application.state.engine)
 

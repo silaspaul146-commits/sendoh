@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON
+from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -14,6 +14,8 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     display_name: Mapped[str] = mapped_column(String(120))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    username: Mapped[str | None] = mapped_column(String(24), unique=True)
+    avatar: Mapped[str | None] = mapped_column(Text)
 
 class Collection(Base):
     __tablename__ = 'collections'
@@ -82,3 +84,12 @@ class AuthSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     expires_at: Mapped[int] = mapped_column(BigInteger)
+    family_id: Mapped[str | None] = mapped_column(String(36), index=True)
+
+class RefreshSession(Base):
+    __tablename__ = 'refresh_sessions'
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    family_id: Mapped[str] = mapped_column(String(36), index=True)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+    consumed: Mapped[int] = mapped_column(Integer, default=0)

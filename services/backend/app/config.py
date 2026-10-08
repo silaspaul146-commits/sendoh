@@ -58,6 +58,8 @@ def load_settings(database_url: str | None = None) -> Settings:
         missing = [name for name in ('INFOBIP_BASE_URL', 'INFOBIP_API_KEY', 'INFOBIP_SENDER') if not os.getenv(name)]
         if missing:
             raise RuntimeError('Missing Infobip configuration: ' + ', '.join(missing))
+        if urlparse(os.environ['INFOBIP_BASE_URL']).scheme != 'https':
+            raise RuntimeError('INFOBIP_BASE_URL must use HTTPS.')
 
     return Settings(
         environment=environment,

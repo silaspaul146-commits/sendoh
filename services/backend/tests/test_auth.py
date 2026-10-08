@@ -39,7 +39,7 @@ def test_profile_collection_name_and_logout(client):
     headers = {'Authorization': 'Bearer ' + result['access_token']}
     assert result['user']['profile_complete'] is False
     assert client.post('/api/v1/collections', json={'name':'Birthday'}, headers={**headers,'Idempotency-Key':'test-auth-123'}).status_code == 409
-    assert client.post('/api/v1/me/profile', json={'display_name':'  Kboy  '}, headers=headers).json()['display_name'] == 'Kboy'
+    assert client.post('/api/v1/me/profile', json={'display_name':'  Kboy  ', 'username':'kboy'}, headers=headers).json()['display_name'] == 'Kboy'
     created = client.post('/api/v1/collections', json={'name':'Birthday'}, headers={**headers,'Idempotency-Key':'test-auth-123'}).json()
     token = created['share_url'].split('/')[-1]
     public = client.get('/api/v1/public/collections/' + token).json()

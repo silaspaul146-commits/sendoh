@@ -48,4 +48,8 @@ def deliver_otp(settings: Settings, phone: str, challenge_id: str, code: str) ->
         timeout=10,
     )
     response.raise_for_status()
+    messages = response.json().get('messages', [])
+    if len(messages) != 1 or messages[0].get('status', {}).get('groupId') not in (1, 3):
+        # HTTP 200 can still contain a rejected destination/sender result.
+        raise RuntimeError('SMS provider did not accept this message.')
     return 'sms'
