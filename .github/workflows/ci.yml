@@ -53,7 +53,7 @@ jobs:
       - run: ./scripts/bootstrap_flutter.sh
       - name: Build staging Android APK
         working-directory: apps/organizer_flutter
-        run: flutter build apk --release --dart-define=API_URL=${{ vars.SENDOH_STAGING_API_URL || 'https://sendoh-api-staging.onrender.com' }}
+        run: flutter build apk --release --dart-define=API_URL=${{ vars.SENDOH_STAGING_API_URL || 'https://sendoh.onrender.com' }}
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:

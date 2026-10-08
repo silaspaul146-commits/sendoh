@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {CollectionIcon,Icon,money,PaymentLogo,Row} from '../../components';
+import {CollectionIcon,GuestChrome,Icon,money,PaymentLogo,Row} from '../../components';
 
 export type CollectionData={name:string;description:string;organizer_name:string;currency:string;target_amount:number|null;collected_amount:number;expected_amount:number|null;mode:string;deadline_at:string|null;status:string};
 type Step='collection'|'identity'|'amount'|'review'|'method'|'pay';
@@ -22,7 +22,7 @@ export default function ContributionFlow({collection:c}:{collection:CollectionDa
  const chooseAmount=(e:FormEvent)=>{e.preventDefault();if(!validAmount){setError('Enter a positive whole FCFA amount.');return;}go('review');};
  const back=()=>go(steps[Math.max(0,steps.indexOf(step)-1)]);
  const collectionLine=<div className="collection-line"><CollectionIcon/><div><strong>{c.name}</strong><span>Organized by {c.organizer_name}</span></div></div>;
- return <section className="screen">
+ return <GuestChrome><section className="screen">
   <header className="screen-header">{step!=='collection'&&<button className="icon-button" aria-label="Go back" onClick={back}><Icon/></button>}<h1 ref={heading} tabIndex={-1}>{step==='collection'?c.name:titles[step]}</h1>{step==='collection'&&<span className="badge">{c.status==='ACTIVE'?'Active':'Closed'}</span>}</header>
   {step==='collection'&&<div className="screen-content">
    {collectionLine}
@@ -59,5 +59,5 @@ export default function ContributionFlow({collection:c}:{collection:CollectionDa
   </div>}
   {step==='method'&&<div className="screen-content"><p className="center method-hint">Choose how you’d like to pay</p><fieldset className="methods"><legend className="sr-only">Payment method</legend>{(['MTN','ORANGE'] as const).map(m=><label className={`method ${method===m?'chosen':''}`} key={m}><input type="radio" name="method" value={m} checked={method===m} onChange={()=>setMethod(m)}/><PaymentLogo method={m}/><strong>{m==='MTN'?'MTN Mobile Money':'Orange Money'}</strong><span className="radio-mark">{method===m&&<Icon name="check" size={13}/>}</span></label>)}<div className="method other-method"><Icon name="phone"/><div><strong>Other options</strong><small>Coming soon</small></div></div></fieldset><div className="screen-actions"><button className="button" onClick={()=>go('pay')}>Continue</button></div></div>}
   {step==='pay'&&<div className="screen-content payment-final"><div className="pay-context"><h2>{money(n)}</h2><p>Your contribution</p><strong>{name.trim()}</strong><p>for</p><strong>{c.name}</strong><p className="using">Using</p><div className="payment-choice"><PaymentLogo method={method}/><strong>{method==='MTN'?'MTN Mobile Money':'Orange Money'}</strong></div></div><div className="soft-card payment-unavailable" role="status"><Icon name="info"/><div><h2>Payments aren’t available yet</h2><p>No payment has been requested and no money has been charged. Please check with the organizer.</p></div></div><div className="screen-actions"><button className="button" disabled>Payment unavailable</button><button className="button secondary" onClick={()=>go('collection')}>Back to collection</button><button className="text-button" onClick={()=>go('amount')}>Change contribution</button></div></div>}
- </section>;
+ </section></GuestChrome>;
 }

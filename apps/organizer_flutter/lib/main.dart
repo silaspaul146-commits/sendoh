@@ -124,6 +124,47 @@ class _ShellState extends ConsumerState<Shell> {
       Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) =>
               CollectionDetail(data: data, api: ref.read(apiProvider))));
+
+  void comingSoon(String feature) => ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$feature is coming after Collections.')));
+
+  Widget homeAction(
+          {required IconData icon,
+          required String label,
+          required VoidCallback onTap,
+          bool primary = false}) =>
+      Expanded(
+          child: Material(
+              color: primary ? SendohColors.teal : SendohColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 16),
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: primary
+                                  ? SendohColors.teal
+                                  : SendohColors.border)),
+                      child: Column(children: [
+                        Icon(icon,
+                            color: primary
+                                ? Colors.white
+                                : SendohColors.teal,
+                            size: 23),
+                        const SizedBox(height: 9),
+                        Text(label,
+                            style: TextStyle(
+                                color: primary
+                                    ? Colors.white
+                                    : SendohColors.ink,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600))
+                      ])))));
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
@@ -176,6 +217,29 @@ class _ShellState extends ConsumerState<Shell> {
                                           fontSize: 21,
                                           fontWeight: FontWeight.w600))
                                 ]))
+                          ]),
+                          const SizedBox(height: 28),
+                          const Text('What would you like to do?',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: SendohColors.secondary)),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            homeAction(
+                                icon: Icons.groups_outlined,
+                                label: 'Collect',
+                                onTap: create,
+                                primary: true),
+                            const SizedBox(width: 10),
+                            homeAction(
+                                icon: Icons.notifications_none,
+                                label: 'Request',
+                                onTap: () => comingSoon('Request money')),
+                            const SizedBox(width: 10),
+                            homeAction(
+                                icon: Icons.send_outlined,
+                                label: 'Pay',
+                                onTap: () => comingSoon('Pay someone')),
                           ]),
                           const SizedBox(height: 30),
                           const Text('Your collections',

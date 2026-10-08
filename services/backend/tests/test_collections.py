@@ -18,6 +18,12 @@ def client(tmp_path):
 def headers(user='alice',key='create-0001'):
     return {'Authorization':f'Bearer {user}','Idempotency-Key':key}
 
+def test_service_root_and_health(client):
+    root=client.get('/')
+    assert root.status_code==200
+    assert root.json()['service']=='Sendoh API'
+    assert client.get('/health').json()['status']=='ok'
+
 def test_create_replay_and_private_public_views(client):
     body={'name':'Family support','participants':[{'name':'Private person'}]}
     first=client.post('/api/v1/collections',json=body,headers=headers())

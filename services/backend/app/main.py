@@ -81,6 +81,15 @@ def create_app(database_url=None):
         return {'status': 'ok', 'stage': settings.environment,
                 'otp_provider': settings.otp_provider, 'payments_enabled': False}
 
+    @app.get('/')
+    def root():
+        return {
+            'service': 'Sendoh API',
+            'status': 'ok',
+            'health': '/health',
+            'documentation': '/docs',
+        }
+
     @app.get('/api/v1/me')
     def me(user=Depends(actor)): return profile(user, settings.environment)
 

@@ -6,9 +6,14 @@ This repository is prepared for the following staging topology:
 - Vercel Next.js guest web -> Render FastAPI service
 - Render FastAPI service -> Neon PostgreSQL
 
-The names below assume Render can allocate `sendoh-api-staging.onrender.com`.
-If Render assigns a different hostname, update `SendohConfig.apiBaseUrl`, the
-Vercel `API_INTERNAL_URL`, and the GitHub `SENDOH_STAGING_API_URL` variable.
+Current hosted staging endpoints:
+
+- Backend: `https://sendoh.onrender.com`
+- Guest web and public Sendoh page: `https://sendoh.vercel.app`
+
+If either hostname changes, update `SendohConfig.apiBaseUrl`, Vercel's
+`API_INTERNAL_URL`, Render's public URL variables, and the GitHub
+`SENDOH_STAGING_API_URL` variable.
 
 ## 1. Put the repository on GitHub
 
@@ -28,9 +33,9 @@ Create a Blueprint from the repository's `render.yaml`. Set the prompted values:
 | Variable | Staging value |
 | --- | --- |
 | `DATABASE_URL` | Neon pooled connection string |
-| `PUBLIC_WEB_URL` | Final Vercel URL, for example `https://sendoh-guest.vercel.app` |
-| `CORS_ORIGINS` | The same Vercel URL |
-| `ALLOWED_HOSTS` | Render hostname, for example `sendoh-api-staging.onrender.com` |
+| `PUBLIC_WEB_URL` | `https://sendoh.vercel.app` |
+| `CORS_ORIGINS` | `https://sendoh.vercel.app` |
+| `ALLOWED_HOSTS` | `sendoh.onrender.com` |
 
 The pre-deploy command applies Alembic migrations before the new service starts.
 Confirm that `https://<render-host>/health` returns `status: ok`.
@@ -46,7 +51,8 @@ Import the same GitHub repository and set **Root Directory** to
 `apps/guest_web`. Add this environment variable to Preview and Production:
 
 ```text
-API_INTERNAL_URL=https://<render-host>
+API_INTERNAL_URL=https://sendoh.onrender.com
+NEXT_PUBLIC_SITE_URL=https://sendoh.vercel.app
 ```
 
 Leave `SENDOH_DESIGN_PREVIEW` unset. Redeploy after changing environment
@@ -64,7 +70,7 @@ To build on Windows instead:
 
 ```powershell
 cd C:\Users\IHIMBRU\Desktop\sendoh
-.\scripts\build_android.ps1 -ApiUrl "https://<render-host>"
+.\scripts\build_android.ps1 -ApiUrl "https://sendoh.onrender.com"
 ```
 
 The output is:
@@ -75,6 +81,22 @@ apps\organizer_flutter\build\app\outputs\flutter-apk\app-release.apk
 
 The generated Flutter project retains both Android and iOS platform support.
 An installable iOS build requires macOS, Xcode, and an Apple signing identity.
+
+## Local OTP versus hosted staging OTP
+
+A local challenge and a Render challenge are stored in different places.
+
+For a challenge requested from a locally running backend, use this from the
+repository root:
+
+```powershell
+.\scripts\get_dev_otp.ps1 -ChallengeId "YOUR-CHALLENGE-ID"
+```
+
+For a challenge requested by a release APK connected to
+`https://sendoh.onrender.com`, do not run `app.dev_otp` locally. Open the Render
+service logs and find the corresponding `SENDOH_STAGING_OTP` entry. The local
+development controls are excluded from Flutter release builds.
 
 ## 6. Enable Infobip after delivery testing
 

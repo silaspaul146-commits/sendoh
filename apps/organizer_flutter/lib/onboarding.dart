@@ -25,6 +25,9 @@ class _OnboardingState extends State<Onboarding> {
   SendohApi? signedIn;
   Timer? timer;
   String get phoneNumber => '+237${phone.text.replaceAll(RegExp(r'\s'), '')}';
+  String get developmentOtpCommand =>
+      '\$env:SENDOH_ENV="development"\n'
+      '.\\.venv\\Scripts\\python.exe -m app.dev_otp $challenge';
   SendohApi get publicApi =>
       SendohApi(url.text.trim().replaceAll(RegExp(r'/+$'), ''), '');
 
@@ -211,21 +214,23 @@ class _OnboardingState extends State<Onboarding> {
                                       : () => setState(() => step = 1),
                                   child:
                                       const Text('I already have an account')),
-                              const SizedBox(height: 24),
-                              TextButton(
-                                  onPressed: busy
-                                      ? null
-                                      : () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute<void>(
-                                              builder: (_) =>
-                                                  const DevelopmentSession())),
-                                  child: const Text(
-                                      'Use existing development token')),
-                              const Text(
-                                  'Development preview · no SMS or payments',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 12)),
+                              if (kDebugMode) ...[
+                                const SizedBox(height: 24),
+                                TextButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    const DevelopmentSession())),
+                                    child: const Text(
+                                        'Use existing development token')),
+                                const Text(
+                                    'Local development tools are enabled',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 12)),
+                              ],
                             ] else ...[
                               Text(
                                   [
@@ -242,7 +247,7 @@ class _OnboardingState extends State<Onboarding> {
                               Text(step == 1
                                   ? 'We’ll use a code to verify your number.'
                                   : step == 2
-                                      ? 'Enter the 6-digit development code for $phoneNumber'
+                                      ? 'Enter the 6-digit verification code for $phoneNumber'
                                       : 'How should we call you?'),
                               const SizedBox(height: 28),
                               if (step == 1)
@@ -270,20 +275,25 @@ class _OnboardingState extends State<Onboarding> {
                                     child: Text(seconds > 0
                                         ? 'Resend code in 00:${seconds.toString().padLeft(2, '0')}'
                                         : 'Resend code')),
-                                ExpansionTile(
-                                    title: const Text('Get development code'),
-                                    children: [
-                                      const Text(
-                                          'No SMS was sent. Run this command from services/backend on your API computer:'),
-                                      SelectableText(
-                                          'python -m app.dev_otp $challenge'),
-                                      TextButton(
-                                          onPressed: () => Clipboard.setData(
-                                              ClipboardData(
-                                                  text:
-                                                      'python -m app.dev_otp $challenge')),
-                                          child: const Text('Copy command')),
-                                    ]),
+                                if (kDebugMode)
+                                  ExpansionTile(
+                                      title:
+                                          const Text('Local development code'),
+                                      childrenPadding:
+                                          const EdgeInsets.fromLTRB(
+                                              16, 0, 16, 14),
+                                      children: [
+                                        const Text(
+                                            'From services/backend in PowerShell, run:'),
+                                        const SizedBox(height: 10),
+                                        SelectableText(developmentOtpCommand),
+                                        TextButton(
+                                            onPressed: () => Clipboard.setData(
+                                                ClipboardData(
+                                                    text:
+                                                        developmentOtpCommand)),
+                                            child: const Text('Copy commands')),
+                                      ]),
                               ],
                               if (step == 3)
                                 TextField(

@@ -13,7 +13,7 @@ project; real-money payments remain disabled.
 - Flutter organizer source: brand-matched phone onboarding, six-box verification, Home / Activity / Profile, three-step creation form, optional target and deadline, contribution modes, initial participants, review, API submission, collection detail and copy link.
 - FastAPI: private collection list/detail, atomic creation/publication with initial participants, caller-scoped idempotency, public-safe collection view, activity, profile and health.
 - SQLAlchemy models, Alembic migrations, local SQLite and hosted Neon PostgreSQL configuration, OpenAPI export.
-- Next.js guest journey: public collection, guest identity, amount, review, provider choice, explicit payment-unavailable stop, unavailable/not-found states, and gated design fixtures.
+- Next.js public experience: branded Sendoh marketing homepage for WhatsApp sharing, social preview metadata, and a focused guest collection journey covering identity, amount, review, provider choice, explicit payment-unavailable stop, and unavailable/not-found states.
 - Render Blueprint, Vercel configuration, centralized Flutter API endpoint, Infobip-ready OTP delivery, and an automated Android APK artifact.
 - Automated backend tests and CI definitions for PostgreSQL, guest web and Flutter.
 
@@ -67,6 +67,10 @@ npm run dev
 
 The server fetches from `http://127.0.0.1:8000`; set `API_INTERNAL_URL` to override it. This is a server-side request, so no broad browser CORS exception is required. Open the link copied from the organizer app.
 
+The root page explains Sendoh for public and WhatsApp visitors. Collection URLs
+under `/c/[token]` bypass the marketing story and open the contribution flow
+directly.
+
 For a physical phone in local development, configure `PUBLIC_WEB_URL` with a reachable development host, not localhost. For hosted staging, use the HTTPS Vercel URL.
 
 ## 3. Flutter organizer
@@ -86,6 +90,9 @@ The bootstrap script generates Android/iOS platform boilerplate, preserves the a
 - Physical device: use the computer's reachable development host.
 
 The Android debug manifest permits local HTTP; no release HTTP exception is supplied. Release builds use the HTTPS endpoint in `lib/config.dart`; debug builds can still override it with `--dart-define=API_URL=...`.
+
+Local-only API settings, development-token entry, and local OTP instructions
+are guarded by Flutter debug mode and do not appear in the release APK.
 
 Flutter 3.24.5 analysis and Chrome-hosted widget tests passed in the authoring environment. The Linux `flutter_tester` binary is incompatible with that managed container, so the same tests were run on Flutter's Chrome platform. Run the bootstrap checks on the development computer before distributing a native build. Native sharing currently consists of copy-link, not a WhatsApp integration.
 

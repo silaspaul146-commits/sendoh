@@ -1,5 +1,5 @@
 param(
-    [string]$ApiUrl = "https://sendoh-api-staging.onrender.com"
+    [string]$ApiUrl = "https://sendoh.onrender.com"
 )
 
 $ErrorActionPreference = "Stop"
