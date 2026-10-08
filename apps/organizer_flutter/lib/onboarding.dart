@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,9 @@ import 'api.dart';
 import 'config.dart';
 import 'design.dart';
 import 'main.dart';
+import 'session_store.dart';
+import 'package:image_picker/image_picker.dart';
+import 'device_lock.dart';
 
 class Onboarding extends StatefulWidget {
   const Onboarding({super.key});
@@ -18,10 +22,14 @@ class _OnboardingState extends State<Onboarding> {
   final phone = TextEditingController();
   final code = TextEditingController();
   final name = TextEditingController();
+  final username = TextEditingController();
+  String? avatar;
+  bool restoring = true, hasSavedSession = false;
   final url = TextEditingController(text: SendohConfig.apiBaseUrl);
   int step = 0, seconds = 0;
   bool busy = false;
   String? error, challenge;
+  String? delivery;
   SendohApi? signedIn;
   Timer? timer;
   String get phoneNumber => '+237${phone.text.replaceAll(RegExp(r'\s'), '')}';
@@ -32,11 +40,72 @@ class _OnboardingState extends State<Onboarding> {
       SendohApi(url.text.trim().replaceAll(RegExp(r'/+$'), ''), '');
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+  }
+
+  Future<void> restore() async {
+    try {
+      final saved = await SessionStore.read();
+      if (saved == null) return;
+      hasSavedSession = true;
+      // Do not send an old token to a different configured backend.
+      if (saved['url'] != SendohConfig.apiBaseUrl) return;
+      if (await SessionStore.locked()) {
+        final ok = await authenticateDevice('Unlock your Sendoh account');
+        if (!ok) return;
+      }
+      final api = SendohApi(saved['url'] as String, '')
+        ..refreshToken = saved['refresh'] as String;
+      await api.refresh();
+      final user = await api.request('/me');
+      if (!mounted) return;
+      signedIn = api;
+      await continueWithProfile(Map<String, dynamic>.from(user));
+    } on ApiException catch (e) {
+      if (e.status == 401) {
+        await SessionStore.clear();
+        hasSavedSession = false;
+      }
+      if (mounted) setState(() => error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => error = 'Could not restore your session. Retry or sign in with your phone.');
+    } finally {
+      if (mounted) setState(() => restoring = false);
+    }
+  }
+
+  Future<void> continueWithProfile(Map<String, dynamic> user) async {
+    if (user['profile_complete'] == true) {
+      await enter(signedIn!, user);
+    } else {
+      setState(() {
+        name.text = user['display_name'] as String? ?? '';
+        username.text = user['username'] as String? ?? '';
+        avatar = user['avatar'] as String?;
+        step = 3;
+        restoring = false;
+      });
+    }
+  }
+
+  Future<void> pickPhoto() => run(() async {
+    final photo = await ImagePicker().pickImage(source: ImageSource.gallery,
+        maxWidth: 512, maxHeight: 512, imageQuality: 75);
+    if (photo == null) return;
+    final bytes = await photo.readAsBytes();
+    if (bytes.length > 200000) throw Exception('Choose a smaller photo (under 200 KB).');
+    if (mounted) setState(() => avatar = base64Encode(bytes));
+  });
+
+  @override
   void dispose() {
     timer?.cancel();
     phone.dispose();
     code.dispose();
     name.dispose();
+    username.dispose();
     url.dispose();
     super.dispose();
   }
@@ -64,6 +133,7 @@ class _OnboardingState extends State<Onboarding> {
         if (!mounted) return;
         setState(() {
           challenge = result['challenge_id'] as String;
+          delivery = result['delivery'] as String?;
           step = 2;
           seconds = result['resend_after'] as int;
           code.clear();
@@ -79,17 +149,20 @@ class _OnboardingState extends State<Onboarding> {
         });
       });
 
-  Future<void> enter(SendohApi api, String displayName) async {
+  Future<void> enter(SendohApi api, Map<String, dynamic> user) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => ProviderScope(
             overrides: [apiProvider.overrideWithValue(api)],
-            child: Shell(name: displayName))));
+            child: Shell(name: user['display_name'] as String, account: user))));
     if (!mounted) return;
     setState(() {
       step = 0;
       signedIn = null;
       code.clear();
       name.clear();
+      username.clear();
+      avatar = null;
+      hasSavedSession = false;
     });
   }
 
@@ -103,21 +176,25 @@ class _OnboardingState extends State<Onboarding> {
         if (!mounted) return;
         timer?.cancel();
         signedIn =
-            SendohApi(publicApi.baseUrl, result['access_token'] as String);
-        if (result['user']['profile_complete'] == true) {
-          await enter(signedIn!, result['user']['display_name'] as String);
-        } else {
-          setState(() => step = 3);
-        }
+            SendohApi(publicApi.baseUrl, result['access_token'] as String)
+              ..refreshToken = result['refresh_token'] as String;
+        await SessionStore.save(signedIn!.baseUrl, signedIn!.refreshToken!);
+        if (!mounted) return;
+        await continueWithProfile(Map<String, dynamic>.from(result['user']));
       });
 
   Future<void> saveProfile() => run(() async {
         if (name.text.trim().isEmpty) {
           throw Exception('Please enter your name.');
         }
-        final result = await signedIn!
-            .request('/me/profile', body: {'display_name': name.text.trim()});
-        if (mounted) await enter(signedIn!, result['display_name'] as String);
+        final handle = username.text.trim().toLowerCase();
+        if (!RegExp(r'^[a-z][a-z0-9_]{2,23}$').hasMatch(handle)) {
+          throw Exception('Use 3–24 letters, numbers or underscores, starting with a letter.');
+        }
+        final result = await signedIn!.request('/me/profile', body: {
+          'display_name': name.text.trim(), 'username': handle, 'avatar': avatar,
+        });
+        if (mounted) await enter(signedIn!, Map<String, dynamic>.from(result));
       });
 
   Future<void> settings() async {
@@ -182,6 +259,13 @@ class _OnboardingState extends State<Onboarding> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (step == 0) ...[
+                              if (restoring) const LinearProgressIndicator(),
+                              if (error != null) Text(error!),
+                              if (hasSavedSession && !restoring)
+                                TextButton(onPressed: () {
+                                  setState(() => restoring = true);
+                                  restore();
+                                }, child: const Text('Unlock / retry saved session')),
                               const SizedBox(height: 12),
                               const SendohBrand(vertical: true),
                               const SizedBox(height: 12),
@@ -203,13 +287,13 @@ class _OnboardingState extends State<Onboarding> {
                               ),
                               const SizedBox(height: 30),
                               FilledButton(
-                                  onPressed: busy
+                                  onPressed: busy || restoring
                                       ? null
                                       : () => setState(() => step = 1),
                                   child: const Text('Create account')),
                               const SizedBox(height: 12),
                               OutlinedButton(
-                                  onPressed: busy
+                                  onPressed: busy || restoring
                                       ? null
                                       : () => setState(() => step = 1),
                                   child:
@@ -275,7 +359,7 @@ class _OnboardingState extends State<Onboarding> {
                                     child: Text(seconds > 0
                                         ? 'Resend code in 00:${seconds.toString().padLeft(2, '0')}'
                                         : 'Resend code')),
-                                if (kDebugMode)
+                                if (kDebugMode && delivery == 'local-development')
                                   ExpansionTile(
                                       title:
                                           const Text('Local development code'),
@@ -295,7 +379,15 @@ class _OnboardingState extends State<Onboarding> {
                                             child: const Text('Copy commands')),
                                       ]),
                               ],
-                              if (step == 3)
+                              if (step == 3) ...[
+                                Center(child: CircleAvatar(radius: 42,
+                                  backgroundImage: avatar == null ? null : MemoryImage(base64Decode(avatar!)),
+                                  child: avatar == null ? const Icon(Icons.person_outline, size: 40) : null)),
+                                TextButton(onPressed: busy ? null : pickPhoto,
+                                    child: const Text('Add profile photo (optional)')),
+                                if (avatar != null)
+                                  TextButton(onPressed: busy ? null : () => setState(() => avatar = null),
+                                      child: const Text('Remove photo')),
                                 TextField(
                                     controller: name,
                                     enabled: !busy,
@@ -305,6 +397,13 @@ class _OnboardingState extends State<Onboarding> {
                                     maxLength: 120,
                                     decoration: const InputDecoration(
                                         labelText: 'Full name')),
+                                const SizedBox(height: 16),
+                                TextField(controller: username, enabled: !busy,
+                                  autocorrect: false, enableSuggestions: false, maxLength: 24,
+                                  decoration: const InputDecoration(labelText: 'Unique username',
+                                    prefixText: '@', helperText: 'Friends will use this to find you.')),
+                                const Text('Your phone number stays private. Your name and photo help people recognize you.'),
+                              ],
                               if (error != null)
                                 Padding(
                                     padding: const EdgeInsets.symmetric(

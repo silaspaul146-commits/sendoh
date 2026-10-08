@@ -17,5 +17,6 @@ cat > android/app/src/debug/AndroidManifest.xml <<'XML'
 </manifest>
 XML
 flutter pub get
+python3 ../../scripts/configure_mobile.py
 flutter analyze
 flutter test

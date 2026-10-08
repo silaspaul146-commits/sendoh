@@ -37,11 +37,12 @@ export default function Home() {
       <main className="marketing-main">
         <section className="marketing-hero">
           <div className="hero-copy">
-            <p className="hero-kicker">GROUP MONEY, WITHOUT THE GROUP CONFUSION</p>
-            <h1>Collect money together without chasing screenshots.</h1>
+            <p className="hero-kicker">YOUR PEOPLE. YOUR PLANS. ONE SENDOH.</p>
+            <h1>Collect together. Request simply. Send with confidence.</h1>
             <p className="hero-lead">
-              Sendoh gives organizers one place to create a collection, share it,
-              track contributions and keep everyone aligned.
+              For the njangi group, the family celebration and everyday plans with friends:
+              Sendoh is being built for collections, money requests and person-to-person
+              payments in Cameroon—with one clear record.
             </p>
             <div className="hero-actions">
               <a className="button marketing-primary" href="#how-it-works">
@@ -52,8 +53,8 @@ export default function Home() {
               </a>
             </div>
             <div className="hero-trust">
-              <span><Icon name="check" size={16} /> No account needed to contribute</span>
-              <span><Icon name="check" size={16} /> Built for FCFA collections</span>
+              <span><Icon name="check" size={16} /> Guest collection links</span>
+              <span><Icon name="check" size={16} /> Built for Cameroon · FCFA</span>
             </div>
           </div>
           <div className="hero-visual" aria-label="Friends coordinating a collection together">
@@ -81,6 +82,23 @@ export default function Home() {
           <p>Less chasing.</p><span />
           <p>Fewer screenshots.</p><span />
           <p>Clearer contributions.</p>
+        </section>
+
+        <section className="marketing-section benefits-section">
+          <div className="section-heading">
+            <p className="section-kicker">MORE THAN COLLECTIONS</p>
+            <h2>One identity. Different ways to organize money.</h2>
+          </div>
+          <div className="step-grid">
+            {[
+              ['Collections', 'Create and share group collections. Available for testing; payments are not enabled.'],
+              ['Requests', 'Ask a specific person for money, with a reason and a clear response. Planned.'],
+              ['P2P', 'Find the right person by Sendoh username and review before sending. Planned.'],
+              ['Near2P', 'Scan a code to request or send. Opt-in nearby discovery comes later. Planned.'],
+            ].map(([title, text]) => <article className="step-card" key={title}>
+              <div><h3>{title}</h3><p>{text}</p></div>
+            </article>)}
+          </div>
         </section>
 
         <section className="marketing-section benefits-section">
@@ -121,10 +139,10 @@ export default function Home() {
         <section className="marketing-section trust-section">
           <div>
             <p className="section-kicker">DESIGNED FOR TRUST</p>
-            <h2>Money information stays clear at every step.</h2>
+            <h2>The standard we are building toward.</h2>
           </div>
           <div className="trust-points">
-            <p><Icon name="shield" size={21} /><span><strong>Identity before payment</strong>Contributors confirm who they are before money moves.</span></p>
+            <p><Icon name="shield" size={21} /><span><strong>Identity before payment</strong>Verified invitations and contributor identity are the next implementation phase.</span></p>
             <p><Icon name="receipt" size={21} /><span><strong>Amounts and fees separated</strong>The contribution, provider cost and total are shown clearly.</span></p>
             <p><Icon name="clock" size={21} /><span><strong>No false success</strong>A payment is successful only after provider confirmation.</span></p>
           </div>

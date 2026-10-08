@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'session_store.dart';
+import 'device_lock.dart';
+import 'profile_edit.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api.dart';
@@ -9,6 +13,7 @@ import 'design.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
+final sendohNavigator = GlobalKey<NavigatorState>();
 void main() => runApp(const ProviderScope(child: SendohApp()));
 String money(dynamic n) => n == null
     ? 'No target'
@@ -19,6 +24,11 @@ class SendohApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
       title: 'Sendoh',
+      navigatorKey: sendohNavigator,
+      builder: (context, child) => DeviceLock(
+          child: child!,
+          onSignIn: () =>
+              sendohNavigator.currentState?.popUntil((route) => route.isFirst)),
       debugShowCheckedModeBanner: false,
       theme: sendohTheme(),
       home: const Onboarding());
@@ -31,8 +41,7 @@ class DevelopmentSession extends StatefulWidget {
 }
 
 class _DevelopmentSessionState extends State<DevelopmentSession> {
-  final url = TextEditingController(
-          text: SendohConfig.apiBaseUrl),
+  final url = TextEditingController(text: SendohConfig.apiBaseUrl),
       token = TextEditingController();
   String? error;
   bool busy = false;
@@ -91,14 +100,20 @@ class _DevelopmentSessionState extends State<DevelopmentSession> {
 }
 
 class Shell extends ConsumerStatefulWidget {
-  const Shell({super.key, required this.name});
+  const Shell({super.key, required this.name, this.account = const {}});
   final String name;
+  final Map<String, dynamic> account;
   @override
   ConsumerState<Shell> createState() => _ShellState();
 }
 
 class _ShellState extends ConsumerState<Shell> {
   int tab = 0;
+  late Map<String, dynamic> account = {
+    'display_name': widget.name,
+    ...widget.account
+  };
+  String get displayName => account['display_name'] as String;
   late Future<List<dynamic>> items;
   @override
   void initState() {
@@ -151,16 +166,13 @@ class _ShellState extends ConsumerState<Shell> {
                                   : SendohColors.border)),
                       child: Column(children: [
                         Icon(icon,
-                            color: primary
-                                ? Colors.white
-                                : SendohColors.teal,
+                            color: primary ? Colors.white : SendohColors.teal,
                             size: 23),
                         const SizedBox(height: 9),
                         Text(label,
                             style: TextStyle(
-                                color: primary
-                                    ? Colors.white
-                                    : SendohColors.ink,
+                                color:
+                                    primary ? Colors.white : SendohColors.ink,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600))
                       ])))));
@@ -200,7 +212,7 @@ class _ShellState extends ConsumerState<Shell> {
                         padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
                         children: [
                           Row(children: [
-                            PersonAvatar(widget.name, radius: 24),
+                            accountAvatar(24),
                             const SizedBox(width: 12),
                             Expanded(
                                 child: Column(
@@ -212,7 +224,7 @@ class _ShellState extends ConsumerState<Shell> {
                                           fontSize: 12,
                                           color: SendohColors.secondary)),
                                   const SizedBox(height: 4),
-                                  Text(widget.name,
+                                  Text(displayName,
                                       style: const TextStyle(
                                           fontSize: 21,
                                           fontWeight: FontWeight.w600))
@@ -221,8 +233,7 @@ class _ShellState extends ConsumerState<Shell> {
                           const SizedBox(height: 28),
                           const Text('What would you like to do?',
                               style: TextStyle(
-                                  fontSize: 13,
-                                  color: SendohColors.secondary)),
+                                  fontSize: 13, color: SendohColors.secondary)),
                           const SizedBox(height: 12),
                           Row(children: [
                             homeAction(
@@ -293,16 +304,68 @@ class _ShellState extends ConsumerState<Shell> {
                               label: const Text('Create collection')),
                         ])),
       );
+  Widget accountAvatar(double radius) => account['avatar'] == null
+      ? PersonAvatar(displayName, radius: radius)
+      : CircleAvatar(
+          radius: radius,
+          backgroundImage:
+              MemoryImage(base64Decode(account['avatar'] as String)));
   Widget profile() => ListView(padding: const EdgeInsets.all(24), children: [
-        Center(child: PersonAvatar(widget.name, radius: 36)),
+        Center(child: accountAvatar(36)),
         const SizedBox(height: 14),
-        Text(widget.name,
+        Text(displayName,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
         const SizedBox(height: 28),
+        if (account['username'] != null)
+          Text('@${account['username']}', textAlign: TextAlign.center),
+        TextButton(
+            onPressed: () async {
+              final updated = await Navigator.of(context)
+                  .push<Map<String, dynamic>>(MaterialPageRoute(
+                      builder: (_) => EditProfile(
+                          api: ref.read(apiProvider), account: account)));
+              if (mounted && updated != null) setState(() => account = updated);
+            },
+            child: const Text('Edit profile')),
+        ListTile(
+            leading: const Icon(Icons.fingerprint),
+            title: const Text('Device unlock'),
+            subtitle:
+                const Text('Use biometrics or your device PIN when returning.'),
+            onTap: () async {
+              try {
+                final ok = await authenticateDevice(
+                    'Confirm device unlock settings for Sendoh');
+                if (!ok) return;
+                final enabled = !await SessionStore.locked();
+                await SessionStore.setLocked(enabled);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        enabled
+                            ? 'Device unlock enabled.'
+                            : 'Device unlock disabled.',
+                      ),
+                    ),
+                  );
+                }
+              } catch (_) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Set up a screen lock on this device, then try again.',
+                      ),
+                    ),
+                  );
+                }
+              }
+            }),
         SurfaceCard(
             child: Column(children: [
-          const SummaryRow('Account', 'Sendoh organizer'),
+          const SummaryRow('Account', 'Sendoh member'),
           ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.history),
@@ -324,6 +387,7 @@ class _ShellState extends ConsumerState<Shell> {
                           'Could not reach server. Your session will expire automatically.')));
                 }
               }
+              await SessionStore.clear();
               if (mounted) {
                 navigator.pop();
               }

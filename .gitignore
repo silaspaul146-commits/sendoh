@@ -24,3 +24,7 @@ Sendoh_*_Update.py
 *.jks
 *.keystore
 android/key.properties
+
+# Identity update recovery files
+*.sendoh-backup
+sendoh-identity-paths.txt
