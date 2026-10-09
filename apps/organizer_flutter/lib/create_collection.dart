@@ -217,6 +217,8 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                   const SizedBox(height: 20),
                                   fieldLabel('Contribution rule'),
                                   DropdownButtonFormField<String>(
+                                      // Compatibility with Flutter SDKs that lack initialValue.
+                                      // ignore: deprecated_member_use
                                       value: mode,
                                       isExpanded: true,
                                       items: const [
