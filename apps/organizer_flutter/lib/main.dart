@@ -10,6 +10,7 @@ import 'config.dart';
 import 'onboarding.dart';
 import 'create_collection.dart';
 import 'design.dart';
+import 'invitations.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
@@ -182,7 +183,16 @@ class _ShellState extends ConsumerState<Shell> {
         appBar: AppBar(
             title: tab == 0
                 ? const SendohBrand()
-                : Text(tab == 1 ? 'Activity' : 'Profile')),
+                : Text(tab == 1 ? 'Activity' : 'Profile'),
+            actions: [
+              IconButton(
+                  tooltip: 'Invitations and joined collections',
+                  onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                          builder: (_) =>
+                              InvitationsScreen(api: ref.read(apiProvider)))),
+                  icon: const Icon(Icons.mail_outline)),
+            ]),
         bottomNavigationBar: NavigationBar(
             selectedIndex: tab,
             onDestinationSelected: (v) => setState(() => tab = v),
@@ -253,7 +263,16 @@ class _ShellState extends ConsumerState<Shell> {
                                 onTap: () => comingSoon('Pay someone')),
                           ]),
                           const SizedBox(height: 30),
-                          const Text('Your collections',
+                          OutlinedButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => InvitationsScreen(
+                                          api: ref.read(apiProvider)))),
+                              icon: const Icon(Icons.mail_outline),
+                              label: const Text(
+                                  'Invitations & joined collections')),
+                          const SizedBox(height: 24),
+                          const Text('Collections you organize',
                               style: TextStyle(
                                   fontSize: 17, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 16),
@@ -679,39 +698,122 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
   }
 
+  Future<void> invitePerson([Map<String, dynamic>? person]) async {
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => InvitePerson(
+            api: widget.api, collection: data, participant: person)));
+    if (!mounted || changed != true) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:
+            Text('Invitation saved. They can review it in their Sendoh app.')));
+    await refresh();
+  }
+
+  Future<void> cancelInvitation(Map<String, dynamic> person) async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+                title: const Text('Cancel invitation?'),
+                content: Text(
+                    '${person['name']} will no longer be able to accept this invitation.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, false),
+                      child: const Text('Keep invitation')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, true),
+                      child: const Text('Cancel invitation')),
+                ]));
+    if (!mounted || confirmed != true) {
+      return;
+    }
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      await widget.api.request(
+          '/collections/${data['id']}/invitations/${person['id']}/cancel',
+          body: {});
+      if (mounted) {
+        await refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+
   void participant(Map<String, dynamic> p) => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => SafeArea(
-          child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-              child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(child: PersonAvatar(p['name'], radius: 28)),
-                    const SizedBox(height: 14),
-                    Text(p['name'],
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            fontSize: 21, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 20),
-                    SummaryRow(
-                        'Expected',
-                        p['expected_amount'] == null
-                            ? 'Any amount'
-                            : money(p['expected_amount'])),
-                    const SummaryRow('Contributed', '0 FCFA'),
-                    if (p['expected_amount'] != null)
-                      SummaryRow('Remaining', money(p['expected_amount'])),
-                    const Center(child: StatusBadge('Pending', pending: true)),
-                    const SizedBox(height: 20),
-                    const Text('No contributions recorded yet.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 13, color: SendohColors.secondary))
-                  ]))));
+      builder: (sheet) => SafeArea(
+          child: SingleChildScrollView(
+              child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                  child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(child: PersonAvatar(p['name'], radius: 28)),
+                        const SizedBox(height: 14),
+                        Text(p['name'],
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 21, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 20),
+                        SummaryRow(
+                            'Expected',
+                            p['expected_amount'] == null
+                                ? 'Any amount'
+                                : money(p['expected_amount'])),
+                        const SummaryRow('Contributed', '0 FCFA'),
+                        if (p['expected_amount'] != null)
+                          SummaryRow('Remaining', money(p['expected_amount'])),
+                        SummaryRow('Membership',
+                            invitationLabel(p['invitation_state'])),
+                        if (p['username'] != null)
+                          SummaryRow('Verified profile', '@${p['username']}'),
+                        const Center(
+                            child: StatusBadge('Unpaid', pending: true)),
+                        const SizedBox(height: 20),
+                        const Text('No contributions recorded yet.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 13, color: SendohColors.secondary)),
+                        if (data['status'] == 'ACTIVE' &&
+                            !['PENDING', 'ACCEPTED', 'DECLINED']
+                                .contains(p['invitation_state'])) ...[
+                          const SizedBox(height: 20),
+                          FilledButton(
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      Navigator.pop(sheet);
+                                      invitePerson(p);
+                                    },
+                              child: const Text('Invite this person')),
+                        ],
+                        if (p['invitation_state'] == 'PENDING') ...[
+                          const SizedBox(height: 20),
+                          OutlinedButton(
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      Navigator.pop(sheet);
+                                      cancelInvitation(p);
+                                    },
+                              child: const Text('Cancel invitation')),
+                        ],
+                      ])))));
   @override
   Widget build(BuildContext context) {
     final target = data['target_amount'] as int?;
@@ -720,6 +822,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final pct = target == null ? 0.0 : collected / target * 100;
     return Scaffold(
         appBar: AppBar(title: Text(data['name']), actions: [
+          if (data['status'] == 'ACTIVE')
+            IconButton(
+                tooltip: 'Invite someone',
+                onPressed: busy ? null : () => invitePerson(),
+                icon: const Icon(Icons.person_add_outlined)),
           IconButton(
               tooltip: 'Refresh',
               onPressed: busy ? null : refresh,
@@ -777,6 +884,13 @@ class _CollectionDetailState extends State<CollectionDetail> {
                   Text('${people.length} participants',
                       style: const TextStyle(
                           fontSize: 12, color: SendohColors.secondary)),
+                  if (data['status'] == 'ACTIVE') ...[
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                        onPressed: busy ? null : () => invitePerson(),
+                        icon: const Icon(Icons.person_add_outlined, size: 18),
+                        label: const Text('Invite by username or phone')),
+                  ],
                   const SizedBox(height: 20),
                   if (data['share_url'] != null)
                     OutlinedButton.icon(
@@ -786,7 +900,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         label: const Text('Copy collection link')),
                   const SizedBox(height: 22),
                   Row(
-                      children: ['Overview', 'Contributions']
+                      children: ['Overview', 'Participants']
                           .asMap()
                           .entries
                           .map((e) => Expanded(
@@ -837,7 +951,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                            children: ['All', 'Pending', 'Partial', 'Paid']
+                            children: ['All', 'Unpaid', 'Partial', 'Paid']
                                 .map((v) => Padding(
                                     padding: const EdgeInsets.only(right: 8),
                                     child: ChoiceChip(
@@ -866,12 +980,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 style: const TextStyle(
                                     fontSize: 14, fontWeight: FontWeight.w500)),
                             subtitle: Text(
-                                p['expected_amount'] == null
-                                    ? 'Any amount'
-                                    : '0 / ${money(p['expected_amount'])}',
+                                '${invitationLabel(p['invitation_state'])}\n${p['expected_amount'] == null ? 'Any amount' : '0 / ${money(p['expected_amount'])}'}',
                                 style: const TextStyle(fontSize: 12)),
                             trailing:
-                                const StatusBadge('Pending', pending: true),
+                                const StatusBadge('Unpaid', pending: true),
                             onTap: () => participant(p));
                       })
                   ],

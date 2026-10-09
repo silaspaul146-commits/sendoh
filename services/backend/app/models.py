@@ -42,11 +42,29 @@ class Collection(Base):
 
 class Participant(Base):
     __tablename__ = 'participants'
-    __table_args__ = (CheckConstraint('expected_amount IS NULL OR expected_amount > 0'),)
+    __table_args__ = (
+        CheckConstraint('expected_amount IS NULL OR expected_amount > 0'),
+        CheckConstraint("invitation_state IN ('UNVERIFIED','PENDING','ACCEPTED','DECLINED','CANCELLED')", name='ck_participant_invitation_state'),
+        UniqueConstraint('collection_id', 'user_id', name='uq_participant_member'),
+        UniqueConstraint('collection_id', 'invited_user_id', name='uq_participant_invited_user'),
+        UniqueConstraint('collection_id', 'invited_phone', name='uq_participant_invited_phone'),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'), index=True)
     name: Mapped[str] = mapped_column(String(120))
     expected_amount: Mapped[int | None] = mapped_column(BigInteger)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'), index=True)
+    invited_user_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'), index=True)
+    invited_phone: Mapped[str | None] = mapped_column(String(16), index=True)
+    invitation_state: Mapped[str] = mapped_column(String(16), default='UNVERIFIED', server_default='UNVERIFIED')
+    invited_at: Mapped[int | None] = mapped_column(BigInteger)
+    expires_at: Mapped[int | None] = mapped_column(BigInteger)
+
+class InvitationRate(Base):
+    __tablename__ = 'invitation_rates'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    window_start: Mapped[int] = mapped_column(BigInteger)
+    count: Mapped[int] = mapped_column(Integer)
 
 class Activity(Base):
     __tablename__ = 'activity'

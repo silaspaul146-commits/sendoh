@@ -1,9 +1,23 @@
-import hashlib, json, secrets
+import hashlib, json, secrets, time
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from .models import Collection, Participant, Activity, Idempotency, User
 
 class Conflict(Exception): pass
+
+def participant_state(p):
+    if p.invitation_state == 'PENDING' and (p.expires_at or 0) <= int(time.time()):
+        return 'EXPIRED'
+    return p.invitation_state
+
+def participant_summary(db, p):
+    member = db.get(User, p.user_id) if p.user_id else None
+    return dict(id=p.id, name=member.display_name if member else p.name,
+                expected_amount=p.expected_amount, user_id=p.user_id,
+                username=member.username if member else None,
+                invitation_state=participant_state(p),
+                invited_phone_hint=('••••••' + p.invited_phone[-3:]) if p.invited_phone else None,
+                identity_verified=member is not None)
 
 def serialize(db, collection, web_url, public=False):
     result = dict(id=collection.id, name=collection.name, description=collection.description,
@@ -16,7 +30,7 @@ def serialize(db, collection, web_url, public=False):
         result.pop('id')
         return result
     result['share_url'] = f'{web_url}/c/{collection.public_token}' if collection.status == 'ACTIVE' else None
-    result['participants'] = [dict(id=p.id, name=p.name, expected_amount=p.expected_amount)
+    result['participants'] = [participant_summary(db, p)
         for p in db.scalars(select(Participant).where(Participant.collection_id == collection.id))]
     return result
 

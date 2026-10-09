@@ -13,11 +13,12 @@ from .schemas import CollectionInput
 from .service import create_collection, serialize, Conflict
 from .config import load_settings
 from .request_limits import RequestSizeLimit
+from .invitations import router as invitation_router
 
 
 def create_app(database_url=None):
     settings = load_settings(database_url)
-    app = FastAPI(title='Sendoh API', version='0.2.0')
+    app = FastAPI(title='Sendoh API', version='0.3.0')
     app.add_middleware(RequestSizeLimit)
     url = settings.database_url
     engine = create_engine(
@@ -66,7 +67,7 @@ def create_app(database_url=None):
         request.state.request_id = str(uuid.uuid4())
         response = await call_next(request)
         response.headers['X-Request-ID'] = request.state.request_id
-        if request.url.path.startswith(('/api/v1/auth', '/api/v1/me')):
+        if request.url.path.startswith('/api/v1/') and not request.url.path.startswith('/api/v1/public/'):
             response.headers['Cache-Control'] = 'no-store'
         return response
 
@@ -83,7 +84,7 @@ def create_app(database_url=None):
     @app.get('/health')
     def health(db=Depends(database)):
         db.execute(text('SELECT 1'))
-        return {'status': 'ok', 'stage': settings.environment,
+        return {'status': 'ok', 'stage': settings.environment, 'version': '0.3.0',
                 'otp_provider': settings.otp_provider, 'payments_enabled': False}
 
     @app.get('/')
@@ -124,6 +125,7 @@ def create_app(database_url=None):
     def activity(user=Depends(actor), db=Depends(database)):
         return [dict(id=a.id, message=a.message, created_at=a.created_at.isoformat()) for a in db.scalars(select(Activity).where(Activity.organizer_id==user.id).order_by(Activity.created_at.desc()))]
     app.include_router(router(database, actor, bearer, settings))
+    app.include_router(invitation_router(database, actor, web_url))
     return app
 
 app = create_app()
