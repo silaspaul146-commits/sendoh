@@ -206,24 +206,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           color: unread
                               ? SendohColors.tealSoft
                               : SendohColors.surface,
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(
-                                unread
-                                    ? Icons.mark_email_unread_outlined
-                                    : Icons.drafts_outlined,
-                                color: SendohColors.teal),
-                            title: Text(item['title'] as String,
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: unread
-                                        ? FontWeight.w600
-                                        : FontWeight.w400)),
-                            subtitle: Text(
-                                '${item['collection_name']}\n${displayDate(DateTime.fromMillisecondsSinceEpoch((item['created_at'] as int) * 1000, isUtc: true).toIso8601String())}${item['kind'] == 'INVITED' && item['invitation_available'] == false ? '\nInvitation is no longer pending' : ''}'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => open(item),
-                          )));
+                          child: Material(
+                              type: MaterialType.transparency,
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                    unread
+                                        ? Icons.mark_email_unread_outlined
+                                        : Icons.drafts_outlined,
+                                    color: SendohColors.teal),
+                                title: Text(item['title'] as String,
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: unread
+                                            ? FontWeight.w600
+                                            : FontWeight.w400)),
+                                subtitle: Text(
+                                    '${item['collection_name']}\n${displayDate(DateTime.fromMillisecondsSinceEpoch((item['created_at'] as int) * 1000, isUtc: true).toIso8601String())}${item['kind'] == 'INVITED' && item['invitation_available'] == false ? '\nInvitation is no longer pending' : ''}'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => open(item),
+                              ))));
                 }),
                 if (cursor != null)
                   OutlinedButton(
