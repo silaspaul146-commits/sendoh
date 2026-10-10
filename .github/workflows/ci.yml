@@ -50,10 +50,16 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - run: ./scripts/bootstrap_flutter.sh
+      - run: bash ./scripts/bootstrap_flutter.sh
+      - name: Prepare optional Firebase client configuration
+        env:
+          SENDOH_FIREBASE_CONFIG: ${{ vars.SENDOH_FIREBASE_CONFIG }}
+        run: python3 scripts/prepare_push_build.py --output "$RUNNER_TEMP/sendoh-push.json" --android-root apps/organizer_flutter/android
       - name: Build staging Android APK
         working-directory: apps/organizer_flutter
-        run: flutter build apk --release --dart-define=API_URL=${{ vars.SENDOH_STAGING_API_URL || 'https://sendoh.onrender.com' }}
+        env:
+          SENDOH_API_URL: ${{ vars.SENDOH_STAGING_API_URL || 'https://sendoh.onrender.com' }}
+        run: flutter build apk --release --dart-define="API_URL=$SENDOH_API_URL" --dart-define-from-file="$RUNNER_TEMP/sendoh-push.json"
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:

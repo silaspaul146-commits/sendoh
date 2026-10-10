@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'session_store.dart';
 import 'device_lock.dart';
@@ -11,6 +12,8 @@ import 'onboarding.dart';
 import 'create_collection.dart';
 import 'design.dart';
 import 'invitations.dart';
+import 'notifications.dart';
+import 'push_service.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
@@ -108,8 +111,10 @@ class Shell extends ConsumerStatefulWidget {
   ConsumerState<Shell> createState() => _ShellState();
 }
 
-class _ShellState extends ConsumerState<Shell> {
+class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
   int tab = 0;
+  int unread = 0;
+  bool notificationsOpen = false;
   late Map<String, dynamic> account = {
     'display_name': widget.name,
     ...widget.account
@@ -120,6 +125,77 @@ class _ShellState extends ConsumerState<Shell> {
   void initState() {
     super.initState();
     items = ref.read(apiProvider).collections();
+    WidgetsBinding.instance.addObserver(this);
+    PushService.updates.addListener(pushUpdated);
+    WidgetsBinding.instance.addPostFrameCallback((_) => connectNotifications());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    PushService.updates.removeListener(pushUpdated);
+    unawaited(PushService.detach());
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      connectNotifications();
+    }
+  }
+
+  Future<void> connectNotifications() async {
+    if (!mounted) {
+      return;
+    }
+    final api = ref.read(apiProvider);
+    try {
+      final id = account['id'] as String? ?? '';
+      if (id.isNotEmpty) {
+        await PushService.attach(api, id);
+      }
+    } catch (_) {/* Retry on the next resume; the inbox still works. */}
+    if (!mounted) {
+      return;
+    }
+    await refreshUnread();
+    if (mounted && PushService.pendingOpen) {
+      PushService.pendingOpen = false;
+      await openNotifications();
+    }
+  }
+
+  Future<void> refreshUnread() async {
+    try {
+      final data = await ref.read(apiProvider).request('/me/notifications');
+      if (mounted) {
+        setState(() => unread = data['unread_count'] as int);
+      }
+    } catch (_) {/* Manual inbox refresh displays actionable errors. */}
+  }
+
+  void pushUpdated() {
+    refreshUnread();
+    if (PushService.pendingOpen && mounted && !notificationsOpen) {
+      PushService.pendingOpen = false;
+      openNotifications();
+    }
+  }
+
+  Future<void> openNotifications() async {
+    if (!mounted || notificationsOpen) {
+      return;
+    }
+    notificationsOpen = true;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => NotificationsScreen(
+            api: ref.read(apiProvider),
+            userId: account['id'] as String? ?? '')));
+    notificationsOpen = false;
+    if (mounted) {
+      await refreshUnread();
+    }
   }
 
   void reload() => setState(() => items = ref.read(apiProvider).collections());
@@ -186,6 +262,13 @@ class _ShellState extends ConsumerState<Shell> {
                 : Text(tab == 1 ? 'Activity' : 'Profile'),
             actions: [
               IconButton(
+                  tooltip: 'Notifications ($unread unread)',
+                  onPressed: openNotifications,
+                  icon: Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text(unread > 99 ? '99+' : '$unread'),
+                      child: const Icon(Icons.notifications_outlined))),
+              IconButton(
                   tooltip: 'Invitations and joined collections',
                   onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
@@ -215,6 +298,7 @@ class _ShellState extends ConsumerState<Shell> {
                 : RefreshIndicator(
                     onRefresh: () async {
                       reload();
+                      await refreshUnread();
                       await items;
                     },
                     child: ListView(
@@ -406,6 +490,7 @@ class _ShellState extends ConsumerState<Shell> {
                           'Could not reach server. Your session will expire automatically.')));
                 }
               }
+              await PushService.detach(deleteToken: true);
               await SessionStore.clear();
               if (mounted) {
                 navigator.pop();

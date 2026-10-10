@@ -14,12 +14,12 @@ from .service import create_collection, serialize, Conflict
 from .config import load_settings
 from .request_limits import RequestSizeLimit
 from .invitations import router as invitation_router
+from .notifications import router as notification_router
+from .push import configured_sender, lifespan_for
 
 
 def create_app(database_url=None):
     settings = load_settings(database_url)
-    app = FastAPI(title='Sendoh API', version='0.3.0')
-    app.add_middleware(RequestSizeLimit)
     url = settings.database_url
     engine = create_engine(
         url,
@@ -30,6 +30,10 @@ def create_app(database_url=None):
         @event.listens_for(engine, 'connect')
         def foreign_keys(connection, _): connection.execute('PRAGMA foreign_keys=ON')
     sessions = sessionmaker(engine, expire_on_commit=False)
+    sender = configured_sender()
+    app = FastAPI(title='Sendoh API', version='0.4.0',
+        lifespan=lifespan_for(sessions, sender, settings.environment))
+    app.add_middleware(RequestSizeLimit)
     app.state.engine = engine
     app.state.settings = settings
     web_url = settings.public_web_url
@@ -84,7 +88,8 @@ def create_app(database_url=None):
     @app.get('/health')
     def health(db=Depends(database)):
         db.execute(text('SELECT 1'))
-        return {'status': 'ok', 'stage': settings.environment, 'version': '0.3.0',
+        return {'status': 'ok', 'stage': settings.environment, 'version': '0.4.0',
+                'push_configured': sender is not None,
                 'otp_provider': settings.otp_provider, 'payments_enabled': False}
 
     @app.get('/')
@@ -126,6 +131,7 @@ def create_app(database_url=None):
         return [dict(id=a.id, message=a.message, created_at=a.created_at.isoformat()) for a in db.scalars(select(Activity).where(Activity.organizer_id==user.id).order_by(Activity.created_at.desc()))]
     app.include_router(router(database, actor, bearer, settings))
     app.include_router(invitation_router(database, actor, web_url))
+    app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     return app
 
 app = create_app()

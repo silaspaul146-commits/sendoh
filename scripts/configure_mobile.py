@@ -25,7 +25,7 @@ def configure(root=ROOT):
     manifest = root / 'android/app/src/main/AndroidManifest.xml'
     if manifest.exists():
         value = manifest.read_text()
-        for permission in ('INTERNET', 'USE_BIOMETRIC'):
+        for permission in ('INTERNET', 'USE_BIOMETRIC', 'POST_NOTIFICATIONS'):
             name = 'android.permission.' + permission
             if name not in value:
                 value = re.sub(r'(<manifest\b[^>]*>)',
@@ -35,7 +35,19 @@ def configure(root=ROOT):
             value = re.sub(r'android:allowBackup="[^"]*"', 'android:allowBackup="false"', value)
         else:
             value = value.replace('<application', '<application android:allowBackup="false"', 1)
+        for name in ('firebase_messaging_auto_init_enabled', 'firebase_analytics_collection_enabled'):
+            if name not in value:
+                value = value.replace('</application>',
+                    f'    <meta-data android:name="{name}" android:value="false" />\n    </application>')
         save(manifest, value)
+        for gradle in (root / 'android/app/build.gradle', root / 'android/app/build.gradle.kts'):
+            if gradle.exists():
+                value = gradle.read_text()
+                value = value.replace('minSdk = flutter.minSdkVersion', 'minSdk = maxOf(23, flutter.minSdkVersion)')
+                value = value.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion Math.max(23, flutter.minSdkVersion)')
+                value = re.sub(r'(\bminSdk(?:Version)?\s*(?:=\s*)?)(\d+)',
+                    lambda m: m[1] + str(max(23, int(m[2]))), value)
+                save(gradle, value)
         activities = list((root / 'android/app/src/main').rglob('MainActivity.kt')) + list((root / 'android/app/src/main').rglob('MainActivity.java'))
         if not activities:
             raise RuntimeError('No MainActivity found. Configure FlutterFragmentActivity manually before building.')
@@ -54,6 +66,7 @@ def configure(root=ROOT):
         value = plistlib.loads(info.read_bytes())
         value.setdefault('NSPhotoLibraryUsageDescription', 'Choose an optional Sendoh profile photo.')
         value.setdefault('NSFaceIDUsageDescription', 'Unlock your existing Sendoh session securely.')
+        value['FirebaseMessagingAutoInitEnabled'] = False
         save(info, plistlib.dumps(value, sort_keys=False))
 
 if __name__ == '__main__':

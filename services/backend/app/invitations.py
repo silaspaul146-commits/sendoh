@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from .models import User, PhoneIdentity, Participant, Collection, Activity, Idempotency, InvitationRate
 from .schemas import Money
 from .service import participant_state, participant_summary, serialize
+from .notifications import emit
 
 class InviteInput(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
@@ -153,10 +154,12 @@ def router(database, actor, web_url):
         p.invited_user_id = target.id if target else None
         p.invited_phone = phone
         p.invitation_state = 'PENDING'
+        p.invitation_version = (p.invitation_version or 0) + 1
         p.invited_at = int(time.time())
         p.expires_at = p.invited_at + 14 * 86400
         try:
             db.flush()
+            emit(db, p.invited_user_id, p, 'INVITED')
             record.response = participant_summary(db, p)
             db.add(Activity(organizer_id=user.id, collection_id=c.id, message='Sent a participant invitation'))
             db.commit()
@@ -202,6 +205,7 @@ def router(database, actor, web_url):
                 raise HTTPException(409, 'This invitation has already changed. Refresh your invitations.')
             db.add(Activity(organizer_id=c.organizer_id, collection_id=c.id,
                 message=f'{user.display_name[:120]} {"joined the collection" if desired == "ACCEPTED" else "declined an invitation"}'))
+            emit(db, c.organizer_id, p, desired)
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -235,6 +239,10 @@ def router(database, actor, web_url):
             db.rollback()
             raise HTTPException(409, 'This invitation has already changed. Refresh the collection.')
         db.add(Activity(organizer_id=user.id, collection_id=c.id, message='Cancelled a participant invitation'))
+        recipient = p.invited_user_id
+        if not recipient and p.invited_phone:
+            recipient = db.scalar(select(PhoneIdentity.user_id).where(PhoneIdentity.phone == p.invited_phone))
+        emit(db, recipient, p, 'CANCELLED')
         db.commit()
         return participant_summary(db, p)
 

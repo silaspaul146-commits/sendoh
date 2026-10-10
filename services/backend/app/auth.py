@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
-from .models import User, PhoneIdentity, OtpChallenge, AuthSession, RefreshSession, uid
+from .models import User, PhoneIdentity, OtpChallenge, AuthSession, RefreshSession, PushDevice, uid
 from .avatars import sanitize_avatar
 from .config import Settings
 from .otp import deliver_otp, otp_directory
@@ -54,6 +54,7 @@ def issue_session(db, user, family_id=None, expires_at=None):
             'expires_in': min(43200, expiry - now)}
 
 def revoke_family(db, family_id):
+    db.execute(update(PushDevice).where(PushDevice.family_id == family_id).values(active=0))
     db.execute(update(AuthSession).where(AuthSession.family_id == family_id).values(expires_at=0))
     db.execute(update(RefreshSession).where(RefreshSession.family_id == family_id).values(expires_at=0))
 
@@ -175,6 +176,9 @@ def router(database, actor, bearer, settings: Settings):
         session = db.get(AuthSession, digest(credentials.credentials))
         if session and session.family_id:
             revoke_family(db, session.family_id)
+        elif settings.environment == 'development':
+            db.execute(update(PushDevice).where(PushDevice.user_id == user.id,
+                PushDevice.family_id == 'dev:' + user.id).values(active=0))
         db.execute(update(AuthSession).where(AuthSession.token_hash == digest(credentials.credentials)).values(expires_at=0))
         db.commit()
         return {'signed_out': True}

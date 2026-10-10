@@ -60,6 +60,47 @@ class Participant(Base):
     invited_at: Mapped[int | None] = mapped_column(BigInteger)
     expires_at: Mapped[int | None] = mapped_column(BigInteger)
 
+    invitation_version: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'))
+    participant_id: Mapped[str] = mapped_column(ForeignKey('participants.id'))
+    invitation_version: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(32))
+    event_key: Mapped[str] = mapped_column(String(160), unique=True)
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    read_at: Mapped[int | None] = mapped_column(BigInteger)
+
+class PushDevice(Base):
+    __tablename__ = 'push_devices'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    family_id: Mapped[str] = mapped_column(String(80), index=True)
+    token: Mapped[str] = mapped_column(Text)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    platform: Mapped[str] = mapped_column(String(8))
+    active: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+
+class PushDelivery(Base):
+    __tablename__ = 'push_deliveries'
+    __table_args__ = (UniqueConstraint('notification_id', 'device_id', name='uq_notification_device'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    notification_id: Mapped[str] = mapped_column(ForeignKey('notifications.id'))
+    device_id: Mapped[str] = mapped_column(ForeignKey('push_devices.id'))
+    token_hash: Mapped[str] = mapped_column(String(64))
+    family_id: Mapped[str] = mapped_column(String(80))
+    state: Mapped[str] = mapped_column(String(12), default='PENDING')
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    due_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    lease_until: Mapped[int] = mapped_column(BigInteger, default=0)
+    lease_owner: Mapped[str | None] = mapped_column(String(36))
+    last_code: Mapped[str | None] = mapped_column(String(40))
+
 class InvitationRate(Base):
     __tablename__ = 'invitation_rates'
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
