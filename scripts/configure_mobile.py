@@ -85,3 +85,6 @@ def configure(root=ROOT):
 
 if __name__ == '__main__':
     configure()
+    # Import only for the CLI; unit tests can still exercise native config alone.
+    from configure_brand import configure as configure_brand
+    configure_brand()
