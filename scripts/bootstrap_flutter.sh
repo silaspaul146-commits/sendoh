@@ -19,4 +19,4 @@ XML
 flutter pub get
 python3 ../../scripts/configure_mobile.py
 flutter analyze
-flutter test --reporter expanded
+flutter test --reporter expanded --reporter expanded
