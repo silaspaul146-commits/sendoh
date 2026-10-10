@@ -43,7 +43,7 @@ def configure(root=ROOT):
         for gradle in (root / 'android/app/build.gradle', root / 'android/app/build.gradle.kts'):
             if gradle.exists():
                 value = gradle.read_text()
-                value = value.replace('minSdk = flutter.minSdkVersion', 'minSdk = maxOf(23, flutter.minSdkVersion)')
+                value = value.replace('minSdk = flutter.minSdkVersion', 'minSdk = Math.max(23, flutter.minSdkVersion)')
                 value = value.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion Math.max(23, flutter.minSdkVersion)')
                 value = re.sub(r'(\bminSdk(?:Version)?\s*(?:=\s*)?)(\d+)',
                     lambda m: m[1] + str(max(23, int(m[2]))), value)
