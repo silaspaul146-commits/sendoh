@@ -3,7 +3,7 @@ import os
 import hashlib
 import secrets
 import time
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +11,21 @@ from .models import User, PhoneIdentity, OtpChallenge, AuthSession, RefreshSessi
 from .avatars import sanitize_avatar
 from .config import Settings
 from .otp import deliver_otp, otp_directory
+
+
+
+def _deliver_staging_push(sender, tokens, challenge_id, code, expires_at):
+    # No request-scoped database session crosses into the background task.
+    # Tokens were selected only from previously authenticated live sessions.
+    import logging
+    for token in tokens:
+        if time.time() >= expires_at:
+            return
+        try:
+            sender.send(token, challenge_id, otp=code)
+        except Exception:
+            logging.getLogger('sendoh.otp').warning(
+                'Staging OTP push failed; use the staging log fallback.')
 
 
 def digest(value):
@@ -70,7 +85,7 @@ def router(database, actor, bearer, settings: Settings, push_sender=None):
     routes = APIRouter(prefix='/api/v1')
 
     @routes.post('/auth/code')
-    def send_code(data: PhoneInput, db=Depends(database)):
+    def send_code(data: PhoneInput, background_tasks: BackgroundTasks, db=Depends(database)):
         now = int(time.time())
         challenge_id, code = uid(), f'{secrets.randbelow(1000000):06d}'
         values = dict(challenge_id=challenge_id, code_hash=digest(challenge_id + code),
@@ -90,25 +105,21 @@ def router(database, actor, bearer, settings: Settings, push_sender=None):
             db.rollback()
             raise HTTPException(429, 'Wait 60 seconds before requesting another code.')
         try:
-            # Staging-only: route to PREVIOUSLY authenticated devices for this
-            # phone. Never accept a destination token from the login request.
-            delivery = None
+            # Always retain the explicitly enabled staging-log fallback.
+            # Firebase is best effort and must not hold the HTTP response open.
+            delivery = deliver_otp(settings, data.phone, challenge_id, code)
             if settings.environment == 'staging' and settings.otp_provider == 'log' and os.getenv('SENDOH_STAGING_PUSH_OTP') == '1' and push_sender:
                 identity = db.get(PhoneIdentity, data.phone)
                 if identity:
                     from .push import session_live
                     devices = db.scalars(select(PushDevice).where(PushDevice.user_id == identity.user_id,
                         PushDevice.active == 1, PushDevice.expires_at > now).limit(5)).all()
-                    for device in devices:
-                        if not session_live(db, device, settings.environment, now):
-                            continue
-                        try:
-                            push_sender.send(device.token, challenge_id, otp=code)
-                            delivery = 'staging-push'
-                        except Exception:
-                            pass
-            if delivery is None:
-                delivery = deliver_otp(settings, data.phone, challenge_id, code)
+                    tokens = [device.token for device in devices
+                              if session_live(db, device, settings.environment, now)]
+                    if tokens:
+                        background_tasks.add_task(
+                            _deliver_staging_push, push_sender, tokens, challenge_id, code, now + 300)
+                        delivery = 'staging-push'
         except Exception:
             db.execute(update(OtpChallenge).where(
                 OtpChallenge.phone == data.phone,
