@@ -33,6 +33,9 @@ export async function POST(request: NextRequest) {
     case 'respond':
       if (typeof id !== 'string' || !Number.isInteger(version) || version < 1) return new NextResponse(null,{status:400});
       path=`/me/invitations/${encodeURIComponent(id)}/respond`; body={decision,version}; break;
+    case 'join':
+      if (typeof token !== 'string') return new NextResponse(null,{status:400});
+      path=`/me/guest-collections/${encodeURIComponent(token)}/join`; body={}; break;
     case 'context':
       if (typeof token !== 'string') return new NextResponse(null,{status:400});
       path=`/me/guest-collections/${encodeURIComponent(token)}`; method='GET'; break;

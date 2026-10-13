@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'session_store.dart';
 
@@ -16,6 +17,26 @@ class SendohApi {
   String token;
   String? refreshToken;
   Future<void>? _refreshing;
+  static final Map<String, Future<void>> _waking = {};
+  static final Map<String, DateTime> _awake = {};
+  Future<void> wake() {
+    if (_awake[baseUrl] != null && DateTime.now().difference(_awake[baseUrl]!).inMinutes < 5) {
+      return Future.value();
+    }
+    return _waking.putIfAbsent(baseUrl, () => _ping().whenComplete(() => _waking.remove(baseUrl)));
+  }
+  Future<void> _ping() async {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        final response = await http.get(Uri.parse('$baseUrl/health')).timeout(const Duration(seconds: 25));
+        if (response.statusCode == 200) {
+          _awake[baseUrl] = DateTime.now();
+          return;
+        }
+      } catch (_) { /* Retry only the read-only health check. */ }
+    }
+    throw ApiException(503, 'Sendoh is still waking up. Your session is saved. Please retry.');
+  }
   Future<void> refresh() => _refreshing ??= _rotate().whenComplete(() => _refreshing = null);
   Future<void> _rotate() async {
     if (refreshToken == null) throw ApiException(401, 'Please sign in again.');
@@ -27,6 +48,7 @@ class SendohApi {
   }
   Future<dynamic> request(String path,
       {Map<String, dynamic>? body, String? key, bool retry = true}) async {
+    await wake();
     final uri = Uri.parse('$baseUrl/api/v1$path');
     final sentToken = token;
     final headers = {

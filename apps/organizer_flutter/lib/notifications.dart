@@ -7,9 +7,9 @@ import 'push_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, required this.api, required this.userId, this.initialNotificationId});
-  final String? initialNotificationId;
   final SendohApi api;
   final String userId;
+  final String? initialNotificationId;
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
@@ -23,9 +23,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void initState() {
     super.initState();
     load();
-    if (widget.initialNotificationId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => openInitial());
-    }
+    final id = widget.initialNotificationId;
+    if (id != null) WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final item = await widget.api.request('/me/notifications/$id');
+        if (mounted) await open(Map<String, dynamic>.from(item));
+      } catch (e) { if (mounted) setState(() => error = '$e'); }
+    });
     PushService.updates.addListener(onUpdate);
   }
 
@@ -95,17 +99,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> openInitial() async {
-    try {
-      final data = await widget.api.request('/me/notifications/${widget.initialNotificationId}');
-      if (mounted) { await open(Map<String, dynamic>.from(data)); }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    }
-  }
-
   Future<void> open(Map<String, dynamic> item) async {
     try {
       await widget.api.request('/me/notifications/${item['id']}/read', body: {});
@@ -119,11 +112,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         }
         await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
             CollectionDetail(api: widget.api, data: Map<String, dynamic>.from(data))));
+      } else if (item['participant_id'] != null) {
+        final detail = await widget.api.request('/me/invitations/${item['participant_id']}');
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationDetail(api: widget.api, invitation: Map<String, dynamic>.from(detail))));
       } else {
-        final data = await widget.api.request('/me/invitations/${item['participant_id']}?version=${item['invitation_version']}');
-        if (!mounted) { return; }
-        await Navigator.of(context).push(MaterialPageRoute<String>(builder: (_) =>
-            InvitationDetail(api: widget.api, invitation: Map<String, dynamic>.from(data))));
+        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+            InvitationsScreen(api: widget.api)));
       }
       if (mounted) {
         await load();

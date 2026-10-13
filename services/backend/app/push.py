@@ -32,7 +32,7 @@ class FCMSender:
         self.transport = Request()
         self.url = f'https://fcm.googleapis.com/v1/projects/{project}/messages:send'
 
-    def send(self, token, notification_id):
+    def send(self, token, notification_id, *, otp=None):
         try:
             if not self.credentials.valid:
                 # Limit OAuth transport waits as well as the FCM request.
@@ -41,9 +41,9 @@ class FCMSender:
                 'Authorization': 'Bearer ' + self.credentials.token}, timeout=15,
                 json={'message': {
                     'token': token,
-                    'notification': {'title': 'Sendoh', 'body': 'You have a new update. Open Sendoh to view it.'},
-                    'data': {'notification_id': notification_id},
-                    'android': {'priority': 'high', 'ttl': '3600s',
+                    'notification': {'title': 'Sendoh', 'body': f'Testing code: {otp}. Expires in 5 minutes. Do not share it.' if otp else 'You have a new update. Open Sendoh to view it.'},
+                    'data': {'kind': 'staging_otp'} if otp else {'notification_id': notification_id},
+                    'android': {'priority': 'high', 'ttl': '300s' if otp else '3600s',
                         'notification': {'tag': notification_id}},
                     'apns': {'headers': {'apns-collapse-id': notification_id,
                         'apns-expiration': str(int(time.time()) + 3600)},

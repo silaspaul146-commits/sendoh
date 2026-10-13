@@ -3,7 +3,7 @@ import hashlib
 import json
 import time
 from typing import Literal
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, update, or_, and_, func
 from sqlalchemy.exc import IntegrityError
@@ -66,9 +66,9 @@ def consume_rate(db, user):
 def invitation_view(db, p, c, web_url):
     # Recipient view contains only their own participant row, never the roster.
     info = serialize(db, c, web_url, public=True)
-    return dict(id=p.id, collection_id=c.id, collection=info,
+    return dict(id=p.id, invitation_version=p.invitation_version, collection_id=c.id, collection=info,
                 participant_name=p.name, expected_amount=p.expected_amount,
-                invitation_state=participant_state(p), expires_at=p.expires_at, invitation_version=p.invitation_version,
+                invitation_state=participant_state(p), expires_at=p.expires_at,
                 share_url=f'{web_url}/c/{c.public_token}' if c.status == 'ACTIVE' else None)
 
 def router(database, actor, web_url):
@@ -169,39 +169,6 @@ def router(database, actor, web_url):
             raise HTTPException(409, 'That person already has an invitation or membership.')
         return record.response
 
-    @routes.get('/collections/{collection_id}/invitations/{invitation_id}/link')
-    def link(collection_id: str, invitation_id: str, user=Depends(actor), db=Depends(database)):
-        c = db.scalar(select(Collection).where(Collection.id == collection_id, Collection.organizer_id == user.id))
-        p = db.scalar(select(Participant).where(Participant.id == invitation_id, Participant.collection_id == collection_id))
-        if not c or not p:
-            raise HTTPException(404, 'Invitation not found.')
-        if c.status != 'ACTIVE' or participant_state(p) != 'PENDING':
-            raise HTTPException(409, 'This invitation is no longer pending.')
-        # Locator only: opening this URL never authenticates or grants membership.
-        return {'url': f'{web_url}/i/{p.id}?v={p.invitation_version}'}
-
-    @routes.get('/me/invitations/{invitation_id}')
-    def invitation_detail(invitation_id: str, version: int | None = Query(default=None, ge=1),
-                          user=Depends(actor), db=Depends(database)):
-        p = db.scalar(select(Participant).where(Participant.id == invitation_id, recipient_filter(db, user)))
-        if not p or (version is not None and p.invitation_version != version):
-            raise HTTPException(404, 'Invitation not found for this verified phone number, or the link has changed.')
-        c = db.get(Collection, p.collection_id)
-        return invitation_view(db, p, c, web_url)
-
-    @routes.get('/me/guest-collections/{token}')
-    def guest_context(token: str, user=Depends(actor), db=Depends(database)):
-        c = db.scalar(select(Collection).where(Collection.public_token == token, Collection.status == 'ACTIVE'))
-        if not c:
-            raise HTTPException(404, 'Collection not found.')
-        phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
-        if not phone:
-            raise HTTPException(403, 'Verify your phone number first.')
-        p = db.scalar(select(Participant).where(Participant.collection_id == c.id, recipient_filter(db, user)))
-        return {'user_id': user.id, 'display_name': user.display_name, 'phone': phone,
-                'participant': invitation_view(db, p, c, web_url) if p else None,
-                'attribution': 'self', 'payments_enabled': False}
-
     @routes.get('/me/invitations')
     def inbox(user=Depends(actor), db=Depends(database)):
         rows = db.execute(select(Participant, Collection).join(Collection, Participant.collection_id == Collection.id)
@@ -223,7 +190,7 @@ def router(database, actor, web_url):
         if not p:
             raise HTTPException(404, 'Invitation not found.')
         if data.version is not None and p.invitation_version != data.version:
-            raise HTTPException(409, 'This invitation has changed. Ask for a new link.')
+            raise HTTPException(409, 'This invitation has changed. Open the latest link.')
         desired = 'ACCEPTED' if data.decision == 'accept' else 'DECLINED'
         if p.invitation_state == desired:
             return invitation_view(db, p, c, web_url)
@@ -281,5 +248,98 @@ def router(database, actor, web_url):
         emit(db, recipient, p, 'CANCELLED')
         db.commit()
         return participant_summary(db, p)
+
+
+    @routes.get('/collections/{collection_id}/invitations/{invitation_id}/link')
+    def personal_link(collection_id: str, invitation_id: str, user=Depends(actor), db=Depends(database)):
+        c = db.scalar(select(Collection).where(Collection.id == collection_id, Collection.organizer_id == user.id))
+        p = db.get(Participant, invitation_id)
+        if not c or not p or p.collection_id != c.id or participant_state(p) != 'PENDING':
+            raise HTTPException(404, 'Active invitation not found.')
+        return {'url': f'{web_url}/i/{p.id}?v={p.invitation_version}'}
+
+    @routes.get('/me/invitations/{invitation_id}')
+    def detail(invitation_id: str, version: int | None = None, user=Depends(actor), db=Depends(database)):
+        p = db.scalar(select(Participant).where(Participant.id == invitation_id, recipient_filter(db, user)))
+        if not p or (version is not None and p.invitation_version != version):
+            raise HTTPException(404, 'Invitation not found for this account.')
+        return invitation_view(db, p, db.get(Collection, p.collection_id), web_url)
+
+    @routes.get('/me/guest-collections/{token}')
+    def guest_context(token: str, user=Depends(actor), db=Depends(database)):
+        phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
+        if not phone:
+            raise HTTPException(403, 'Verify your phone first.')
+        c = db.scalar(select(Collection).where(Collection.public_token == token, Collection.status == 'ACTIVE'))
+        if not c:
+            raise HTTPException(404, 'Collection not found.')
+        p = db.scalar(select(Participant).where(Participant.collection_id == c.id,
+            or_(Participant.user_id == user.id, recipient_filter(db, user))))
+        return dict(name=user.display_name, phone=phone, user_id=user.id,
+            participant=invitation_view(db, p, c, web_url) if p else None,
+            attribution='self', payments_enabled=False)
+
+    @routes.post('/me/guest-collections/{token}/join')
+    def join_link(token: str, user=Depends(actor), db=Depends(database)):
+        phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
+        if not phone or not user.display_name:
+            raise HTTPException(403, 'Verify your phone and add your name first.')
+        c = db.scalar(select(Collection).where(Collection.public_token == token,
+            Collection.status == 'ACTIVE').with_for_update())
+        if not c:
+            raise HTTPException(404, 'Collection not found.')
+        if c.organizer_id == user.id:
+            raise HTTPException(409, 'You already organize this collection.')
+        p = db.scalar(select(Participant).where(Participant.collection_id == c.id,
+            or_(Participant.user_id == user.id, recipient_filter(db, user))))
+        if p and participant_state(p) == 'ACCEPTED':
+            return invitation_view(db, p, c, web_url)
+        if p and participant_state(p) != 'PENDING':
+            raise HTTPException(409, 'Ask the organizer to review your existing invitation.')
+        if not p:
+            count = db.scalar(select(func.count()).select_from(Participant).where(Participant.collection_id == c.id))
+            if count >= 200:
+                raise HTTPException(409, 'This collection has reached 200 participants.')
+            p = Participant(collection_id=c.id, name=user.display_name,
+                expected_amount=c.expected_amount, invitation_version=1,
+                invited_at=int(time.time()))
+            db.add(p)
+        p.user_id = user.id
+        p.invited_user_id = user.id
+        p.invited_phone = phone
+        p.name = user.display_name
+        p.invitation_state = 'ACCEPTED'
+        try:
+            db.flush()
+            emit(db, c.organizer_id, p, 'ACCEPTED')
+            db.add(Activity(organizer_id=c.organizer_id, collection_id=c.id,
+                message=f'{user.display_name[:120]} joined through the collection link'))
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(409, 'Membership changed. Refresh and try again.')
+        return invitation_view(db, p, c, web_url)
+
+    @routes.post('/collections/{collection_id}/participants/{placeholder_id}/link/{member_id}')
+    def link_placeholder(collection_id: str, placeholder_id: str, member_id: str,
+                         user=Depends(actor), db=Depends(database)):
+        c = db.scalar(select(Collection).where(Collection.id == collection_id,
+            Collection.organizer_id == user.id).with_for_update())
+        if not c:
+            raise HTTPException(404, 'Collection not found.')
+        old, member = db.get(Participant, placeholder_id), db.get(Participant, member_id)
+        if not old or not member or old.collection_id != c.id or member.collection_id != c.id:
+            raise HTTPException(404, 'Participant not found.')
+        if old.invitation_state != 'UNVERIFIED' or old.user_id or old.invited_user_id or old.invited_phone:
+            raise HTTPException(409, 'Only an unlinked manual name can be replaced.')
+        if member.invitation_state != 'ACCEPTED' or not member.user_id:
+            raise HTTPException(409, 'Choose a joined member.')
+        # Keep the authenticated membership and its notification history intact.
+        member.expected_amount = old.expected_amount
+        db.delete(old)
+        db.add(Activity(organizer_id=user.id, collection_id=c.id,
+            message='Organizer linked a manual participant to a joined profile'))
+        db.commit()
+        return participant_summary(db, member)
 
     return routes

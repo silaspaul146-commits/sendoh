@@ -121,10 +121,12 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
   };
   String get displayName => account['display_name'] as String;
   late Future<List<dynamic>> items;
+  late Future<List<dynamic>> joinedItems;
   @override
   void initState() {
     super.initState();
     items = ref.read(apiProvider).collections();
+    joinedItems = loadJoined();
     WidgetsBinding.instance.addObserver(this);
     PushService.updates.addListener(pushUpdated);
     WidgetsBinding.instance.addPostFrameCallback((_) => connectNotifications());
@@ -142,6 +144,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       connectNotifications();
+      reload();
     }
   }
 
@@ -188,20 +191,20 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
       return;
     }
     notificationsOpen = true;
-    final notificationId = PushService.pendingNotificationId;
-    PushService.pendingNotificationId = null;
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => NotificationsScreen(
             api: ref.read(apiProvider),
-            userId: account['id'] as String? ?? '',
-            initialNotificationId: notificationId)));
+            userId: account['id'] as String? ?? '', initialNotificationId: PushService.pendingNotificationId)));
     notificationsOpen = false;
+    PushService.pendingNotificationId = null;
     if (mounted) {
       await refreshUnread();
+      reload();
     }
   }
 
-  void reload() => setState(() => items = ref.read(apiProvider).collections());
+  Future<List<dynamic>> loadJoined() async => List<dynamic>.from(await ref.read(apiProvider).request('/me/joined-collections'));
+  void reload() => setState(() { items = ref.read(apiProvider).collections(); joinedItems = loadJoined(); });
   Future<void> create() async {
     final api = ref.read(apiProvider);
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -276,7 +279,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                   onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                           builder: (_) =>
-                              InvitationsScreen(api: ref.read(apiProvider)))),
+                              InvitationsScreen(api: ref.read(apiProvider)))).then((_) { if (mounted) reload(); }),
                   icon: const Icon(Icons.mail_outline)),
             ]),
         bottomNavigationBar: NavigationBar(
@@ -354,11 +357,30 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                               onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute<void>(
                                       builder: (_) => InvitationsScreen(
-                                          api: ref.read(apiProvider)))),
+                                          api: ref.read(apiProvider)))).then((_) { if (mounted) reload(); }),
                               icon: const Icon(Icons.mail_outline),
                               label: const Text(
                                   'Invitations & joined collections')),
                           const SizedBox(height: 24),
+                          const Text('Collections you joined', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          FutureBuilder<List<dynamic>>(future: joinedItems, builder: (context, snapshot) {
+                            if (snapshot.hasError) return TextButton(onPressed: reload, child: const Text('Retry joined collections'));
+                            if (!snapshot.hasData) return const LinearProgressIndicator();
+                            if (snapshot.data!.isEmpty) return const Padding(padding: EdgeInsets.only(bottom: 16), child: Text('Accepted invitations appear here.'));
+                            return Column(children: snapshot.data!.map((raw) {
+                              final item = Map<String, dynamic>.from(raw);
+                              final c = Map<String, dynamic>.from(item['collection']);
+                              return Padding(padding: const EdgeInsets.only(bottom: 12), child: SurfaceCard(child: Material(type: MaterialType.transparency, child: ListTile(
+                                contentPadding: EdgeInsets.zero, leading: const CollectionSymbol(),
+                                title: Text(c['name'] as String), subtitle: Text('Joined • Organized by ${c['organizer_name']}'),
+                                trailing: const Icon(Icons.chevron_right), onTap: () async {
+                                  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationDetail(api: ref.read(apiProvider), invitation: item)));
+                                  if (mounted) reload();
+                                }))));
+                            }).toList());
+                          }),
+                          const SizedBox(height: 20),
                           const Text('Collections you organize',
                               style: TextStyle(
                                   fontSize: 17, fontWeight: FontWeight.w600)),
@@ -545,7 +567,9 @@ class CollectionCard extends StatelessWidget {
                         StatusBadge(
                             data['status'] == 'ACTIVE' ? 'ACTIVE' : 'DRAFT')
                       ]),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 4, children: (data['participants'] as List).take(7).map((raw) => MemberAvatar(Map<String, dynamic>.from(raw), radius: 14)).toList()),
+                      const SizedBox(height: 16),
                       Wrap(
                           crossAxisAlignment: WrapCrossAlignment.end,
                           spacing: 4,
@@ -839,6 +863,21 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
   }
 
+  Future<void> linkManual(Map<String, dynamic> placeholder) async {
+    final members = (data['participants'] as List).where((p) => p['invitation_state'] == 'ACCEPTED').toList();
+    final chosen = await showDialog<Map<String, dynamic>>(context: context, builder: (dialog) => SimpleDialog(
+      title: Text('Who is ${placeholder['name']}?'), children: [
+        const Padding(padding: EdgeInsets.all(16), child: Text('Choose the correct joined profile. This replaces the manual name and keeps its expected amount.')),
+        if (members.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Ask them to join using the collection link first.')),
+        ...members.map((p) => SimpleDialogOption(onPressed: () => Navigator.pop(dialog, Map<String, dynamic>.from(p)), child: Text('${p['name']} ${p['username'] == null ? '' : '@${p['username']}'}'))),
+      ]));
+    if (chosen == null || !mounted) return;
+    try {
+      await widget.api.request('/collections/${data['id']}/participants/${placeholder['id']}/link/${chosen['id']}', body: {});
+      await refresh();
+    } catch (e) { if (mounted) setState(() => error = '$e'); }
+  }
+
   void participant(Map<String, dynamic> p) => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -851,7 +890,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Center(child: PersonAvatar(p['name'], radius: 28)),
+                        Center(child: MemberAvatar(p, radius: 28)),
                         const SizedBox(height: 14),
                         Text(p['name'],
                             textAlign: TextAlign.center,
@@ -868,6 +907,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
                           SummaryRow('Remaining', money(p['expected_amount'])),
                         SummaryRow('Membership',
                             invitationLabel(p['invitation_state'])),
+                        if (p['invitation_state'] == 'UNVERIFIED') ...[
+                          const Text('Manual name only. This is not a verified account.', textAlign: TextAlign.center),
+                          TextButton(onPressed: () { Navigator.pop(sheet); linkManual(p); }, child: const Text('Link to a joined member')),
+                        ],
                         if (p['username'] != null)
                           SummaryRow('Verified profile', '@${p['username']}'),
                         const Center(
@@ -891,6 +934,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
                               child: const Text('Invite this person')),
                         ],
                         if (p['invitation_state'] == 'PENDING') ...[
+                          TextButton(onPressed: () async {
+                            try {
+                              final link = await widget.api.request('/collections/${data['id']}/invitations/${p['id']}/link');
+                              await Clipboard.setData(ClipboardData(text: link['url'] as String));
+                              if (sheet.mounted) ScaffoldMessenger.of(sheet).showSnackBar(const SnackBar(content: Text('Personal invitation link copied')));
+                            } catch (e) { if (sheet.mounted) ScaffoldMessenger.of(sheet).showSnackBar(SnackBar(content: Text('$e'))); }
+                          }, child: const Text('Copy personal invitation link')),
+
                           const SizedBox(height: 20),
                           OutlinedButton(
                               onPressed: busy
@@ -969,6 +1020,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 : SendohColors.teal)),
                     const SizedBox(height: 14)
                   ],
+                  Wrap(spacing: 4, children: people.take(7).map((raw) => MemberAvatar(Map<String, dynamic>.from(raw), radius: 15)).toList()),
+                  const SizedBox(height: 8),
                   Text('${people.length} participants',
                       style: const TextStyle(
                           fontSize: 12, color: SendohColors.secondary)),
@@ -977,7 +1030,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     FilledButton.icon(
                         onPressed: busy ? null : () => invitePerson(),
                         icon: const Icon(Icons.person_add_outlined, size: 18),
-                        label: const Text('Invite by username or phone')),
+                        label: const Text('Invite a specific person')),
                   ],
                   const SizedBox(height: 20),
                   if (data['share_url'] != null)
@@ -986,6 +1039,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             copyCollectionLink(context, data['share_url']),
                         icon: const Icon(Icons.share_outlined, size: 18),
                         label: const Text('Copy collection link')),
+                  const Text('Share one collection link with your group. People join as themselves; you do not need everyone’s username.', style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
                   const SizedBox(height: 22),
                   Row(
                       children: ['Overview', 'Participants']
@@ -1063,7 +1117,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         final p = Map<String, dynamic>.from(raw);
                         return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: PersonAvatar(p['name'], radius: 16),
+                            leading: MemberAvatar(p, radius: 16),
                             title: Text(p['name'],
                                 style: const TextStyle(
                                     fontSize: 14, fontWeight: FontWeight.w500)),

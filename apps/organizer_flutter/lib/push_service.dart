@@ -45,13 +45,13 @@ class PushService {
       await FirebaseMessaging.instance.setAutoInitEnabled(false);
       FirebaseMessaging.onMessage.listen((_) => updates.value++);
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
-        pendingNotificationId = message.data['notification_id'];
-        pendingOpen = true;
+        pendingNotificationId = message.data['notification_id'] as String?;
+        pendingOpen = pendingNotificationId != null;
         updates.value++;
       });
       final initial = await FirebaseMessaging.instance.getInitialMessage();
-      pendingOpen = initial != null;
-      pendingNotificationId = initial?.data['notification_id'];
+      pendingNotificationId = initial?.data['notification_id'] as String?;
+      pendingOpen = pendingNotificationId != null;
       ready = true;
     } catch (_) {
       // Inbox and login must remain available if Firebase cannot initialize.
@@ -178,7 +178,6 @@ class PushService {
     _api = null;
     _optedIn = false;
     pendingOpen = false;
-    pendingNotificationId = null;
     await _refresh?.cancel();
     _refresh = null;
     if (ready && deleteToken) {

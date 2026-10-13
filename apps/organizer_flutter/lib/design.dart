@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 abstract final class SendohColors {
@@ -278,4 +279,21 @@ String displayDate(dynamic raw) {
     'Dec'
   ];
   return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
+class MemberAvatar extends StatelessWidget {
+  const MemberAvatar(this.person, {super.key, this.radius = 18});
+  final Map<String, dynamic> person;
+  final double radius;
+  @override
+  Widget build(BuildContext context) {
+    final name = (person['name'] ?? person['display_name'] ?? 'Member') as String;
+    final photo = person['avatar'];
+    if (photo is String && photo.isNotEmpty) {
+      try {
+        return CircleAvatar(radius: radius, backgroundImage: MemoryImage(base64Decode(photo)));
+      } catch (_) { /* Legacy invalid image falls back to initials. */ }
+    }
+    return PersonAvatar(name, radius: radius);
+  }
 }

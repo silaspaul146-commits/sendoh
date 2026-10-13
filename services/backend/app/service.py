@@ -15,6 +15,7 @@ def participant_summary(db, p):
     return dict(id=p.id, name=member.display_name if member else p.name,
                 expected_amount=p.expected_amount, user_id=p.user_id,
                 username=member.username if member else None,
+                avatar=member.avatar if member else None,
                 invitation_state=participant_state(p),
                 invited_phone_hint=('••••••' + p.invited_phone[-3:]) if p.invited_phone else None,
                 identity_verified=member is not None)

@@ -1,0 +1,14 @@
+name: Staging health ping
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Wake and check staging API
+        run: curl --fail --silent --show-error --max-time 100 --retry 1 --retry-delay 5 https://sendoh.onrender.com/health

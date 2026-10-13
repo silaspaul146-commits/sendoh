@@ -1,4 +1,5 @@
 """Local development verification. SMS delivery is deliberately not simulated."""
+import os
 import hashlib
 import secrets
 import time
@@ -65,7 +66,7 @@ def profile(user, environment='development'):
             'profile_complete': bool(user.display_name and user.username), 'auth_mode': environment}
 
 
-def router(database, actor, bearer, settings: Settings):
+def router(database, actor, bearer, settings: Settings, push_sender=None):
     routes = APIRouter(prefix='/api/v1')
 
     @routes.post('/auth/code')
@@ -89,7 +90,25 @@ def router(database, actor, bearer, settings: Settings):
             db.rollback()
             raise HTTPException(429, 'Wait 60 seconds before requesting another code.')
         try:
-            delivery = deliver_otp(settings, data.phone, challenge_id, code)
+            # Staging-only: route to PREVIOUSLY authenticated devices for this
+            # phone. Never accept a destination token from the login request.
+            delivery = None
+            if settings.environment == 'staging' and settings.otp_provider == 'log' and os.getenv('SENDOH_STAGING_PUSH_OTP') == '1' and push_sender:
+                identity = db.get(PhoneIdentity, data.phone)
+                if identity:
+                    from .push import session_live
+                    devices = db.scalars(select(PushDevice).where(PushDevice.user_id == identity.user_id,
+                        PushDevice.active == 1, PushDevice.expires_at > now).limit(5)).all()
+                    for device in devices:
+                        if not session_live(db, device, settings.environment, now):
+                            continue
+                        try:
+                            push_sender.send(device.token, challenge_id, otp=code)
+                            delivery = 'staging-push'
+                        except Exception:
+                            pass
+            if delivery is None:
+                delivery = deliver_otp(settings, data.phone, challenge_id, code)
         except Exception:
             db.execute(update(OtpChallenge).where(
                 OtpChallenge.phone == data.phone,

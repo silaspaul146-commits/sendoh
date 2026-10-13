@@ -24,7 +24,7 @@ class _OnboardingState extends State<Onboarding> {
   final name = TextEditingController();
   final username = TextEditingController();
   String? avatar;
-  bool restoring = true, hasSavedSession = false;
+  bool restoring = true, hasSavedSession = false, deviceUnlocked = false;
   final url = TextEditingController(text: SendohConfig.apiBaseUrl);
   int step = 0, seconds = 0;
   bool busy = false;
@@ -49,12 +49,15 @@ class _OnboardingState extends State<Onboarding> {
     try {
       final saved = await SessionStore.read();
       if (saved == null) return;
-      hasSavedSession = true;
+      if (mounted) setState(() => hasSavedSession = true);
       // Do not send an old token to a different configured backend.
-      if (saved['url'] != SendohConfig.apiBaseUrl) return;
-      if (await SessionStore.locked()) {
+      if (saved['url'] != SendohConfig.apiBaseUrl) {
+        throw ApiException(409, 'This saved account belongs to another server. Sign out before switching servers.');
+      }
+      if (!deviceUnlocked && await SessionStore.locked()) {
         final ok = await authenticateDevice('Unlock your Sendoh account');
         if (!ok) return;
+        deviceUnlocked = true;
       }
       final api = SendohApi(saved['url'] as String, '')
         ..refreshToken = saved['refresh'] as String;
@@ -70,7 +73,7 @@ class _OnboardingState extends State<Onboarding> {
       }
       if (mounted) setState(() => error = e.message);
     } catch (_) {
-      if (mounted) setState(() => error = 'Could not restore your session. Retry or sign in with your phone.');
+      if (mounted) setState(() => error = 'Cannot reach Sendoh yet. Your account is saved. Check your connection and retry.');
     } finally {
       if (mounted) setState(() => restoring = false);
     }
@@ -215,7 +218,23 @@ class _OnboardingState extends State<Onboarding> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context)  => hasSavedSession && step == 0
+      ? Scaffold(body: SafeArea(child: Center(child: Padding(
+          padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SendohBrand(vertical: true),
+            const SizedBox(height: 24),
+            const Text('Welcome back', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Text(restoring ? 'Connecting to Sendoh. The server may take a moment to wake up.' : (error ?? 'Unlock to continue where you left off.'), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            if (restoring) const CircularProgressIndicator()
+            else FilledButton(onPressed: () { setState(() { restoring = true; error = null; }); restore(); }, child: const Text('Continue to my account')),
+            if (!restoring) TextButton(onPressed: () async {
+              await SessionStore.clear();
+              if (mounted) setState(() { hasSavedSession = false; deviceUnlocked = false; error = null; });
+            }, child: const Text('Use another account')),
+          ])))))
+      : Scaffold(
         appBar: AppBar(
           title: step == 0
               ? null
@@ -258,6 +277,7 @@ class _OnboardingState extends State<Onboarding> {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            if (step == 2 && delivery == 'staging-push') const Text('Testing code sent to your previously signed-in Sendoh device. Check its notifications.'),
                             if (step == 0) ...[
                               if (restoring) const LinearProgressIndicator(),
                               if (error != null) Text(error!),
