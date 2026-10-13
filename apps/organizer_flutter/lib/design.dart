@@ -162,7 +162,7 @@ class SurfaceCard extends StatelessWidget {
           color: color,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: SendohColors.border, width: .7)),
-      child: child);
+      child: Material(type: MaterialType.transparency, child: child));
 }
 
 class PersonAvatar extends StatelessWidget {
@@ -287,12 +287,14 @@ class MemberAvatar extends StatelessWidget {
   final double radius;
   @override
   Widget build(BuildContext context) {
-    final name = (person['name'] ?? person['display_name'] ?? 'Member') as String;
+    final name =
+        (person['name'] ?? person['display_name'] ?? 'Member') as String;
     final photo = person['avatar'];
     if (photo is String && photo.isNotEmpty) {
       try {
-        return CircleAvatar(radius: radius, backgroundImage: MemoryImage(base64Decode(photo)));
-      } catch (_) { /* Legacy invalid image falls back to initials. */ }
+        return CircleAvatar(
+            radius: radius, backgroundImage: MemoryImage(base64Decode(photo)));
+      } catch (_) {/* Legacy invalid image falls back to initials. */}
     }
     return PersonAvatar(name, radius: radius);
   }
