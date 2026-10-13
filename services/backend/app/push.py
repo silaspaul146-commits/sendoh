@@ -140,15 +140,18 @@ def lifespan_for(sessions, sender, environment):
     @asynccontextmanager
     async def lifespan(app):
         stop = asyncio.Event()
+        wake = asyncio.Event()
+        app.state.push_wake = wake
         async def loop():
             while not stop.is_set():
+                wake.clear()
                 try:
                     worked = await asyncio.to_thread(process_one, sessions, sender, environment)
                 except Exception:
                     log.warning('Push queue temporarily unavailable; will retry.')
                     worked = False
                 try:
-                    await asyncio.wait_for(stop.wait(), timeout=1 if worked else 10)
+                    await asyncio.wait_for(wake.wait(), timeout=0.01 if worked else 10)
                 except asyncio.TimeoutError:
                     pass
         task = asyncio.create_task(loop()) if sender else None
@@ -156,6 +159,7 @@ def lifespan_for(sessions, sender, environment):
             yield
         finally:
             stop.set()
+            wake.set()
             if task:
                 await task
     return lifespan

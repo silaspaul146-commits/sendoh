@@ -3,7 +3,7 @@ import hashlib
 import json
 import time
 from typing import Literal
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, update, or_, and_, func
 from sqlalchemy.exc import IntegrityError
@@ -34,6 +34,7 @@ class InviteInput(BaseModel):
 class DecisionInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     decision: Literal['accept', 'decline']
+    version: int | None = Field(default=None, ge=1)
 
 def recipient_filter(db, user):
     phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
@@ -67,7 +68,7 @@ def invitation_view(db, p, c, web_url):
     info = serialize(db, c, web_url, public=True)
     return dict(id=p.id, collection_id=c.id, collection=info,
                 participant_name=p.name, expected_amount=p.expected_amount,
-                invitation_state=participant_state(p), expires_at=p.expires_at,
+                invitation_state=participant_state(p), expires_at=p.expires_at, invitation_version=p.invitation_version,
                 share_url=f'{web_url}/c/{c.public_token}' if c.status == 'ACTIVE' else None)
 
 def router(database, actor, web_url):
@@ -168,6 +169,39 @@ def router(database, actor, web_url):
             raise HTTPException(409, 'That person already has an invitation or membership.')
         return record.response
 
+    @routes.get('/collections/{collection_id}/invitations/{invitation_id}/link')
+    def link(collection_id: str, invitation_id: str, user=Depends(actor), db=Depends(database)):
+        c = db.scalar(select(Collection).where(Collection.id == collection_id, Collection.organizer_id == user.id))
+        p = db.scalar(select(Participant).where(Participant.id == invitation_id, Participant.collection_id == collection_id))
+        if not c or not p:
+            raise HTTPException(404, 'Invitation not found.')
+        if c.status != 'ACTIVE' or participant_state(p) != 'PENDING':
+            raise HTTPException(409, 'This invitation is no longer pending.')
+        # Locator only: opening this URL never authenticates or grants membership.
+        return {'url': f'{web_url}/i/{p.id}?v={p.invitation_version}'}
+
+    @routes.get('/me/invitations/{invitation_id}')
+    def invitation_detail(invitation_id: str, version: int | None = Query(default=None, ge=1),
+                          user=Depends(actor), db=Depends(database)):
+        p = db.scalar(select(Participant).where(Participant.id == invitation_id, recipient_filter(db, user)))
+        if not p or (version is not None and p.invitation_version != version):
+            raise HTTPException(404, 'Invitation not found for this verified phone number, or the link has changed.')
+        c = db.get(Collection, p.collection_id)
+        return invitation_view(db, p, c, web_url)
+
+    @routes.get('/me/guest-collections/{token}')
+    def guest_context(token: str, user=Depends(actor), db=Depends(database)):
+        c = db.scalar(select(Collection).where(Collection.public_token == token, Collection.status == 'ACTIVE'))
+        if not c:
+            raise HTTPException(404, 'Collection not found.')
+        phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
+        if not phone:
+            raise HTTPException(403, 'Verify your phone number first.')
+        p = db.scalar(select(Participant).where(Participant.collection_id == c.id, recipient_filter(db, user)))
+        return {'user_id': user.id, 'display_name': user.display_name, 'phone': phone,
+                'participant': invitation_view(db, p, c, web_url) if p else None,
+                'attribution': 'self', 'payments_enabled': False}
+
     @routes.get('/me/invitations')
     def inbox(user=Depends(actor), db=Depends(database)):
         rows = db.execute(select(Participant, Collection).join(Collection, Participant.collection_id == Collection.id)
@@ -178,8 +212,8 @@ def router(database, actor, web_url):
 
     @routes.post('/me/invitations/{invitation_id}/respond')
     def respond(invitation_id: str, data: DecisionInput, user=Depends(actor), db=Depends(database)):
-        if not user.username:
-            raise HTTPException(409, 'Complete your profile first.')
+        if not user.display_name:
+            raise HTTPException(409, 'Add your name first.')
         probe = db.scalar(select(Participant).where(Participant.id == invitation_id, recipient_filter(db, user)))
         if not probe:
             raise HTTPException(404, 'Invitation not found.')
@@ -188,6 +222,8 @@ def router(database, actor, web_url):
             recipient_filter(db, user)).execution_options(populate_existing=True).with_for_update())
         if not p:
             raise HTTPException(404, 'Invitation not found.')
+        if data.version is not None and p.invitation_version != data.version:
+            raise HTTPException(409, 'This invitation has changed. Ask for a new link.')
         desired = 'ACCEPTED' if data.decision == 'accept' else 'DECLINED'
         if p.invitation_state == desired:
             return invitation_view(db, p, c, web_url)

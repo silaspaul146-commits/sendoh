@@ -21,6 +21,10 @@ class InboxApi extends SendohApi {
       read = true;
       return {'ok': true};
     }
+    if (path.startsWith('/me/invitations/participant?')) {
+      return {'id':'participant','invitation_state':'PENDING','invitation_version':1,'expected_amount':null,
+        'collection':{'name':'Family support','organizer_name':'Alice','description':'','deadline_at':null,'collected_amount':0}};
+    }
     if (path == '/me/invitations' || path == '/me/joined-collections') {
       return [];
     }
@@ -30,7 +34,7 @@ class InboxApi extends SendohApi {
           'id': 'notification',
           'kind': 'INVITED',
           'title': 'You have a collection invitation',
-          'collection_name': 'Family support',
+          'participant_id':'participant', 'invitation_version':1, 'collection_name': 'Family support',
           'collection_id': 'collection',
           'created_at': 1790000000,
           'read_at': read ? 1790000001 : null,
@@ -59,7 +63,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('opening an update marks it read then loads current invitations',
+  testWidgets('opening an update marks it read then opens its specific invitation',
       (tester) async {
     final api = InboxApi();
     await tester.pumpWidget(MaterialApp(
@@ -70,8 +74,8 @@ void main() {
     await tester.tap(find.text('You have a collection invitation'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('/me/notifications/notification/read'));
-    expect(api.calls, contains('/me/invitations'));
-    expect(find.text('No invitations yet'), findsOneWidget);
+    expect(api.calls, contains('/me/invitations/participant?version=1'));
+    expect(find.text('Collection invitation'), findsOneWidget);
   });
 
   testWidgets('failed inbox load shows retry instead of an empty success',

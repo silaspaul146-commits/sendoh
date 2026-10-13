@@ -12,6 +12,7 @@ class PushService {
   static const _store = FlutterSecureStorage();
   static final updates = ValueNotifier<int>(0);
   static bool ready = false, pendingOpen = false;
+  static String? pendingNotificationId;
   static SendohApi? _api;
   static bool _optedIn = false;
   static int _generation = 0;
@@ -43,12 +44,14 @@ class PushService {
           iosBundleId: ios ? const String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID') : null));
       await FirebaseMessaging.instance.setAutoInitEnabled(false);
       FirebaseMessaging.onMessage.listen((_) => updates.value++);
-      FirebaseMessaging.onMessageOpenedApp.listen((_) {
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        pendingNotificationId = message.data['notification_id'];
         pendingOpen = true;
         updates.value++;
       });
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       pendingOpen = initial != null;
+      pendingNotificationId = initial?.data['notification_id'];
       ready = true;
     } catch (_) {
       // Inbox and login must remain available if Firebase cannot initialize.
@@ -175,6 +178,7 @@ class PushService {
     _api = null;
     _optedIn = false;
     pendingOpen = false;
+    pendingNotificationId = null;
     await _refresh?.cancel();
     _refresh = null;
     if (ready && deleteToken) {

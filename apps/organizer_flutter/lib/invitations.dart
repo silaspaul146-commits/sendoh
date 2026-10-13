@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'api.dart';
 import 'design.dart';
 
@@ -90,12 +91,28 @@ class _InvitePersonState extends State<InvitePerson> {
       error = null;
     });
     try {
-      await widget.api.request(
+      final invited = await widget.api.request(
           '/collections/${widget.collection['id']}/invitations',
           body: body,
           key: requestKey);
       if (mounted) {
-        Navigator.of(context).pop(true);
+        await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+          title: const Text('Invitation sent'),
+          content: const Text('They can join in Sendoh, or verify their phone using a personal web link.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done')),
+            TextButton(onPressed: () async {
+              try {
+                final link = await widget.api.request('/collections/${widget.collection['id']}/invitations/${invited['id']}/link');
+                await Clipboard.setData(ClipboardData(text: link['url'] as String));
+                if (dialogContext.mounted) { Navigator.pop(dialogContext); }
+              } catch (e) {
+                if (dialogContext.mounted) { ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('$e'))); }
+              }
+            }, child: const Text('Copy invitation link')),
+          ],
+        ));
+        if (mounted) { Navigator.of(context).pop(true); }
       }
     } catch (e) {
       if (mounted) {
@@ -198,7 +215,7 @@ class _InvitePersonState extends State<InvitePerson> {
               const SurfaceCard(
                   color: SendohColors.tealSoft,
                   child: Text(
-                      'The invitation appears in their Sendoh app. A new user must verify the invited phone number first. You can let them know on WhatsApp; no SMS or push alert is sent yet.',
+                      'The invitation appears in their Sendoh app. A new user must verify the invited phone number first. You can let them know on WhatsApp; push alerts are sent to registered devices when available.',
                       style: TextStyle(fontSize: 13, height: 1.6))),
               if (error != null)
                 Padding(
@@ -377,7 +394,7 @@ class _InvitationDetailState extends State<InvitationDetail> {
     try {
       final result = await widget.api.request(
           '/me/invitations/${widget.invitation['id']}/respond',
-          body: {'decision': decision});
+          body: {'decision': decision, if (widget.invitation['invitation_version'] != null) 'version': widget.invitation['invitation_version']});
       if (mounted) {
         Navigator.of(context).pop(result['invitation_state'] as String);
       }
@@ -399,7 +416,7 @@ class _InvitationDetailState extends State<InvitationDetail> {
     final pending = item['invitation_state'] == 'PENDING';
     return Scaffold(
       appBar: AppBar(
-          title: Text(pending ? 'Collection invitation' : 'Joined collection')),
+          title: Text(pending ? 'Collection invitation' : item['invitation_state'] == 'ACCEPTED' ? 'Joined collection' : 'Invitation update')),
       body: ListView(padding: const EdgeInsets.all(22), children: [
         const Center(child: CollectionSymbol()),
         const SizedBox(height: 20),
@@ -427,7 +444,7 @@ class _InvitationDetailState extends State<InvitationDetail> {
         Text(
             pending
                 ? 'Accepting adds your verified Sendoh profile to this collection. It does not make a payment.'
-                : 'You have joined this collection. No payment has been made through Sendoh. Payments are not available yet.',
+                : item['invitation_state'] == 'ACCEPTED' ? 'You have joined this collection. No payment has been made through Sendoh. Payments are not available yet.' : 'This invitation is no longer pending. No payment has been made.',
             style: const TextStyle(height: 1.6, color: SendohColors.secondary)),
         if (pending && item['expires_at'] != null) ...[
           const SizedBox(height: 10),

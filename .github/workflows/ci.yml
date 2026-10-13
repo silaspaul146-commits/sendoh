@@ -43,6 +43,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
+      - run: node --test scripts/test-guest-proxy.cjs
   flutter:
     runs-on: ubuntu-latest
     steps:
@@ -65,6 +66,8 @@ jobs:
         env:
           SENDOH_API_URL: ${{ vars.SENDOH_STAGING_API_URL || 'https://sendoh.onrender.com' }}
         run: flutter build apk --release --dart-define="API_URL=$SENDOH_API_URL" --dart-define-from-file="$RUNNER_TEMP/sendoh-push.json"
+      - name: Verify packaged Sendoh branding
+        run: bash scripts/verify_apk_brand.sh apps/organizer_flutter/build/app/outputs/flutter-apk/app-release.apk
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:

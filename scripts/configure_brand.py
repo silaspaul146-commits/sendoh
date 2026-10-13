@@ -29,6 +29,7 @@ def configure(root=ROOT):
         res = manifest.parent / 'res'
         for density, size in [('mdpi',48), ('hdpi',72), ('xhdpi',96), ('xxhdpi',144), ('xxxhdpi',192)]:
             write(res / f'mipmap-{density}/sendoh_launcher.png', (assets / f'icon-{size}.png').read_bytes())
+            write(res / f'mipmap-{density}/ic_launcher.png', (assets / f'icon-{size}.png').read_bytes())
         write(res / 'drawable-nodpi/sendoh_foreground.png', (assets / 'adaptive-foreground.png').read_bytes())
         write(res / 'values/sendoh_icon.xml', '<resources><color name="sendoh_icon_background">#FBF9F6</color></resources>\n')
         write(res / 'mipmap-anydpi-v26/sendoh_launcher.xml', '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/sendoh_icon_background"/><foreground android:drawable="@drawable/sendoh_foreground"/></adaptive-icon>\n')
@@ -38,6 +39,7 @@ def configure(root=ROOT):
 <path android:pathData="M11,45 L15,50 C23,59 37,52 35,41 C34,36 28,31 20,23" android:strokeColor="#FFFFFFFF" android:strokeWidth="7" android:strokeLineCap="round"/>
 </vector>\n''')
         text = manifest.read_text()
+        text = re.sub(r'android:label="[^"]*"', 'android:label="Sendoh"', text, count=1)
         def application(match):
             tag = match[0]
             for attribute in ('icon', 'roundIcon'):

@@ -6,7 +6,8 @@ import 'main.dart' show CollectionDetail;
 import 'push_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key, required this.api, required this.userId});
+  const NotificationsScreen({super.key, required this.api, required this.userId, this.initialNotificationId});
+  final String? initialNotificationId;
   final SendohApi api;
   final String userId;
   @override
@@ -22,6 +23,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void initState() {
     super.initState();
     load();
+    if (widget.initialNotificationId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => openInitial());
+    }
     PushService.updates.addListener(onUpdate);
   }
 
@@ -91,6 +95,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Future<void> openInitial() async {
+    try {
+      final data = await widget.api.request('/me/notifications/${widget.initialNotificationId}');
+      if (mounted) { await open(Map<String, dynamic>.from(data)); }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   Future<void> open(Map<String, dynamic> item) async {
     try {
       await widget.api.request('/me/notifications/${item['id']}/read', body: {});
@@ -105,8 +120,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
             CollectionDetail(api: widget.api, data: Map<String, dynamic>.from(data))));
       } else {
-        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
-            InvitationsScreen(api: widget.api)));
+        final data = await widget.api.request('/me/invitations/${item['participant_id']}?version=${item['invitation_version']}');
+        if (!mounted) { return; }
+        await Navigator.of(context).push(MaterialPageRoute<String>(builder: (_) =>
+            InvitationDetail(api: widget.api, invitation: Map<String, dynamic>.from(data))));
       }
       if (mounted) {
         await load();

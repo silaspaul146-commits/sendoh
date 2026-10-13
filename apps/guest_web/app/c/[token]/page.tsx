@@ -10,5 +10,5 @@ export default async function Collection({params}:{params:Promise<{token:string}
  catch {return <Unavailable/>}
  if(response.status===404) notFound();
  if(!response.ok) return <Unavailable/>;
- return <ContributionFlow collection={await response.json()}/>;
+ return <ContributionFlow collection={await response.json()} token={token}/>;
 }

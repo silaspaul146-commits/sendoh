@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
+import GuestIdentity,{guestRequest} from '../../guest-identity';
 import {CollectionIcon,GuestChrome,Icon,money,PaymentLogo,Row} from '../../components';
 
 export type CollectionData={name:string;description:string;organizer_name:string;currency:string;target_amount:number|null;collected_amount:number;expected_amount:number|null;mode:string;deadline_at:string|null;status:string};
@@ -7,8 +8,9 @@ type Step='collection'|'identity'|'amount'|'review'|'method'|'pay';
 const steps:Step[]=['collection','identity','amount','review','method','pay'];
 const titles:Record<Step,string>={collection:'',identity:'Identify yourself',amount:'Contribute',review:'Confirm contribution',method:'Choose payment method',pay:'Your payment'};
 
-export default function ContributionFlow({collection:c}:{collection:CollectionData}) {
+export default function ContributionFlow({collection:c,token}:{collection:CollectionData,token?:string}) {
  const [step,setStep]=useState<Step>('collection');
+ const [expected,setExpected]=useState(c.expected_amount); const [invitationUrl,setInvitationUrl]=useState('');
  const [name,setName]=useState(''); const [phone,setPhone]=useState('');
  const [amount,setAmount]=useState(c.expected_amount?.toString()??''); const [note,setNote]=useState('');
  const [confirmed,setConfirmed]=useState(false); const [method,setMethod]=useState<'MTN'|'ORANGE'>('MTN');
@@ -18,6 +20,7 @@ export default function ContributionFlow({collection:c}:{collection:CollectionDa
  const suggested=Array.from(new Set([500,1000,1500,...(c.expected_amount?[c.expected_amount]:[3000])]));
  const go=(next:Step)=>{setStep(next);setError('');};
  useEffect(()=>{if(firstRender.current){firstRender.current=false;return;} heading.current?.focus();window.scrollTo({top:0,behavior:'instant'});},[step]);
+ const verifyIdentity=async()=>{const data=await guestRequest({action:'context',token});setName(data.display_name);setPhone(data.phone.replace(/^\+237/,''));if(data.participant){setExpected(data.participant.expected_amount);if(data.participant.expected_amount!=null)setAmount(String(data.participant.expected_amount));if(data.participant.invitation_state==='PENDING')setInvitationUrl(`/i/${data.participant.id}?v=${data.participant.invitation_version}`);}setConfirmed(false);go('amount');};
  const identity=(e:FormEvent)=>{e.preventDefault();if(!name.trim()){setError('Enter your name.');return;}if(!/^[26][0-9]{8}$/.test(phone.replace(/\s/g,''))){setError('Enter a valid 9-digit Cameroon phone number.');return;}go('amount');};
  const chooseAmount=(e:FormEvent)=>{e.preventDefault();if(!validAmount){setError('Enter a positive whole FCFA amount.');return;}go('review');};
  const back=()=>go(steps[Math.max(0,steps.indexOf(step)-1)]);
@@ -32,8 +35,9 @@ export default function ContributionFlow({collection:c}:{collection:CollectionDa
    <div className="soft-card"><h2>Contribute to this collection</h2><p>You don’t need a Sendoh account to contribute.</p>{c.expected_amount!==null&&<p className="expectation">{c.mode==='MINIMUM_TOTAL'?'Minimum total':'Expected contribution'}: <strong>{money(c.expected_amount)}</strong></p>}</div>
    <div className="screen-actions"><p className="availability"><Icon name="info" size={16}/>Payments are not available yet.</p><button className="button" disabled={c.status!=='ACTIVE'} onClick={()=>go('identity')}>Continue</button></div>
   </div>}
-  {step==='identity'&&<form className="screen-content" onSubmit={identity}>
-   <h2 className="question">Who are you contributing as?</h2><p>Enter your details so your contribution can be attributed correctly.</p>
+  {step==='identity'&&token&&<div className="screen-content"><GuestIdentity onVerified={verifyIdentity}/></div>}
+  {step==='identity'&&!token&&<form className="screen-content" onSubmit={identity}>
+   <h2 className="question">Who are you contributing as?</h2><p>Design preview only. These details are not verified or saved.</p>
    <label className="field">Full name<input value={name} onChange={e=>{setName(e.target.value);setConfirmed(false)}} autoComplete="name" maxLength={120} required placeholder="Your full name"/></label>
    <label className="field">Phone number<span className="phone-input"><span>+237</span><input value={phone} onChange={e=>{setPhone(e.target.value.replace(/[^0-9\s]/g,''));setConfirmed(false)}} autoComplete="tel-national" inputMode="tel" maxLength={12} required placeholder="670 12 34 56" aria-label="Phone number"/></span></label>
    <p className="helper">Use your own details. Your name and number are not shown to other guests.</p>
@@ -41,7 +45,8 @@ export default function ContributionFlow({collection:c}:{collection:CollectionDa
   </form>}
   {step==='amount'&&<form className="screen-content" onSubmit={chooseAmount}>
    <h2 className="question">How much would you like to contribute?</h2>
-   {c.expected_amount!==null?<p>Expected contribution: <strong>{money(c.expected_amount)}</strong></p>:<p>You can contribute any amount.</p>}
+   {invitationUrl&&<p className="soft-card">You have a personal invitation. <a href={invitationUrl}>Review and join</a></p>}
+   {expected!==null?<p>Your expected contribution: <strong>{money(expected)}</strong></p>:<p>You can contribute any amount.</p>}
    <div className="amount-options" role="group" aria-label="Suggested amounts">{suggested.map(value=><button type="button" aria-pressed={amount===String(value)} className={amount===String(value)?'selected':''} key={value} onClick={()=>{setAmount(String(value));setConfirmed(false)}}>{value.toLocaleString('en')}</button>)}</div>
    <label className="field">Amount (FCFA)<input inputMode="numeric" value={amount} onChange={e=>{setAmount(e.target.value);setConfirmed(false)}} maxLength={13} required aria-describedby="amount-help" placeholder="Enter an amount"/></label>
    <p className="helper" id="amount-help">You can contribute less or more than the expected amount.</p>
@@ -54,7 +59,7 @@ export default function ContributionFlow({collection:c}:{collection:CollectionDa
    <div className="summary"><Row label="Your contribution">{money(n)}</Row><Row label="Provider cost">Not available yet</Row><Row label="Sendoh fee">Not quoted yet</Row><Row label="Total charged" strong>Awaiting quote</Row></div>
    <p className="helper">{money(n)} would go to the collection. You’ll see the fees and exact total before you can pay.</p>
    {note.trim()&&<div className="note"><span>Note</span><p>{note.trim()}</p></div>}
-   <label className="confirmation"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/><span>I confirm the contributor and contribution amount are correct.</span></label>
+   <label className="confirmation"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/><span>I am contributing for myself and confirm the amount is correct.</span></label>
    <div className="screen-actions"><button className="button" disabled={!confirmed} onClick={()=>go('method')}>Continue to payment method</button></div>
   </div>}
   {step==='method'&&<div className="screen-content"><p className="center method-hint">Choose how you’d like to pay</p><fieldset className="methods"><legend className="sr-only">Payment method</legend>{(['MTN','ORANGE'] as const).map(m=><label className={`method ${method===m?'chosen':''}`} key={m}><input type="radio" name="method" value={m} checked={method===m} onChange={()=>setMethod(m)}/><PaymentLogo method={m}/><strong>{m==='MTN'?'MTN Mobile Money':'Orange Money'}</strong><span className="radio-mark">{method===m&&<Icon name="check" size={13}/>}</span></label>)}<div className="method other-method"><Icon name="phone"/><div><strong>Other options</strong><small>Coming soon</small></div></div></fieldset><div className="screen-actions"><button className="button" onClick={()=>go('pay')}>Continue</button></div></div>}

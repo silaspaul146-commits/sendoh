@@ -188,10 +188,13 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
       return;
     }
     notificationsOpen = true;
+    final notificationId = PushService.pendingNotificationId;
+    PushService.pendingNotificationId = null;
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => NotificationsScreen(
             api: ref.read(apiProvider),
-            userId: account['id'] as String? ?? '')));
+            userId: account['id'] as String? ?? '',
+            initialNotificationId: notificationId)));
     notificationsOpen = false;
     if (mounted) {
       await refreshUnread();

@@ -60,7 +60,7 @@ def serialize(db, n):
         (p.expires_at or 0) > int(time.time()))
     return dict(id=n.id, kind=n.kind, title=KINDS[n.kind], collection_id=n.collection_id,
         collection_name=c.name if c else 'Collection', participant_id=n.participant_id,
-        created_at=n.created_at, read_at=n.read_at,
+        created_at=n.created_at, read_at=n.read_at, invitation_version=n.invitation_version,
         invitation_available=available if n.kind == 'INVITED' else False)
 
 class RegisterDevice(BaseModel):
@@ -100,6 +100,13 @@ def router(database, actor, bearer, settings, push_enabled):
             Notification.user_id == user.id, Notification.read_at.is_(None)))
         return dict(items=[serialize(db, n) for n in rows[:50]], unread_count=unread,
                     next_cursor=rows[49].id if len(rows) > 50 else None, push_available=push_enabled)
+
+    @routes.get('/notifications/{notification_id}')
+    def detail(notification_id: str, user=Depends(actor), db=Depends(database)):
+        n = db.scalar(select(Notification).where(Notification.id == notification_id, Notification.user_id == user.id))
+        if not n:
+            raise HTTPException(404, 'Notification not found.')
+        return serialize(db, n)
 
     @routes.post('/notifications/{notification_id}/read')
     def read(notification_id: str, user=Depends(actor), db=Depends(database)):

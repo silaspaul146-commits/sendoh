@@ -31,7 +31,7 @@ def create_app(database_url=None):
         def foreign_keys(connection, _): connection.execute('PRAGMA foreign_keys=ON')
     sessions = sessionmaker(engine, expire_on_commit=False)
     sender = configured_sender()
-    app = FastAPI(title='Sendoh API', version='0.4.0',
+    app = FastAPI(title='Sendoh API', version='0.5.0',
         lifespan=lifespan_for(sessions, sender, settings.environment))
     app.add_middleware(RequestSizeLimit)
     app.state.engine = engine
@@ -70,6 +70,10 @@ def create_app(database_url=None):
     async def request_id(request: Request, call_next):
         request.state.request_id = str(uuid.uuid4())
         response = await call_next(request)
+        if request.method == 'POST' and response.status_code < 400:
+            wake = getattr(app.state, 'push_wake', None)
+            if wake is not None:
+                wake.set()
         response.headers['X-Request-ID'] = request.state.request_id
         if request.url.path.startswith('/api/v1/') and not request.url.path.startswith('/api/v1/public/'):
             response.headers['Cache-Control'] = 'no-store'
@@ -88,7 +92,7 @@ def create_app(database_url=None):
     @app.get('/health')
     def health(db=Depends(database)):
         db.execute(text('SELECT 1'))
-        return {'status': 'ok', 'stage': settings.environment, 'version': '0.4.0',
+        return {'status': 'ok', 'stage': settings.environment, 'version': '0.5.0',
                 'push_configured': sender is not None,
                 'otp_provider': settings.otp_provider, 'payments_enabled': False}
 
