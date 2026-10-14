@@ -67,10 +67,11 @@ void main() {
           'invitation_state': 'PENDING',
           'expected_amount': 5000
         })));
-    await tester.scrollUntilVisible(find.textContaining('does not make a payment'), 150);
+    await tester.scrollUntilVisible(
+        find.textContaining('does not make a payment'), 150);
     expect(find.textContaining('does not make a payment'), findsOneWidget);
     final button = find.widgetWithText(FilledButton, 'Accept invitation');
-    await tester.ensureVisible(button);
+    await tester.scrollUntilVisible(button, 150);
     await tester.tap(button);
     await tester.pump();
     final updating = find.widgetWithText(FilledButton, 'Updating…');
@@ -96,7 +97,8 @@ void main() {
     expect(find.text('Joined'), findsOneWidget);
     expect(find.text('Accept invitation'), findsNothing);
     expect(find.text('Payment successful'), findsNothing);
-    await tester.scrollUntilVisible(find.textContaining('No real money moves.'), 150);
+    await tester.scrollUntilVisible(
+        find.textContaining('No real money moves.'), 150);
     expect(find.textContaining('No real money moves.'), findsOneWidget);
   });
 }
