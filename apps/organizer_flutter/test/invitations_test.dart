@@ -95,7 +95,6 @@ void main() {
     expect(find.text('Joined'), findsOneWidget);
     expect(find.text('Accept invitation'), findsNothing);
     expect(find.text('Payment successful'), findsNothing);
-    expect(
-        find.textContaining('Payments are not available yet'), findsOneWidget);
+    expect(find.textContaining('No real money moves.'), findsOneWidget);
   });
 }
