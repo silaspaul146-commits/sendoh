@@ -10,16 +10,17 @@ from .models import (Notification, PushDevice, PushDelivery, Participant, Collec
                      PhoneIdentity, AuthSession, RefreshSession, User)
 
 KINDS = {
+    'TEST_PAYMENT': 'A test contribution was recorded',
     'INVITED': 'You have a collection invitation',
     'ACCEPTED': 'Someone joined your collection',
     'DECLINED': 'Someone declined your invitation',
     'CANCELLED': 'A collection invitation was cancelled',
 }
 
-def emit(db, recipient, participant, kind, deliver=True):
+def emit(db, recipient, participant, kind, deliver=True, event_id=None):
     if not recipient:
         return
-    event = f'{participant.id}:{participant.invitation_version}:{kind}:{recipient}'
+    event = f'{participant.id}:{participant.invitation_version}:{kind}:{recipient}' if event_id is None else f'{kind}:{event_id}:{recipient}'
     if db.scalar(select(Notification.id).where(Notification.event_key == event)):
         return
     now = int(time.time())

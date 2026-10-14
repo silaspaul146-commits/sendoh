@@ -1,7 +1,7 @@
 import hashlib, json, secrets, time
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
-from .models import Collection, Participant, Activity, Idempotency, User
+from .models import Collection, Participant, Activity, Idempotency, User, TestPayment
 
 class Conflict(Exception): pass
 
@@ -12,7 +12,9 @@ def participant_state(p):
 
 def participant_summary(db, p):
     member = db.get(User, p.user_id) if p.user_id else None
-    return dict(id=p.id, name=member.display_name if member else p.name,
+    paid = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.participant_id == p.id, TestPayment.status == 'SUCCEEDED')))
+    state = 'Unpaid' if paid == 0 else 'Partial' if p.expected_amount and paid < p.expected_amount else 'Paid'
+    return dict(test_paid_amount=paid, test_payment_status=state, id=p.id, name=member.display_name if member else p.name,
                 expected_amount=p.expected_amount, user_id=p.user_id,
                 username=member.username if member else None,
                 avatar=member.avatar if member else None,
@@ -26,6 +28,7 @@ def serialize(db, collection, web_url, public=False):
                   deadline_at=collection.deadline_at.isoformat() if collection.deadline_at else None,
                   mode=collection.mode, expected_amount=collection.expected_amount,
                   status=collection.status, collected_amount=0)
+    result['test_collected_amount'] = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.collection_id == collection.id, TestPayment.status == 'SUCCEEDED')))
     if public:
         result['organizer_name'] = db.get(User, collection.organizer_id).display_name
         result.pop('id')

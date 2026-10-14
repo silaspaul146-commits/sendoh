@@ -16,6 +16,7 @@ from .request_limits import RequestSizeLimit
 from .invitations import router as invitation_router
 from .notifications import router as notification_router
 from .push import configured_sender, lifespan_for
+from .payments import router as payment_router, enabled as test_payments_enabled
 
 
 def create_app(database_url=None):
@@ -94,7 +95,7 @@ def create_app(database_url=None):
         db.execute(text('SELECT 1'))
         return {'status': 'ok', 'stage': settings.environment, 'version': '0.6.0',
                 'push_configured': sender is not None,
-                'otp_provider': settings.otp_provider, 'payments_enabled': False}
+                'otp_provider': settings.otp_provider, 'payments_enabled': False, 'test_payments_enabled': test_payments_enabled(settings)}
 
     @app.get('/')
     def root():
@@ -136,6 +137,7 @@ def create_app(database_url=None):
     app.include_router(router(database, actor, bearer, settings, sender))
     app.include_router(invitation_router(database, actor, web_url))
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
+    app.include_router(payment_router(database, actor, settings))
     return app
 
 app = create_app()

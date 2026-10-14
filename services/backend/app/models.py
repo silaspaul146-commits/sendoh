@@ -152,3 +152,27 @@ class RefreshSession(Base):
     family_id: Mapped[str] = mapped_column(String(36), index=True)
     expires_at: Mapped[int] = mapped_column(BigInteger)
     consumed: Mapped[int] = mapped_column(Integer, default=0)
+
+class TestPayment(Base):
+    """Sandbox-only ledger, deliberately separate from future real payments."""
+    __tablename__ = 'test_payments'
+    __table_args__ = (
+        UniqueConstraint('payer_id', 'request_key', name='uq_test_payment_request'),
+        CheckConstraint('amount > 0 AND amount <= 1000000000000'),
+        CheckConstraint("status IN ('PENDING','SUCCEEDED','FAILED','CANCELLED')"),
+        CheckConstraint("method IN ('MTN','ORANGE')"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'), index=True)
+    participant_id: Mapped[str] = mapped_column(ForeignKey('participants.id'), index=True)
+    payer_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    payer_name: Mapped[str] = mapped_column(String(120))
+    collection_name: Mapped[str] = mapped_column(String(120))
+    request_key: Mapped[str] = mapped_column(String(120))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    method: Mapped[str] = mapped_column(String(8))
+    note: Mapped[str] = mapped_column(String(200), default='')
+    status: Mapped[str] = mapped_column(String(12), default='PENDING')
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    completed_at: Mapped[int | None] = mapped_column(BigInteger)

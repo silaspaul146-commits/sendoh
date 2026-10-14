@@ -365,6 +365,20 @@ class InvitationDetail extends StatefulWidget {
 }
 
 class _InvitationDetailState extends State<InvitationDetail> {
+  late Map<String, dynamic> current = Map<String, dynamic>.from(widget.invitation);
+  Future<void> payments({bool history = false}) async {
+    final c = Map<String, dynamic>.from(current['collection']);
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => history
+      ? TestPaymentHistory(api: widget.api, collectionId: current['collection_id'])
+      : PaymentDemo(api: widget.api, collectionId: current['collection_id'], collection: c['name'],
+          name: current['participant_name'], expected: current['expected_amount'] as int?)));
+    if (!mounted) { return; }
+    try {
+      final result = await widget.api.request('/me/invitations/${current['id']}');
+      if (mounted) { setState(() => current = Map<String, dynamic>.from(result)); }
+    } catch (e) { if (mounted) { setState(() => error = '$e'); } }
+  }
+
   bool busy = false;
   String? error;
   Future<void> respond(String decision) async {
@@ -395,7 +409,7 @@ class _InvitationDetailState extends State<InvitationDetail> {
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.invitation;
+    final item = current;
     final c = Map<String, dynamic>.from(item['collection']);
     final pending = item['invitation_state'] == 'PENDING';
     return Scaffold(
@@ -423,12 +437,13 @@ class _InvitationDetailState extends State<InvitationDetail> {
           SummaryRow('Your expected amount', _amount(item['expected_amount'])),
           SummaryRow('Deadline', displayDate(c['deadline_at'])),
           SummaryRow('Collected', _amount(c['collected_amount'])),
+          SummaryRow('Test collected (no money)', _amount(c['test_collected_amount'] ?? 0)),
         ])),
         const SizedBox(height: 20),
         Text(
             pending
                 ? 'Accepting adds your verified Sendoh profile to this collection. It does not make a payment.'
-                : 'You have joined this collection. No payment has been made through Sendoh. Payments are not available yet.',
+                : 'You have joined this collection. You can test the complete payment flow. No real money moves.',
             style: const TextStyle(height: 1.6, color: SendohColors.secondary)),
         if (pending && item['expires_at'] != null) ...[
           const SizedBox(height: 10),
@@ -442,7 +457,10 @@ class _InvitationDetailState extends State<InvitationDetail> {
               child: Text(error!,
                   style: const TextStyle(color: SendohColors.red))),
         const SizedBox(height: 24),
-        if (item['invitation_state'] == 'ACCEPTED') FilledButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PaymentDemo(collection: c['name'] as String, name: item['participant_name'] as String, expected: item['expected_amount'] as int?))), child: const Text('Try contribution demo')),
+        if (item['invitation_state'] == 'ACCEPTED') ...[
+          FilledButton(onPressed: () => payments(), child: const Text('Make a test contribution')),
+          OutlinedButton(onPressed: () => payments(history: true), child: const Text('My test payments and receipts')),
+        ],
         if (pending) ...[
           FilledButton(
               onPressed: busy ? null : () => respond('accept'),

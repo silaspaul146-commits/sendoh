@@ -13,6 +13,7 @@ import 'create_collection.dart';
 import 'design.dart';
 import 'invitations.dart';
 import 'notifications.dart';
+import 'payment_demo.dart';
 import 'push_service.dart';
 
 final apiProvider =
@@ -601,6 +602,7 @@ class CollectionCard extends StatelessWidget {
                                         ? const Color(0xFF5DA59B)
                                         : SendohColors.teal)),
                       const SizedBox(height: 14),
+                      Text('Test collected: ${money(data['test_collected_amount'] ?? 0)} • no money', style: TextStyle(fontSize: 12, color: color)),
                       Text(
                           '${(data['participants'] as List).length} participants · ${displayDate(data['deadline_at'])}',
                           style: TextStyle(fontSize: 12, color: color)),
@@ -793,6 +795,17 @@ class _CollectionDetailState extends State<CollectionDetail> {
   void initState() {
     super.initState();
     data = widget.data;
+    PushService.updates.addListener(paymentUpdate);
+  }
+
+  void paymentUpdate() {
+    if (mounted && !busy) { refresh(); }
+  }
+
+  @override
+  void dispose() {
+    PushService.updates.removeListener(paymentUpdate);
+    super.dispose();
   }
 
   Future<void> refresh() async {
@@ -808,6 +821,13 @@ class _CollectionDetailState extends State<CollectionDetail> {
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> openPayments({bool contribute = false}) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => contribute
+      ? PaymentDemo(api: widget.api, collectionId: data['id'], collection: data['name'], name: 'your verified profile', expected: data['expected_amount'] as int?)
+      : TestPaymentHistory(api: widget.api, collectionId: data['id'], organizer: true)));
+    if (mounted) { await refresh(); }
   }
 
   Future<void> invitePerson([Map<String, dynamic>? person]) async {
@@ -902,9 +922,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             p['expected_amount'] == null
                                 ? 'Any amount'
                                 : money(p['expected_amount'])),
-                        const SummaryRow('Contributed', '0 FCFA'),
+                        SummaryRow('Test contributed', money(p['test_paid_amount'] ?? 0)),
                         if (p['expected_amount'] != null)
-                          SummaryRow('Remaining', money(p['expected_amount'])),
+                          SummaryRow('Test remaining', money(((p['expected_amount'] as int) - ((p['test_paid_amount'] ?? 0) as int)).clamp(0, 1000000000000))),
                         SummaryRow('Membership',
                             invitationLabel(p['invitation_state'])),
                         if (p['invitation_state'] == 'UNVERIFIED') ...[
@@ -958,6 +978,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final target = data['target_amount'] as int?;
     final collected = data['collected_amount'] as int;
     final people = data['participants'] as List;
+    final visiblePeople = people.where((p) => filter == 'All' || (p['test_payment_status'] ?? 'Unpaid') == filter).toList();
     final pct = target == null ? 0.0 : collected / target * 100;
     return Scaffold(
         appBar: AppBar(title: Text(data['name']), actions: [
@@ -1020,6 +1041,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 : SendohColors.teal)),
                     const SizedBox(height: 14)
                   ],
+                  SurfaceCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const StatusBadge('TEST • No money moves'),
+                    SummaryRow('Successful test contributions', money(data['test_collected_amount'] ?? 0)),
+                    if (target != null) LinearProgressIndicator(value: (((data['test_collected_amount'] ?? 0) as num) / target).clamp(0.0, 1.0).toDouble()),
+                    OutlinedButton(onPressed: busy ? null : () => openPayments(), child: const Text('Test payments and receipts')),
+                    if (data['status'] == 'ACTIVE') FilledButton(onPressed: busy ? null : () => openPayments(contribute: true), child: const Text('Contribute as myself (test)')),
+                  ])),
+                  const SizedBox(height: 16),
                   Wrap(spacing: 4, children: people.take(7).map((raw) => MemberAvatar(Map<String, dynamic>.from(raw), radius: 15)).toList()),
                   const SizedBox(height: 8),
                   Text('${people.length} participants',
@@ -1086,8 +1115,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             : money(data['expected_amount'])),
                     const Divider(),
                     const EmptyState(
-                        title: 'No contributions yet',
-                        message: 'Payment collection is not available yet.',
+                        title: 'Test payment tracking',
+                        message: 'Open Test payments and receipts to view saved attempts. Real payment collection is not enabled yet.',
                         icon: Icons.receipt_long_outlined)
                   ] else ...[
                     SingleChildScrollView(
@@ -1105,15 +1134,13 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                             setState(() => filter = v))))
                                 .toList())),
                     const SizedBox(height: 16),
-                    if (people.isEmpty ||
-                        filter == 'Paid' ||
-                        filter == 'Partial')
+                    if (visiblePeople.isEmpty)
                       const EmptyState(
                           title: 'No matching contributions',
                           message:
                               'Participant contributions will appear here.')
                     else
-                      ...people.map((raw) {
+                      ...visiblePeople.map((raw) {
                         final p = Map<String, dynamic>.from(raw);
                         return ListTile(
                             contentPadding: EdgeInsets.zero,
@@ -1122,10 +1149,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 style: const TextStyle(
                                     fontSize: 14, fontWeight: FontWeight.w500)),
                             subtitle: Text(
-                                '${invitationLabel(p['invitation_state'])}\n${p['expected_amount'] == null ? 'Any amount' : '0 / ${money(p['expected_amount'])}'}',
+                                '${invitationLabel(p['invitation_state'])}\nTest: ${money(p['test_paid_amount'] ?? 0)} / ${p['expected_amount'] == null ? 'Any amount' : money(p['expected_amount'])}',
                                 style: const TextStyle(fontSize: 12)),
                             trailing:
-                                const StatusBadge('Unpaid', pending: true),
+                                StatusBadge('Test ${p['test_payment_status'] ?? 'Unpaid'}', pending: (p['test_paid_amount'] ?? 0) == 0),
                             onTap: () => participant(p));
                       })
                   ],

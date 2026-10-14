@@ -4,6 +4,7 @@ import 'design.dart';
 import 'invitations.dart';
 import 'main.dart' show CollectionDetail;
 import 'push_service.dart';
+import 'payment_demo.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({
@@ -153,7 +154,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return;
       }
 
-      if (['ACCEPTED', 'DECLINED'].contains(item['kind'])) {
+      if (item['kind'] == 'TEST_PAYMENT') {
+        bool organizer = false;
+        try {
+          await widget.api.request('/collections/${item['collection_id']}');
+          organizer = true;
+        } on ApiException catch (e) {
+          if (e.status != 404) { rethrow; }
+        }
+        if (!mounted) { return; }
+        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TestPaymentHistory(
+          api: widget.api, collectionId: item['collection_id'], organizer: organizer)));
+      } else if (['ACCEPTED', 'DECLINED'].contains(item['kind'])) {
         final data = await widget.api.request(
           '/collections/${item['collection_id']}',
         );
