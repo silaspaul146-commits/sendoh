@@ -15,12 +15,12 @@ export default function ContributionFlow({collection,token}:{collection:Collecti
  async function back(){setStep('collection');try{await identityReady();}catch(e){setError(e instanceof Error?e.message:'Refresh this page to reload totals.');}}
  return <GuestChrome><section className="screen">
  {step==='checkout'&&token?<TestCheckout token={token} name={name} collection={c.name} expected={expected} onBack={()=>void back()}/>:<>
-  <header className="screen-header"><h1>{step==='collection'?c.name:'Identify yourself'}</h1><span className="badge">{c.status==='ACTIVE'?'Active':'Closed'}</span></header>
+  <header className="screen-header">{step==='identity'&&<button className="icon-button" aria-label="Back to collection" onClick={()=>setStep('collection')}>←</button>}<h1>{step==='collection'?c.name:'Identify yourself'}</h1><span className="badge">{c.status==='ACTIVE'?'Active':'Closed'}</span></header>
   <div className="screen-content">
    {step==='collection'&&<>
     <div className="collection-line"><CollectionIcon/><div><strong>{c.name}</strong><span>Organized by {c.organizer_name}</span></div></div>
     <div className="collection-meta">{c.target_amount!==null&&<p>{money(c.target_amount)} target</p>}<p>{c.deadline_at?`Deadline: ${new Date(c.deadline_at).toLocaleDateString('en-GB',{timeZone:'Africa/Douala'})}`:'No deadline'}</p></div>
-    <div className="collection-progress"><Row label="Real collected">{money(c.collected_amount)}</Row><Row label="Test collected (no money)">{money(c.test_collected_amount??0)}</Row>{c.target_amount!==null&&<><progress value={Math.min(c.test_collected_amount??0,c.target_amount)} max={c.target_amount}/><p>Test progress only</p></>}</div>
+    <div className="collection-progress coordination-progress"><Row label="Collected">{money(c.collected_amount)}</Row>{c.target_amount!==null&&c.target_amount>0&&<><progress value={Math.min(c.collected_amount,c.target_amount)} max={c.target_amount}/><p>{money(Math.max(0,c.target_amount-c.collected_amount))} remaining</p></>}<p className="test-total">Test contributions: {money(c.test_collected_amount??0)} · No real money</p></div>
     {c.description&&<div className="purpose"><h2>About this collection</h2><p>{c.description}</p></div>}
     <div className="soft-card"><h2>Contribute to this collection</h2><p>No app installation needed. Verify your number to contribute as yourself.</p>{c.expected_amount!==null&&<p>{c.mode==='MINIMUM_TOTAL'?'Minimum total':'Expected contribution'}: {money(c.expected_amount)}</p>}</div>
     <div className="screen-actions"><p>Test payments are saved on Sendoh. No real money moves.</p><button className="button" disabled={c.status!=='ACTIVE'||!token} onClick={()=>setStep('identity')}>Continue</button>{!token&&<p>Visual preview only. Open a real collection link to test backend payments.</p>}</div>

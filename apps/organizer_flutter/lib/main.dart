@@ -1,3 +1,4 @@
+import 'coordination.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -219,47 +220,10 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
         builder: (_) => CollectionCreated(data: result, api: api)));
   }
 
-  void open(Map<String, dynamic> data) =>
-      Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) =>
-              CollectionDetail(data: data, api: ref.read(apiProvider))));
-
-  void comingSoon(String feature) => ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature is coming after Collections.')));
-
-  Widget homeAction(
-          {required IconData icon,
-          required String label,
-          required VoidCallback onTap,
-          bool primary = false}) =>
-      Expanded(
-          child: Material(
-              color: primary ? SendohColors.teal : SendohColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                  onTap: onTap,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 16),
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: primary
-                                  ? SendohColors.teal
-                                  : SendohColors.border)),
-                      child: Column(children: [
-                        Icon(icon,
-                            color: primary ? Colors.white : SendohColors.teal,
-                            size: 23),
-                        const SizedBox(height: 9),
-                        Text(label,
-                            style: TextStyle(
-                                color:
-                                    primary ? Colors.white : SendohColors.ink,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600))
-                      ])))));
+  Future<void> open(Map<String, dynamic> data) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CollectionDetail(data: data, api: ref.read(apiProvider))));
+    if (mounted) { reload(); }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -306,7 +270,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                     onRefresh: () async {
                       reload();
                       await refreshUnread();
-                      await items;
+                      await Future.wait([items, joinedItems]);
                     },
                     child: ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
@@ -332,56 +296,10 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                                 ]))
                           ]),
                           const SizedBox(height: 28),
-                          const Text('What would you like to do?',
-                              style: TextStyle(
-                                  fontSize: 13, color: SendohColors.secondary)),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            homeAction(
-                                icon: Icons.groups_outlined,
-                                label: 'Collect',
-                                onTap: create,
-                                primary: true),
-                            const SizedBox(width: 10),
-                            homeAction(
-                                icon: Icons.notifications_none,
-                                label: 'Request',
-                                onTap: () => comingSoon('Request money')),
-                            const SizedBox(width: 10),
-                            homeAction(
-                                icon: Icons.send_outlined,
-                                label: 'Pay',
-                                onTap: () => comingSoon('Pay someone')),
-                          ]),
-                          const SizedBox(height: 30),
-                          OutlinedButton.icon(
-                              onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                      builder: (_) => InvitationsScreen(
-                                          api: ref.read(apiProvider)))).then((_) { if (mounted) reload(); }),
-                              icon: const Icon(Icons.mail_outline),
-                              label: const Text(
-                                  'Invitations & joined collections')),
-                          const SizedBox(height: 24),
-                          const Text('Collections you joined', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 12),
-                          FutureBuilder<List<dynamic>>(future: joinedItems, builder: (context, snapshot) {
-                            if (snapshot.hasError) return TextButton(onPressed: reload, child: const Text('Retry joined collections'));
-                            if (!snapshot.hasData) return const LinearProgressIndicator();
-                            if (snapshot.data!.isEmpty) return const Padding(padding: EdgeInsets.only(bottom: 16), child: Text('Accepted invitations appear here.'));
-                            return Column(children: snapshot.data!.map((raw) {
-                              final item = Map<String, dynamic>.from(raw);
-                              final c = Map<String, dynamic>.from(item['collection']);
-                              return Padding(padding: const EdgeInsets.only(bottom: 12), child: SurfaceCard(child: Material(type: MaterialType.transparency, child: ListTile(
-                                contentPadding: EdgeInsets.zero, leading: const CollectionSymbol(),
-                                title: Text(c['name'] as String), subtitle: Text('Joined • Organized by ${c['organizer_name']}'),
-                                trailing: const Icon(Icons.chevron_right), onTap: () async {
-                                  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationDetail(api: ref.read(apiProvider), invitation: item)));
-                                  if (mounted) reload();
-                                }))));
-                            }).toList());
-                          }),
+                          const Text('Organize money. Together.', style: TextStyle(fontSize: 14, color: SendohColors.secondary)),
                           const SizedBox(height: 20),
+                          FilledButton.icon(onPressed: create, style: FilledButton.styleFrom(backgroundColor: SendohColors.orange, foregroundColor: SendohColors.ink), icon: const Icon(Icons.add), label: const Text('Create collection')),
+                          const SizedBox(height: 28),
                           const Text('Collections you organize',
                               style: TextStyle(
                                   fontSize: 17, fontWeight: FontWeight.w600)),
@@ -423,14 +341,33 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                                           onTap: () => open(c)));
                                 }).toList());
                               }),
-                          const SizedBox(height: 12),
-                          FilledButton.icon(
-                              onPressed: create,
-                              style: FilledButton.styleFrom(
-                                  backgroundColor: SendohColors.orange,
-                                  foregroundColor: SendohColors.ink),
-                              icon: const Icon(Icons.add, size: 21),
-                              label: const Text('Create collection')),
+                          const SizedBox(height: 24),
+                          Row(children: [
+                            const Expanded(child: Text('Collections you joined', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                            TextButton(onPressed: () async {
+                              await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationsScreen(api: ref.read(apiProvider), initiallyJoined: true)));
+                              if (mounted) { reload(); }
+                            }, child: const Text('View all')),
+                          ]),
+                          const Text('Your groups, your part. Swipe to explore.', style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
+                          const SizedBox(height: 14),
+                          FutureBuilder<List<dynamic>>(future: joinedItems, builder: (context, snapshot) {
+                            if (snapshot.hasError) { return TextButton(onPressed: reload, child: const Text('Retry joined collections')); }
+                            if (!snapshot.hasData) { return const LinearProgressIndicator(); }
+                            if (snapshot.data!.isEmpty) { return const SurfaceCard(child: Text('When you accept an invitation or join through a collection link, your collection appears here.', style: TextStyle(height: 1.6, color: SendohColors.secondary))); }
+                            return SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: snapshot.data!.map((raw) {
+                              final item = Map<String, dynamic>.from(raw);
+                              return Padding(padding: const EdgeInsets.only(right: 12), child: SizedBox(width: (MediaQuery.sizeOf(context).width - 76).clamp(240.0, 320.0).toDouble(), child: JoinedCollectionCard(item: item, onTap: () async {
+                                await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationDetail(api: ref.read(apiProvider), invitation: item)));
+                                if (mounted) { reload(); }
+                              })));
+                            }).toList()));
+                          }),
+                          const SizedBox(height: 24),
+                          OutlinedButton.icon(onPressed: () async {
+                            await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationsScreen(api: ref.read(apiProvider))));
+                            if (mounted) { reload(); }
+                          }, icon: const Icon(Icons.mail_outline), label: const Text('Review invitations')),
                         ])),
       );
   Widget accountAvatar(double radius) => account['avatar'] == null
@@ -527,87 +464,25 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
 }
 
 class CollectionCard extends StatelessWidget {
-  const CollectionCard(
-      {super.key,
-      required this.data,
-      required this.onTap,
-      this.featured = false});
+  const CollectionCard({super.key, required this.data, required this.onTap, this.featured = false});
   final Map<String, dynamic> data;
   final VoidCallback onTap;
   final bool featured;
   @override
-  Widget build(BuildContext context) {
-    final target = data['target_amount'] as int?;
-    final collected = (data['collected_amount'] as num).toDouble();
-    final color = featured ? Colors.white : SendohColors.ink;
-    return Material(
-        color: featured ? SendohColors.teal : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color:
-                            featured ? SendohColors.teal : SendohColors.border,
-                        width: .7)),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        Expanded(
-                            child: Text(data['name'],
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: color))),
-                        const SizedBox(width: 8),
-                        StatusBadge(
-                            data['status'] == 'ACTIVE' ? 'ACTIVE' : 'DRAFT')
-                      ]),
-                      const SizedBox(height: 12),
-                      Wrap(spacing: 4, children: (data['participants'] as List).take(7).map((raw) => MemberAvatar(Map<String, dynamic>.from(raw), radius: 14)).toList()),
-                      const SizedBox(height: 16),
-                      Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.end,
-                          spacing: 4,
-                          children: [
-                            Text(money(data['collected_amount']),
-                                style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w600,
-                                    color: color)),
-                            if (target != null)
-                              Text('/ ${money(target)}',
-                                  style: TextStyle(fontSize: 12, color: color))
-                          ]),
-                      const SizedBox(height: 12),
-                      if (target != null)
-                        ClipRRect(
-                            borderRadius: BorderRadius.circular(5),
-                            child: LinearProgressIndicator(
-                                value: (collected / target)
-                                    .clamp(0.0, 1.0)
-                                    .toDouble(),
-                                minHeight: 7,
-                                backgroundColor: featured
-                                    ? const Color(0xFF316260)
-                                    : SendohColors.tealSoft,
-                                color: collected >= target
-                                    ? SendohColors.green
-                                    : featured
-                                        ? const Color(0xFF5DA59B)
-                                        : SendohColors.teal)),
-                      const SizedBox(height: 14),
-                      Text('Test collected: ${money(data['test_collected_amount'] ?? 0)} • no money', style: TextStyle(fontSize: 12, color: color)),
-                      Text(
-                          '${(data['participants'] as List).length} participants · ${displayDate(data['deadline_at'])}',
-                          style: TextStyle(fontSize: 12, color: color)),
-                    ]))));
-  }
+  Widget build(BuildContext context) => Material(
+    color: featured ? SendohColors.teal : SendohColors.surface,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: featured ? SendohColors.teal : SendohColors.border)),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(onTap: onTap, child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [Expanded(child: Text(data['name'] as String, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: featured ? Colors.white : SendohColors.ink))), const SizedBox(width: 8), StatusBadge(data['status'] as String)]),
+      const SizedBox(height: 20),
+      CollectionProgress(data: data, dark: featured),
+      const SizedBox(height: 20),
+      PeoplePreview(people: data['participants'] as List? ?? [], dark: featured),
+      const SizedBox(height: 14),
+      Row(children: [Expanded(child: Text(displayDate(data['deadline_at']), style: TextStyle(fontSize: 12, color: featured ? Colors.white : SendohColors.secondary))), Icon(Icons.arrow_forward, size: 18, color: featured ? SendohColors.orange : SendohColors.teal)]),
+    ]))),
+  );
 }
 
 class ActivityView extends ConsumerStatefulWidget {
@@ -622,70 +497,38 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
   void initState() {
     super.initState();
     activity = ref.read(apiProvider).request('/me/activity');
+    PushService.updates.addListener(onUpdate);
   }
-
+  void onUpdate() {
+    if (mounted) { setState(() => activity = ref.read(apiProvider).request('/me/activity')); }
+  }
+  Future<void> refresh() async { onUpdate(); await activity; }
   @override
-  Widget build(BuildContext context) => FutureBuilder<dynamic>(
-      future: activity,
-      builder: (context, s) {
-        if (s.hasError) {
-          return Center(
-              child: TextButton(
-                  onPressed: () => setState(() =>
-                      activity = ref.read(apiProvider).request('/me/activity')),
-                  child: const Text('Couldn’t load activity. Try again')));
-        }
-        if (!s.hasData) return const Center(child: CircularProgressIndicator());
-        final entries = s.data as List;
-        if (entries.isEmpty) {
-          return const EmptyState(
-              title: 'No activity yet',
-              message: 'Updates from your collections will appear here.',
-              icon: Icons.history);
-        }
-        return RefreshIndicator(
-            onRefresh: () async {
-              setState(() =>
-                  activity = ref.read(apiProvider).request('/me/activity'));
-              await activity;
-            },
-            child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(22),
-                children: [
-                  const Text('All updates',
-                      style: TextStyle(
-                          fontSize: 13, color: SendohColors.secondary)),
-                  const SizedBox(height: 20),
-                  ...entries.map((e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const CircleAvatar(
-                                radius: 18,
-                                backgroundColor: SendohColors.tealSoft,
-                                child: Icon(Icons.add,
-                                    size: 20, color: SendohColors.teal)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  Text(e['message'],
-                                      style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500)),
-                                  const SizedBox(height: 5),
-                                  Text(displayDate(e['created_at']),
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          color: SendohColors.muted))
-                                ]))
-                          ])))
-                ]));
-      });
+  void dispose() { PushService.updates.removeListener(onUpdate); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => FutureBuilder<dynamic>(future: activity, builder: (context, snapshot) {
+    final entries = snapshot.hasData ? snapshot.data as List : <dynamic>[];
+    return RefreshIndicator(onRefresh: refresh, child: ListView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(22), children: [
+      const Text('Your group, in the loop.', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: SendohColors.teal)),
+      const SizedBox(height: 8),
+      const Text('Updates from collections you organize. Invitations and joined-group alerts are in Notifications.', style: TextStyle(height: 1.6, color: SendohColors.secondary)),
+      const SizedBox(height: 24),
+      if (snapshot.connectionState == ConnectionState.waiting) const LinearProgressIndicator(),
+      if (snapshot.hasError) ...[
+        const Text('Couldn’t load activity. Your records are still saved.'),
+        TextButton(onPressed: onUpdate, child: const Text('Try again')),
+      ] else if (snapshot.hasData && entries.isEmpty) const EmptyState(title: 'Your story starts here', message: 'Create a collection and invite your group. Updates will appear here as things happen.', icon: Icons.history),
+      if (!snapshot.hasError) ...entries.map((raw) {
+        final e = Map<String, dynamic>.from(raw);
+        final test = (e['message'] as String).startsWith('TEST:');
+        return Padding(padding: const EdgeInsets.only(bottom: 12), child: SurfaceCard(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          CircleAvatar(radius: 19, backgroundColor: test ? SendohColors.amberSoft : SendohColors.tealSoft, child: Icon(test ? Icons.receipt_long_outlined : Icons.groups_outlined, size: 20, color: test ? SendohColors.amber : SendohColors.teal)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(e['message'] as String, style: const TextStyle(fontSize: 14, height: 1.5, fontWeight: FontWeight.w500)), const SizedBox(height: 6), Text(displayDate(e['created_at']), style: const TextStyle(fontSize: 12, color: SendohColors.muted))])),
+        ])));
+      }),
+    ]));
+  });
 }
 
 Future<void> copyCollectionLink(BuildContext context, String link) async {
@@ -787,7 +630,7 @@ class CollectionDetail extends StatefulWidget {
 
 class _CollectionDetailState extends State<CollectionDetail> {
   late Map<String, dynamic> data;
-  int tab = 0;
+  int tab = 1;
   String filter = 'All';
   bool busy = false;
   String? error;
@@ -975,11 +818,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                       ])))));
   @override
   Widget build(BuildContext context) {
-    final target = data['target_amount'] as int?;
-    final collected = data['collected_amount'] as int;
     final people = data['participants'] as List;
     final visiblePeople = people.where((p) => filter == 'All' || (p['test_payment_status'] ?? 'Unpaid') == filter).toList();
-    final pct = target == null ? 0.0 : collected / target * 100;
     return Scaffold(
         appBar: AppBar(title: Text(data['name']), actions: [
           if (data['status'] == 'ACTIVE')
@@ -998,80 +838,28 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
                 children: [
-                  Align(
-                      alignment: Alignment.centerRight,
-                      child: StatusBadge(
-                          data['status'] == 'ACTIVE' ? 'ACTIVE' : 'DRAFT')),
-                  const SizedBox(height: 20),
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    metric('Target', money(target)),
-                    metric('Collected', money(collected)),
-                    metric(
-                        target != null && collected > target
-                            ? 'Above target'
-                            : 'Remaining',
-                        target == null
-                            ? '—'
-                            : money((target - collected).abs()))
-                  ]),
-                  const SizedBox(height: 28),
-                  if (target != null) ...[
-                    RichText(
-                        text: TextSpan(
-                            style: const TextStyle(
-                                color: SendohColors.secondary, fontSize: 12),
-                            children: [
-                          TextSpan(
-                              text: '${pct.toStringAsFixed(1)}% ',
-                              style: const TextStyle(
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.w600,
-                                  color: SendohColors.teal)),
-                          const TextSpan(text: 'of target collected')
-                        ])),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: LinearProgressIndicator(
-                            value: (pct / 100).clamp(0.0, 1.0).toDouble(),
-                            minHeight: 8,
-                            backgroundColor: SendohColors.border,
-                            color: pct >= 100
-                                ? SendohColors.green
-                                : SendohColors.teal)),
-                    const SizedBox(height: 14)
-                  ],
-                  SurfaceCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const StatusBadge('TEST • No money moves'),
-                    SummaryRow('Successful test contributions', money(data['test_collected_amount'] ?? 0)),
-                    if (target != null) LinearProgressIndicator(value: (((data['test_collected_amount'] ?? 0) as num) / target).clamp(0.0, 1.0).toDouble()),
-                    OutlinedButton(onPressed: busy ? null : () => openPayments(), child: const Text('Test payments and receipts')),
-                    if (data['status'] == 'ACTIVE') FilledButton(onPressed: busy ? null : () => openPayments(contribute: true), child: const Text('Contribute as myself (test)')),
+                  SurfaceCard(color: SendohColors.teal, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [const Expanded(child: Text('Your group’s progress', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))), StatusBadge(data['status'] as String)]),
+                    const SizedBox(height: 20),
+                    CollectionProgress(data: data, dark: true),
+                    const SizedBox(height: 20),
+                    PeoplePreview(people: people, dark: true),
                   ])),
                   const SizedBox(height: 16),
-                  Wrap(spacing: 4, children: people.take(7).map((raw) => MemberAvatar(Map<String, dynamic>.from(raw), radius: 15)).toList()),
+                  Row(children: [
+                    CoordinationAction(icon: Icons.share_outlined, label: 'Copy link', onTap: data['share_url'] == null ? null : () => copyCollectionLink(context, data['share_url'])),
+                    CoordinationAction(icon: Icons.person_add_outlined, label: 'Invite', onTap: busy || data['status'] != 'ACTIVE' ? null : () => invitePerson()),
+                    CoordinationAction(icon: Icons.receipt_long_outlined, label: 'Receipts', onTap: busy ? null : () => openPayments()),
+                  ]),
+                  const SizedBox(height: 16),
+                  const Text('One link for the whole group. Everyone joins as themselves.', style: TextStyle(fontSize: 12, height: 1.5, color: SendohColors.secondary)),
+                  const SizedBox(height: 16),
+                  if (data['status'] == 'ACTIVE') FilledButton.icon(onPressed: busy ? null : () => openPayments(contribute: true), icon: const Icon(Icons.add_card_outlined), label: const Text('Make a test contribution')),
                   const SizedBox(height: 8),
-                  Text('${people.length} participants',
-                      style: const TextStyle(
-                          fontSize: 12, color: SendohColors.secondary)),
-                  if (data['status'] == 'ACTIVE') ...[
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                        onPressed: busy ? null : () => invitePerson(),
-                        icon: const Icon(Icons.person_add_outlined, size: 18),
-                        label: const Text('Invite a specific person')),
-                  ],
+                  const Text('Test mode · No real money moves.', style: TextStyle(fontSize: 12, color: SendohColors.amber)),
                   const SizedBox(height: 20),
-                  if (data['share_url'] != null)
-                    OutlinedButton.icon(
-                        onPressed: () =>
-                            copyCollectionLink(context, data['share_url']),
-                        icon: const Icon(Icons.share_outlined, size: 18),
-                        label: const Text('Copy collection link')),
-                  const Text('Share one collection link with your group. People join as themselves; you do not need everyone’s username.', style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
-                  const SizedBox(height: 22),
                   Row(
-                      children: ['Overview', 'Participants']
+                      children: ['About', 'People']
                           .asMap()
                           .entries
                           .map((e) => Expanded(
@@ -1115,8 +903,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             : money(data['expected_amount'])),
                     const Divider(),
                     const EmptyState(
-                        title: 'Test payment tracking',
-                        message: 'Open Test payments and receipts to view saved attempts. Real payment collection is not enabled yet.',
+                        title: 'A shared view for your group',
+                        message: 'Use People to see who has joined and Receipts to follow test contributions. No real funds are collected yet.',
                         icon: Icons.receipt_long_outlined)
                   ] else ...[
                     SingleChildScrollView(

@@ -25,6 +25,9 @@ ThemeData sendohTheme() {
       colorScheme: ColorScheme.fromSeed(
           seedColor: SendohColors.teal,
           primary: SendohColors.teal,
+          secondary: SendohColors.orange,
+          onPrimary: Colors.white,
+          onSecondary: SendohColors.ink,
           surface: SendohColors.canvas,
           error: SendohColors.red));
   return base.copyWith(
@@ -51,20 +54,20 @@ ThemeData sendohTheme() {
             const TextStyle(fontSize: 14, color: SendohColors.secondary),
         hintStyle: const TextStyle(fontSize: 14, color: SendohColors.muted),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: SendohColors.border)),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: SendohColors.border)),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(12),
             borderSide:
                 const BorderSide(color: SendohColors.teal, width: 1.5))),
     filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
             minimumSize: const Size(double.infinity, 49),
             shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             textStyle:
                 const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -72,7 +75,7 @@ ThemeData sendohTheme() {
             minimumSize: const Size(double.infinity, 49),
             side: const BorderSide(color: SendohColors.border),
             shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             textStyle:
                 const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
     textButtonTheme: TextButtonThemeData(
@@ -160,7 +163,7 @@ class SurfaceCard extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: SendohColors.border, width: .7)),
       child: Material(type: MaterialType.transparency, child: child));
 }
@@ -195,16 +198,17 @@ class StatusBadge extends StatelessWidget {
   final String text;
   final bool pending;
   @override
-  Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-          color: pending ? SendohColors.amberSoft : SendohColors.tealSoft,
-          borderRadius: BorderRadius.circular(4)),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: pending ? SendohColors.amber : SendohColors.teal)));
+  Widget build(BuildContext context) {
+    final value = text.toLowerCase();
+    final failed = value.contains('failed') || value == 'declined';
+    final waiting = pending || value.contains('partial') || value.contains('unpaid') || value.contains('pending') || value.contains('test');
+    final foreground = failed ? SendohColors.red : waiting ? SendohColors.amber : SendohColors.teal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(color: failed ? const Color(0xFFFCEBE9) : waiting ? SendohColors.amberSoft : SendohColors.tealSoft, borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: foreground)),
+    );
+  }
 }
 
 class SummaryRow extends StatelessWidget {
@@ -260,9 +264,9 @@ class EmptyState extends StatelessWidget {
 }
 
 String displayDate(dynamic raw) {
-  if (raw == null) return 'No deadline';
+  if (raw == null) { return 'No deadline'; }
   final date = DateTime.tryParse(raw.toString());
-  if (date == null) return 'No deadline';
+  if (date == null) { return 'No deadline'; }
   final d = date.toUtc().add(const Duration(hours: 1));
   const months = [
     'Jan',

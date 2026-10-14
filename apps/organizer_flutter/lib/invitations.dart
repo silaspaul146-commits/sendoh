@@ -1,3 +1,4 @@
+import 'coordination.dart';
 import 'payment_demo.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -199,7 +200,7 @@ class _InvitePersonState extends State<InvitePerson> {
               const SurfaceCard(
                   color: SendohColors.tealSoft,
                   child: Text(
-                      'The invitation appears in their Sendoh app. A new user must verify the invited phone number first. You can let them know on WhatsApp; no SMS or push alert is sent yet.',
+                      'The invitation appears in their Sendoh app. A new user must verify the invited phone number first. You can let them know on WhatsApp; push alerts can notify registered members when their device allows notifications.',
                       style: TextStyle(fontSize: 13, height: 1.6))),
               if (error != null)
                 Padding(
@@ -215,7 +216,8 @@ class _InvitePersonState extends State<InvitePerson> {
 }
 
 class InvitationsScreen extends StatefulWidget {
-  const InvitationsScreen({super.key, required this.api});
+  const InvitationsScreen({super.key, required this.api, this.initiallyJoined = false});
+  final bool initiallyJoined;
   final SendohApi api;
   @override
   State<InvitationsScreen> createState() => _InvitationsScreenState();
@@ -223,7 +225,8 @@ class InvitationsScreen extends StatefulWidget {
 
 class _InvitationsScreenState extends State<InvitationsScreen> {
   List<dynamic> pending = [], joined = [];
-  bool loading = true, showJoined = false;
+  bool loading = true;
+  late bool showJoined = widget.initiallyJoined;
   String? error;
   @override
   void initState() {
@@ -318,7 +321,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                           : 'No invitations yet',
                       message: showJoined
                           ? 'Collections you accept will appear here.'
-                          : 'Ask the organizer to invite your username or verified phone number. Pull down to refresh.',
+                          : 'Open your group’s collection link or ask the organizer for a personal invitation.',
                       icon: Icons.mail_outline),
                 if (!loading && error == null)
                   ...rows.map((raw) {
@@ -432,18 +435,17 @@ class _InvitationDetailState extends State<InvitationDetail> {
         if ((c['description'] as String? ?? '').isNotEmpty)
           Text(c['description'] as String, style: const TextStyle(height: 1.6)),
         const SizedBox(height: 16),
-        SurfaceCard(
-            child: Column(children: [
-          SummaryRow('Your expected amount', _amount(item['expected_amount'])),
+        SurfaceCard(color: SendohColors.teal, child: CollectionProgress(data: c, dark: true)),
+        const SizedBox(height: 16),
+        SurfaceCard(child: Column(children: [
+          SummaryRow('Your expected contribution', _amount(item['expected_amount'])),
           SummaryRow('Deadline', displayDate(c['deadline_at'])),
-          SummaryRow('Collected', _amount(c['collected_amount'])),
-          SummaryRow('Test collected (no money)', _amount(c['test_collected_amount'] ?? 0)),
         ])),
         const SizedBox(height: 20),
         Text(
             pending
                 ? 'Accepting adds your verified Sendoh profile to this collection. It does not make a payment.'
-                : 'You have joined this collection. You can test the complete payment flow. No real money moves.',
+                : 'You’re part of this collection. Follow the group’s progress and keep your contribution receipts here. No real money moves.',
             style: const TextStyle(height: 1.6, color: SendohColors.secondary)),
         if (pending && item['expires_at'] != null) ...[
           const SizedBox(height: 10),
@@ -458,7 +460,8 @@ class _InvitationDetailState extends State<InvitationDetail> {
                   style: const TextStyle(color: SendohColors.red))),
         const SizedBox(height: 24),
         if (item['invitation_state'] == 'ACCEPTED') ...[
-          FilledButton(onPressed: () => payments(), child: const Text('Make a test contribution')),
+          if (c['status'] == 'ACTIVE') FilledButton(onPressed: () => payments(), child: const Text('Make a test contribution')),
+          const SizedBox(height: 12),
           OutlinedButton(onPressed: () => payments(history: true), child: const Text('My test payments and receipts')),
         ],
         if (pending) ...[

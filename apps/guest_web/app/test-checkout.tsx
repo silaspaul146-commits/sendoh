@@ -47,14 +47,15 @@ export default function TestCheckout({token,name,collection,expected,onBack}:{to
  return <>
   <header className="screen-header"><h1 ref={heading} tabIndex={-1}>{title}</h1><span className="badge">Test only</span></header>
   <div className="screen-content">
+   {(['amount','review','method','pay'] as Stage[]).includes(stage)&&<nav className="checkout-steps" aria-label="Contribution progress">{['Amount','Review','Method','Pay'].map((label,i)=><span key={label} aria-current={i===['amount','review','method','pay'].indexOf(stage)?'step':undefined} className={i<=['amount','review','method','pay'].indexOf(stage)?'reached':''}><b>{i+1}</b>{label}</span>)}</nav>}
    <p className="helper">No money moves. Attempts and results are saved on Sendoh.</p>
-   <p><strong>{payment?.collection_name??collection}</strong><br/>Contributing as {payment?.payer_name??name}</p>
+   <div className="contribution-context"><span className="avatar" aria-hidden="true">{(payment?.payer_name??name).slice(0,1).toUpperCase()}</span><p><strong>{payment?.collection_name??collection}</strong><br/>Contributing as {payment?.payer_name??name}</p></div>
    {busy&&<p role="status">Saving / loading…</p>}
    {error&&<p className="error" role="alert">{error}</p>}
    {stage==='amount'&&<>
     <h2>How much would you like to contribute?</h2>
     {expected!==null&&<p>Expected contribution: {money(expected)}</p>}
-    <div className="amount-options">{Array.from(new Set([500,1000,1500,expected??3000])).map(v=><button key={v} disabled={busy} onClick={()=>setAmount(String(v))}>{v.toLocaleString('en')}</button>)}</div>
+    <div className="amount-options">{Array.from(new Set([500,1000,1500,expected??3000])).map(v=><button key={v} className={n===v?'selected':''} aria-pressed={n===v} disabled={busy} onClick={()=>setAmount(String(v))}>{v.toLocaleString('en')}</button>)}</div>
     <label className="field">Amount (FCFA)<input inputMode="numeric" value={amount} onChange={e=>setAmount(e.target.value)} maxLength={13}/></label>
     <label className="field">Note (optional)<textarea value={note} onChange={e=>setNote(e.target.value)} maxLength={200}/></label>
     <button className="button" disabled={busy} onClick={review}>Continue</button>
@@ -90,7 +91,7 @@ export default function TestCheckout({token,name,collection,expected,onBack}:{to
    {stage==='receipt'&&payment&&<>
     <h2>TEST • Not proof of payment</h2>
     <div className="summary"><Row label="Contributor">{payment.payer_name}</Row><Row label="Collection">{payment.collection_name}</Row><Row label="Amount">{money(payment.amount)}</Row><Row label="Fee">{money(payment.fee_amount)}</Row><Row label="Method">{methodName(payment.method)}</Row><Row label="Reference">{payment.reference}</Row><Row label="Recorded">{new Date(payment.completed_at!*1000).toLocaleString()}</Row></div>
-    {payment.note&&<p>{payment.note}</p>}<p>Persisted test receipt. No real funds were received.</p>
+    {payment.note&&<p>{payment.note}</p>}<p>Your saved test receipt. No real funds were received.</p>
     <button className="button secondary" onClick={()=>window.print()}>Print / save receipt</button>
    </>}
    {stage==='history'&&<>
