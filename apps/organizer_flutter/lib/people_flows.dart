@@ -373,20 +373,22 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                     child: const Text('Remove expiry')),
                             ] else ...[
                               const Text('Payment method'),
-                              RadioListTile<String>(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('MTN MoMo'),
-                                  value: 'MTN MoMo',
-                                  groupValue: method,
-                                  onChanged: (v) =>
-                                      setState(() => method = v!)),
-                              RadioListTile<String>(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Orange Money'),
-                                  value: 'Orange Money',
-                                  groupValue: method,
-                                  onChanged: (v) =>
-                                      setState(() => method = v!)),
+                              SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment<String>(
+                                    value: 'MTN MoMo',
+                                    label: Text('MTN MoMo'),
+                                  ),
+                                  ButtonSegment<String>(
+                                    value: 'Orange Money',
+                                    label: Text('Orange Money'),
+                                  ),
+                                ],
+                                selected: {method},
+                                onSelectionChanged: (selection) {
+                                  setState(() => method = selection.single);
+                                },
+                              ),
                             ],
                             const SizedBox(height: 24),
                             FilledButton(
