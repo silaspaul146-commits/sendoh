@@ -112,6 +112,11 @@ def process_one(sessions, sender, environment):
             p = db.get(Participant, notification.participant_id)
             valid = bool(p and p.invitation_version == notification.invitation_version and
                          p.invitation_state == 'PENDING' and (p.expires_at or 0) > now)
+        if valid and notification.kind == 'REQUEST_RECEIVED':
+            from .models import MoneyRequest
+            request = db.get(MoneyRequest, notification.request_id)
+            valid = bool(request and request.status == 'PENDING' and
+                (request.expires_at is None or request.expires_at > now))
         state, code = ('SKIPPED', 'NO_LONGER_ELIGIBLE') if not valid else ('SENT', None)
         invalidate = False
         if valid:

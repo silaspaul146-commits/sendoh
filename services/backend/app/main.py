@@ -17,6 +17,7 @@ from .invitations import router as invitation_router
 from .notifications import router as notification_router
 from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
+from .people import router as people_router
 
 
 def create_app(database_url=None):
@@ -138,6 +139,7 @@ def create_app(database_url=None):
     app.include_router(invitation_router(database, actor, web_url))
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     app.include_router(payment_router(database, actor, settings))
+    app.include_router(people_router(database, actor))
     return app
 
 app = create_app()

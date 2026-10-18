@@ -216,7 +216,8 @@ class _InvitePersonState extends State<InvitePerson> {
 }
 
 class InvitationsScreen extends StatefulWidget {
-  const InvitationsScreen({super.key, required this.api, this.initiallyJoined = false});
+  const InvitationsScreen(
+      {super.key, required this.api, this.initiallyJoined = false});
   final bool initiallyJoined;
   final SendohApi api;
   @override
@@ -368,18 +369,34 @@ class InvitationDetail extends StatefulWidget {
 }
 
 class _InvitationDetailState extends State<InvitationDetail> {
-  late Map<String, dynamic> current = Map<String, dynamic>.from(widget.invitation);
+  late Map<String, dynamic> current =
+      Map<String, dynamic>.from(widget.invitation);
   Future<void> payments({bool history = false}) async {
     final c = Map<String, dynamic>.from(current['collection']);
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => history
-      ? TestPaymentHistory(api: widget.api, collectionId: current['collection_id'])
-      : PaymentDemo(api: widget.api, collectionId: current['collection_id'], collection: c['name'],
-          name: current['participant_name'], expected: current['expected_amount'] as int?)));
-    if (!mounted) { return; }
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => history
+            ? TestPaymentHistory(
+                api: widget.api, collectionId: current['collection_id'])
+            : PaymentDemo(
+                api: widget.api,
+                collectionId: current['collection_id'],
+                collection: c['name'],
+                name: current['participant_name'],
+                expected: current['expected_amount'] as int?)));
+    if (!mounted) {
+      return;
+    }
     try {
-      final result = await widget.api.request('/me/invitations/${current['id']}');
-      if (mounted) { setState(() => current = Map<String, dynamic>.from(result)); }
-    } catch (e) { if (mounted) { setState(() => error = '$e'); } }
+      final result =
+          await widget.api.request('/me/invitations/${current['id']}');
+      if (mounted) {
+        setState(() => current = Map<String, dynamic>.from(result));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    }
   }
 
   bool busy = false;
@@ -393,9 +410,12 @@ class _InvitationDetailState extends State<InvitationDetail> {
       error = null;
     });
     try {
-      final result = await widget.api.request(
-          '/me/invitations/${widget.invitation['id']}/respond',
-          body: {'decision': decision, if (widget.invitation['invitation_version'] != null) 'version': widget.invitation['invitation_version']});
+      final result = await widget.api
+          .request('/me/invitations/${widget.invitation['id']}/respond', body: {
+        'decision': decision,
+        if (widget.invitation['invitation_version'] != null)
+          'version': widget.invitation['invitation_version']
+      });
       if (mounted) {
         Navigator.of(context).pop(result['invitation_state'] as String);
       }
@@ -435,10 +455,14 @@ class _InvitationDetailState extends State<InvitationDetail> {
         if ((c['description'] as String? ?? '').isNotEmpty)
           Text(c['description'] as String, style: const TextStyle(height: 1.6)),
         const SizedBox(height: 16),
-        SurfaceCard(color: SendohColors.teal, child: CollectionProgress(data: c, dark: true)),
+        SurfaceCard(
+            color: SendohColors.teal,
+            child: CollectionProgress(data: c, dark: true)),
         const SizedBox(height: 16),
-        SurfaceCard(child: Column(children: [
-          SummaryRow('Your expected contribution', _amount(item['expected_amount'])),
+        SurfaceCard(
+            child: Column(children: [
+          SummaryRow(
+              'Your expected contribution', _amount(item['expected_amount'])),
           SummaryRow('Deadline', displayDate(c['deadline_at'])),
         ])),
         const SizedBox(height: 20),
@@ -460,9 +484,14 @@ class _InvitationDetailState extends State<InvitationDetail> {
                   style: const TextStyle(color: SendohColors.red))),
         const SizedBox(height: 24),
         if (item['invitation_state'] == 'ACCEPTED') ...[
-          if (c['status'] == 'ACTIVE') FilledButton(onPressed: () => payments(), child: const Text('Make a test contribution')),
+          if (c['status'] == 'ACTIVE')
+            FilledButton(
+                onPressed: () => payments(),
+                child: const Text('Make a test contribution')),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: () => payments(history: true), child: const Text('My test payments and receipts')),
+          OutlinedButton(
+              onPressed: () => payments(history: true),
+              child: const Text('My test payments and receipts')),
         ],
         if (pending) ...[
           FilledButton(

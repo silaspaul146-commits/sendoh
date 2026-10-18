@@ -1,3 +1,4 @@
+import 'home.dart';
 import 'coordination.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -16,6 +17,8 @@ import 'invitations.dart';
 import 'notifications.dart';
 import 'payment_demo.dart';
 import 'push_service.dart';
+import 'people_flows.dart';
+import 'money_requests.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
@@ -67,15 +70,21 @@ class _DevelopmentSessionState extends State<DevelopmentSession> {
         url.text.trim().replaceAll(RegExp(r'/$'), ''), token.text.trim());
     try {
       final profile = await api.request('/me');
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => ProviderScope(
               overrides: [apiProvider.overrideWithValue(api)],
               child: Shell(name: profile['display_name'] as String))));
     } catch (e) {
-      if (mounted) setState(() => error = '$e');
+      if (mounted) {
+        setState(() => error = '$e');
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -124,11 +133,15 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
   String get displayName => account['display_name'] as String;
   late Future<List<dynamic>> items;
   late Future<List<dynamic>> joinedItems;
+  late Future<List<dynamic>> homeInvitations, homeActivity, homeRequests;
   @override
   void initState() {
     super.initState();
     items = ref.read(apiProvider).collections();
     joinedItems = loadJoined();
+    homeInvitations = homeList('/me/invitations');
+    homeActivity = homeList('/me/activity');
+    homeRequests = requestList();
     WidgetsBinding.instance.addObserver(this);
     PushService.updates.addListener(pushUpdated);
     WidgetsBinding.instance.addPostFrameCallback((_) => connectNotifications());
@@ -181,6 +194,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
   }
 
   void pushUpdated() {
+    reload();
     refreshUnread();
     if (PushService.pendingOpen && mounted && !notificationsOpen) {
       PushService.pendingOpen = false;
@@ -196,7 +210,8 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => NotificationsScreen(
             api: ref.read(apiProvider),
-            userId: account['id'] as String? ?? '', initialNotificationId: PushService.pendingNotificationId)));
+            userId: account['id'] as String? ?? '',
+            initialNotificationId: PushService.pendingNotificationId)));
     notificationsOpen = false;
     PushService.pendingNotificationId = null;
     if (mounted) {
@@ -205,8 +220,37 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
     }
   }
 
-  Future<List<dynamic>> loadJoined() async => List<dynamic>.from(await ref.read(apiProvider).request('/me/joined-collections'));
-  void reload() => setState(() { items = ref.read(apiProvider).collections(); joinedItems = loadJoined(); });
+  Future<List<dynamic>> requestList() {
+    final result = ref
+        .read(apiProvider)
+        .request('/money-requests')
+        .then((value) => List<dynamic>.from(value['items']));
+    unawaited(result.then<void>((_) {},
+        onError: (Object error, StackTrace stack) {}));
+    return result;
+  }
+
+  Future<List<dynamic>> loadJoined() async => List<dynamic>.from(
+      await ref.read(apiProvider).request('/me/joined-collections'));
+  Future<List<dynamic>> homeList(String path) {
+    final result = ref
+        .read(apiProvider)
+        .request(path)
+        .then((value) => List<dynamic>.from(value));
+    // Home may be off-screen when a refresh completes. Keep the error available
+    // for FutureBuilder while preventing an unobserved background error.
+    unawaited(result.then<void>((_) {},
+        onError: (Object error, StackTrace stack) {}));
+    return result;
+  }
+
+  void reload() => setState(() {
+        items = ref.read(apiProvider).collections();
+        joinedItems = loadJoined();
+        homeInvitations = homeList('/me/invitations');
+        homeActivity = homeList('/me/activity');
+        homeRequests = requestList();
+      });
   Future<void> create() async {
     final api = ref.read(apiProvider);
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -214,15 +258,21 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
             builder: (_) => ProviderScope(
                 overrides: [apiProvider.overrideWithValue(api)],
                 child: const CreateCollection())));
-    if (!mounted || result == null) return;
+    if (!mounted || result == null) {
+      return;
+    }
     reload();
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => CollectionCreated(data: result, api: api)));
   }
 
   Future<void> open(Map<String, dynamic> data) async {
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CollectionDetail(data: data, api: ref.read(apiProvider))));
-    if (mounted) { reload(); }
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) =>
+            CollectionDetail(data: data, api: ref.read(apiProvider))));
+    if (mounted) {
+      reload();
+    }
   }
 
   @override
@@ -232,6 +282,16 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                 ? const SendohBrand()
                 : Text(tab == 1 ? 'Activity' : 'Profile'),
             actions: [
+              if (tab == 0)
+                IconButton(
+                    tooltip: 'Near2Pay',
+                    icon: const Icon(Icons.qr_code_scanner),
+                    onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => PeopleFlow(
+                                nearby: true,
+                                gateway: ApiPeopleGateway(ref.read(apiProvider),
+                                    account['id'] as String))))),
               IconButton(
                   tooltip: 'Notifications ($unread unread)',
                   onPressed: openNotifications,
@@ -241,10 +301,15 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                       child: const Icon(Icons.notifications_outlined))),
               IconButton(
                   tooltip: 'Invitations and joined collections',
-                  onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                          builder: (_) =>
-                              InvitationsScreen(api: ref.read(apiProvider)))).then((_) { if (mounted) reload(); }),
+                  onPressed: () => Navigator.of(context)
+                          .push(MaterialPageRoute<void>(
+                              builder: (_) => InvitationsScreen(
+                                  api: ref.read(apiProvider))))
+                          .then((_) {
+                        if (mounted) {
+                          reload();
+                        }
+                      }),
                   icon: const Icon(Icons.mail_outline)),
             ]),
         bottomNavigationBar: NavigationBar(
@@ -266,109 +331,77 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
             ? profile()
             : tab == 1
                 ? const ActivityView()
-                : RefreshIndicator(
+                : CoordinationHome(
+                    peopleGateway: ApiPeopleGateway(
+                        ref.read(apiProvider), account['id'] as String),
+                    requests: homeRequests,
+                    onReviewRequest: (item) async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => MoneyRequestDetail(
+                              api: ref.read(apiProvider), id: item['id'])));
+                      if (mounted) reload();
+                    },
+                    onViewRequests: () async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => MoneyRequestInbox(
+                              api: ref.read(apiProvider),
+                              userId: account['id'] as String)));
+                      if (mounted) reload();
+                    },
+                    name: displayName,
+                    avatar: accountAvatar(22),
+                    owned: items,
+                    joined: joinedItems,
+                    invitations: homeInvitations,
+                    recentActivity: homeActivity,
+                    onViewActivity: () => setState(() => tab = 1),
+                    onViewInvitations: () async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) =>
+                              InvitationsScreen(api: ref.read(apiProvider))));
+                      if (mounted) {
+                        reload();
+                      }
+                    },
+                    onReviewInvitation: (item) async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => InvitationDetail(
+                              api: ref.read(apiProvider), invitation: item)));
+                      if (mounted) {
+                        reload();
+                      }
+                    },
                     onRefresh: () async {
                       reload();
-                      await refreshUnread();
-                      await Future.wait([items, joinedItems]);
+                      await Future.wait([
+                        items,
+                        joinedItems,
+                        homeInvitations,
+                        homeActivity,
+                        homeRequests,
+                        refreshUnread()
+                      ]);
                     },
-                    child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
-                        children: [
-                          Row(children: [
-                            accountAvatar(24),
-                            const SizedBox(width: 12),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  const Text('Welcome back,',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: SendohColors.secondary)),
-                                  const SizedBox(height: 4),
-                                  Text(displayName,
-                                      style: const TextStyle(
-                                          fontSize: 21,
-                                          fontWeight: FontWeight.w600))
-                                ]))
-                          ]),
-                          const SizedBox(height: 28),
-                          const Text('Organize money. Together.', style: TextStyle(fontSize: 14, color: SendohColors.secondary)),
-                          const SizedBox(height: 20),
-                          FilledButton.icon(onPressed: create, style: FilledButton.styleFrom(backgroundColor: SendohColors.orange, foregroundColor: SendohColors.ink), icon: const Icon(Icons.add), label: const Text('Create collection')),
-                          const SizedBox(height: 28),
-                          const Text('Collections you organize',
-                              style: TextStyle(
-                                  fontSize: 17, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 16),
-                          FutureBuilder<List<dynamic>>(
-                              future: items,
-                              builder: (context, s) {
-                                if (s.hasError) {
-                                  return Column(children: [
-                                    const Text(
-                                        'Couldn’t load your collections.'),
-                                    TextButton(
-                                        onPressed: reload,
-                                        child: const Text('Try again'))
-                                  ]);
-                                }
-                                if (!s.hasData) {
-                                  return const Padding(
-                                      padding: EdgeInsets.all(40),
-                                      child: Center(
-                                          child: CircularProgressIndicator()));
-                                }
-                                if (s.data!.isEmpty) {
-                                  return const EmptyState(
-                                      title:
-                                          'Your first collection starts here',
-                                      message:
-                                          'Bring people together for a shared purpose. Create a collection and share one link.');
-                                }
-                                return Column(
-                                    children: s.data!.asMap().entries.map((e) {
-                                  final c = Map<String, dynamic>.from(e.value);
-                                  return Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 14),
-                                      child: CollectionCard(
-                                          data: c,
-                                          featured: e.key == 0,
-                                          onTap: () => open(c)));
-                                }).toList());
-                              }),
-                          const SizedBox(height: 24),
-                          Row(children: [
-                            const Expanded(child: Text('Collections you joined', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-                            TextButton(onPressed: () async {
-                              await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationsScreen(api: ref.read(apiProvider), initiallyJoined: true)));
-                              if (mounted) { reload(); }
-                            }, child: const Text('View all')),
-                          ]),
-                          const Text('Your groups, your part. Swipe to explore.', style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
-                          const SizedBox(height: 14),
-                          FutureBuilder<List<dynamic>>(future: joinedItems, builder: (context, snapshot) {
-                            if (snapshot.hasError) { return TextButton(onPressed: reload, child: const Text('Retry joined collections')); }
-                            if (!snapshot.hasData) { return const LinearProgressIndicator(); }
-                            if (snapshot.data!.isEmpty) { return const SurfaceCard(child: Text('When you accept an invitation or join through a collection link, your collection appears here.', style: TextStyle(height: 1.6, color: SendohColors.secondary))); }
-                            return SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: snapshot.data!.map((raw) {
-                              final item = Map<String, dynamic>.from(raw);
-                              return Padding(padding: const EdgeInsets.only(right: 12), child: SizedBox(width: (MediaQuery.sizeOf(context).width - 76).clamp(240.0, 320.0).toDouble(), child: JoinedCollectionCard(item: item, onTap: () async {
-                                await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationDetail(api: ref.read(apiProvider), invitation: item)));
-                                if (mounted) { reload(); }
-                              })));
-                            }).toList()));
-                          }),
-                          const SizedBox(height: 24),
-                          OutlinedButton.icon(onPressed: () async {
-                            await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InvitationsScreen(api: ref.read(apiProvider))));
-                            if (mounted) { reload(); }
-                          }, icon: const Icon(Icons.mail_outline), label: const Text('Review invitations')),
-                        ])),
+                    onCreate: create,
+                    onOpenOwned: open,
+                    onOpenJoined: (item) async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => InvitationDetail(
+                              api: ref.read(apiProvider), invitation: item)));
+                      if (mounted) {
+                        reload();
+                      }
+                    },
+                    onViewJoined: () async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => InvitationsScreen(
+                              api: ref.read(apiProvider),
+                              initiallyJoined: true)));
+                      if (mounted) {
+                        reload();
+                      }
+                    },
+                  ),
       );
   Widget accountAvatar(double radius) => account['avatar'] == null
       ? PersonAvatar(displayName, radius: radius)
@@ -391,7 +424,9 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                   .push<Map<String, dynamic>>(MaterialPageRoute(
                       builder: (_) => EditProfile(
                           api: ref.read(apiProvider), account: account)));
-              if (mounted && updated != null) setState(() => account = updated);
+              if (mounted && updated != null) {
+                setState(() => account = updated);
+              }
             },
             child: const Text('Edit profile')),
         ListTile(
@@ -403,7 +438,9 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
               try {
                 final ok = await authenticateDevice(
                     'Confirm device unlock settings for Sendoh');
-                if (!ok) return;
+                if (!ok) {
+                  return;
+                }
                 final enabled = !await SessionStore.locked();
                 await SessionStore.setLocked(enabled);
                 if (mounted) {
@@ -464,25 +501,64 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
 }
 
 class CollectionCard extends StatelessWidget {
-  const CollectionCard({super.key, required this.data, required this.onTap, this.featured = false});
+  const CollectionCard(
+      {super.key,
+      required this.data,
+      required this.onTap,
+      this.featured = false});
   final Map<String, dynamic> data;
   final VoidCallback onTap;
   final bool featured;
   @override
   Widget build(BuildContext context) => Material(
-    color: featured ? SendohColors.teal : SendohColors.surface,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: featured ? SendohColors.teal : SendohColors.border)),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(onTap: onTap, child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Expanded(child: Text(data['name'] as String, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: featured ? Colors.white : SendohColors.ink))), const SizedBox(width: 8), StatusBadge(data['status'] as String)]),
-      const SizedBox(height: 20),
-      CollectionProgress(data: data, dark: featured),
-      const SizedBox(height: 20),
-      PeoplePreview(people: data['participants'] as List? ?? [], dark: featured),
-      const SizedBox(height: 14),
-      Row(children: [Expanded(child: Text(displayDate(data['deadline_at']), style: TextStyle(fontSize: 12, color: featured ? Colors.white : SendohColors.secondary))), Icon(Icons.arrow_forward, size: 18, color: featured ? SendohColors.orange : SendohColors.teal)]),
-    ]))),
-  );
+        color: featured ? SendohColors.teal : SendohColors.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(
+                color: featured ? SendohColors.teal : SendohColors.border)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+            onTap: onTap,
+            child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text(data['name'] as String,
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: featured
+                                        ? Colors.white
+                                        : SendohColors.ink))),
+                        const SizedBox(width: 8),
+                        StatusBadge(data['status'] as String)
+                      ]),
+                      const SizedBox(height: 20),
+                      CollectionProgress(data: data, dark: featured),
+                      const SizedBox(height: 20),
+                      PeoplePreview(
+                          people: data['participants'] as List? ?? [],
+                          dark: featured),
+                      const SizedBox(height: 14),
+                      Row(children: [
+                        Expanded(
+                            child: Text(displayDate(data['deadline_at']),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: featured
+                                        ? Colors.white
+                                        : SendohColors.secondary))),
+                        Icon(Icons.arrow_forward,
+                            size: 18,
+                            color: featured
+                                ? SendohColors.orange
+                                : SendohColors.teal)
+                      ]),
+                    ]))),
+      );
 }
 
 class ActivityView extends ConsumerStatefulWidget {
@@ -499,36 +575,103 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
     activity = ref.read(apiProvider).request('/me/activity');
     PushService.updates.addListener(onUpdate);
   }
+
   void onUpdate() {
-    if (mounted) { setState(() => activity = ref.read(apiProvider).request('/me/activity')); }
+    if (mounted) {
+      setState(() => activity = ref.read(apiProvider).request('/me/activity'));
+    }
   }
-  Future<void> refresh() async { onUpdate(); await activity; }
+
+  Future<void> refresh() async {
+    onUpdate();
+    await activity;
+  }
+
   @override
-  void dispose() { PushService.updates.removeListener(onUpdate); super.dispose(); }
+  void dispose() {
+    PushService.updates.removeListener(onUpdate);
+    super.dispose();
+  }
+
   @override
-  Widget build(BuildContext context) => FutureBuilder<dynamic>(future: activity, builder: (context, snapshot) {
-    final entries = snapshot.hasData ? snapshot.data as List : <dynamic>[];
-    return RefreshIndicator(onRefresh: refresh, child: ListView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(22), children: [
-      const Text('Your group, in the loop.', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: SendohColors.teal)),
-      const SizedBox(height: 8),
-      const Text('Updates from collections you organize. Invitations and joined-group alerts are in Notifications.', style: TextStyle(height: 1.6, color: SendohColors.secondary)),
-      const SizedBox(height: 24),
-      if (snapshot.connectionState == ConnectionState.waiting) const LinearProgressIndicator(),
-      if (snapshot.hasError) ...[
-        const Text('Couldn’t load activity. Your records are still saved.'),
-        TextButton(onPressed: onUpdate, child: const Text('Try again')),
-      ] else if (snapshot.hasData && entries.isEmpty) const EmptyState(title: 'Your story starts here', message: 'Create a collection and invite your group. Updates will appear here as things happen.', icon: Icons.history),
-      if (!snapshot.hasError) ...entries.map((raw) {
-        final e = Map<String, dynamic>.from(raw);
-        final test = (e['message'] as String).startsWith('TEST:');
-        return Padding(padding: const EdgeInsets.only(bottom: 12), child: SurfaceCard(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          CircleAvatar(radius: 19, backgroundColor: test ? SendohColors.amberSoft : SendohColors.tealSoft, child: Icon(test ? Icons.receipt_long_outlined : Icons.groups_outlined, size: 20, color: test ? SendohColors.amber : SendohColors.teal)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(e['message'] as String, style: const TextStyle(fontSize: 14, height: 1.5, fontWeight: FontWeight.w500)), const SizedBox(height: 6), Text(displayDate(e['created_at']), style: const TextStyle(fontSize: 12, color: SendohColors.muted))])),
-        ])));
-      }),
-    ]));
-  });
+  Widget build(BuildContext context) => FutureBuilder<dynamic>(
+      future: activity,
+      builder: (context, snapshot) {
+        final entries = snapshot.hasData ? snapshot.data as List : <dynamic>[];
+        return RefreshIndicator(
+            onRefresh: refresh,
+            child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(22),
+                children: [
+                  const Text('Your group, in the loop.',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: SendohColors.teal)),
+                  const SizedBox(height: 8),
+                  const Text(
+                      'Updates from collections you organize. Invitations and joined-group alerts are in Notifications.',
+                      style: TextStyle(
+                          height: 1.6, color: SendohColors.secondary)),
+                  const SizedBox(height: 24),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const LinearProgressIndicator(),
+                  if (snapshot.hasError) ...[
+                    const Text(
+                        'Couldn’t load activity. Your records are still saved.'),
+                    TextButton(
+                        onPressed: onUpdate, child: const Text('Try again')),
+                  ] else if (snapshot.hasData && entries.isEmpty)
+                    const EmptyState(
+                        title: 'Your story starts here',
+                        message:
+                            'Create a collection and invite your group. Updates will appear here as things happen.',
+                        icon: Icons.history),
+                  if (!snapshot.hasError)
+                    ...entries.map((raw) {
+                      final e = Map<String, dynamic>.from(raw);
+                      final test = (e['message'] as String).startsWith('TEST:');
+                      return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SurfaceCard(
+                              child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                CircleAvatar(
+                                    radius: 19,
+                                    backgroundColor: test
+                                        ? SendohColors.amberSoft
+                                        : SendohColors.tealSoft,
+                                    child: Icon(
+                                        test
+                                            ? Icons.receipt_long_outlined
+                                            : Icons.groups_outlined,
+                                        size: 20,
+                                        color: test
+                                            ? SendohColors.amber
+                                            : SendohColors.teal)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                      Text(e['message'] as String,
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              height: 1.5,
+                                              fontWeight: FontWeight.w500)),
+                                      const SizedBox(height: 6),
+                                      Text(displayDate(e['created_at']),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: SendohColors.muted))
+                                    ])),
+                              ])));
+                    }),
+                ]));
+      });
 }
 
 Future<void> copyCollectionLink(BuildContext context, String link) async {
@@ -642,7 +785,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 
   void paymentUpdate() {
-    if (mounted && !busy) { refresh(); }
+    if (mounted && !busy) {
+      refresh();
+    }
   }
 
   @override
@@ -658,19 +803,34 @@ class _CollectionDetailState extends State<CollectionDetail> {
     });
     try {
       final result = await widget.api.request('/collections/${data['id']}');
-      if (mounted) setState(() => data = Map<String, dynamic>.from(result));
+      if (mounted) {
+        setState(() => data = Map<String, dynamic>.from(result));
+      }
     } catch (_) {
-      if (mounted) setState(() => error = 'Couldn’t refresh this collection.');
+      if (mounted) {
+        setState(() => error = 'Couldn’t refresh this collection.');
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
   Future<void> openPayments({bool contribute = false}) async {
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => contribute
-      ? PaymentDemo(api: widget.api, collectionId: data['id'], collection: data['name'], name: 'your verified profile', expected: data['expected_amount'] as int?)
-      : TestPaymentHistory(api: widget.api, collectionId: data['id'], organizer: true)));
-    if (mounted) { await refresh(); }
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => contribute
+            ? PaymentDemo(
+                api: widget.api,
+                collectionId: data['id'],
+                collection: data['name'],
+                name: 'your verified profile',
+                expected: data['expected_amount'] as int?)
+            : TestPaymentHistory(
+                api: widget.api, collectionId: data['id'], organizer: true)));
+    if (mounted) {
+      await refresh();
+    }
   }
 
   Future<void> invitePerson([Map<String, dynamic>? person]) async {
@@ -727,18 +887,42 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 
   Future<void> linkManual(Map<String, dynamic> placeholder) async {
-    final members = (data['participants'] as List).where((p) => p['invitation_state'] == 'ACCEPTED').toList();
-    final chosen = await showDialog<Map<String, dynamic>>(context: context, builder: (dialog) => SimpleDialog(
-      title: Text('Who is ${placeholder['name']}?'), children: [
-        const Padding(padding: EdgeInsets.all(16), child: Text('Choose the correct joined profile. This replaces the manual name and keeps its expected amount.')),
-        if (members.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Ask them to join using the collection link first.')),
-        ...members.map((p) => SimpleDialogOption(onPressed: () => Navigator.pop(dialog, Map<String, dynamic>.from(p)), child: Text('${p['name']} ${p['username'] == null ? '' : '@${p['username']}'}'))),
-      ]));
-    if (chosen == null || !mounted) return;
+    final members = (data['participants'] as List)
+        .where((p) => p['invitation_state'] == 'ACCEPTED')
+        .toList();
+    final chosen = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialog) => SimpleDialog(
+                title: Text('Who is ${placeholder['name']}?'),
+                children: [
+                  const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                          'Choose the correct joined profile. This replaces the manual name and keeps its expected amount.')),
+                  if (members.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                            'Ask them to join using the collection link first.')),
+                  ...members.map((p) => SimpleDialogOption(
+                      onPressed: () =>
+                          Navigator.pop(dialog, Map<String, dynamic>.from(p)),
+                      child: Text(
+                          '${p['name']} ${p['username'] == null ? '' : '@${p['username']}'}'))),
+                ]));
+    if (chosen == null || !mounted) {
+      return;
+    }
     try {
-      await widget.api.request('/collections/${data['id']}/participants/${placeholder['id']}/link/${chosen['id']}', body: {});
+      await widget.api.request(
+          '/collections/${data['id']}/participants/${placeholder['id']}/link/${chosen['id']}',
+          body: {});
       await refresh();
-    } catch (e) { if (mounted) setState(() => error = '$e'); }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    }
   }
 
   void participant(Map<String, dynamic> p) => showModalBottomSheet<void>(
@@ -765,14 +949,26 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             p['expected_amount'] == null
                                 ? 'Any amount'
                                 : money(p['expected_amount'])),
-                        SummaryRow('Test contributed', money(p['test_paid_amount'] ?? 0)),
+                        SummaryRow('Test contributed',
+                            money(p['test_paid_amount'] ?? 0)),
                         if (p['expected_amount'] != null)
-                          SummaryRow('Test remaining', money(((p['expected_amount'] as int) - ((p['test_paid_amount'] ?? 0) as int)).clamp(0, 1000000000000))),
+                          SummaryRow(
+                              'Test remaining',
+                              money(((p['expected_amount'] as int) -
+                                      ((p['test_paid_amount'] ?? 0) as int))
+                                  .clamp(0, 1000000000000))),
                         SummaryRow('Membership',
                             invitationLabel(p['invitation_state'])),
                         if (p['invitation_state'] == 'UNVERIFIED') ...[
-                          const Text('Manual name only. This is not a verified account.', textAlign: TextAlign.center),
-                          TextButton(onPressed: () { Navigator.pop(sheet); linkManual(p); }, child: const Text('Link to a joined member')),
+                          const Text(
+                              'Manual name only. This is not a verified account.',
+                              textAlign: TextAlign.center),
+                          TextButton(
+                              onPressed: () {
+                                Navigator.pop(sheet);
+                                linkManual(p);
+                              },
+                              child: const Text('Link to a joined member')),
                         ],
                         if (p['username'] != null)
                           SummaryRow('Verified profile', '@${p['username']}'),
@@ -797,14 +993,28 @@ class _CollectionDetailState extends State<CollectionDetail> {
                               child: const Text('Invite this person')),
                         ],
                         if (p['invitation_state'] == 'PENDING') ...[
-                          TextButton(onPressed: () async {
-                            try {
-                              final link = await widget.api.request('/collections/${data['id']}/invitations/${p['id']}/link');
-                              await Clipboard.setData(ClipboardData(text: link['url'] as String));
-                              if (sheet.mounted) ScaffoldMessenger.of(sheet).showSnackBar(const SnackBar(content: Text('Personal invitation link copied')));
-                            } catch (e) { if (sheet.mounted) ScaffoldMessenger.of(sheet).showSnackBar(SnackBar(content: Text('$e'))); }
-                          }, child: const Text('Copy personal invitation link')),
-
+                          TextButton(
+                              onPressed: () async {
+                                try {
+                                  final link = await widget.api.request(
+                                      '/collections/${data['id']}/invitations/${p['id']}/link');
+                                  await Clipboard.setData(ClipboardData(
+                                      text: link['url'] as String));
+                                  if (sheet.mounted) {
+                                    ScaffoldMessenger.of(sheet).showSnackBar(
+                                        const SnackBar(
+                                            content: Text(
+                                                'Personal invitation link copied')));
+                                  }
+                                } catch (e) {
+                                  if (sheet.mounted) {
+                                    ScaffoldMessenger.of(sheet).showSnackBar(
+                                        SnackBar(content: Text('$e')));
+                                  }
+                                }
+                              },
+                              child:
+                                  const Text('Copy personal invitation link')),
                           const SizedBox(height: 20),
                           OutlinedButton(
                               onPressed: busy
@@ -819,7 +1029,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
   @override
   Widget build(BuildContext context) {
     final people = data['participants'] as List;
-    final visiblePeople = people.where((p) => filter == 'All' || (p['test_payment_status'] ?? 'Unpaid') == filter).toList();
+    final visiblePeople = people
+        .where((p) =>
+            filter == 'All' || (p['test_payment_status'] ?? 'Unpaid') == filter)
+        .toList();
     return Scaffold(
         appBar: AppBar(title: Text(data['name']), actions: [
           if (data['status'] == 'ACTIVE')
@@ -838,25 +1051,62 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
                 children: [
-                  SurfaceCard(color: SendohColors.teal, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [const Expanded(child: Text('Your group’s progress', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))), StatusBadge(data['status'] as String)]),
-                    const SizedBox(height: 20),
-                    CollectionProgress(data: data, dark: true),
-                    const SizedBox(height: 20),
-                    PeoplePreview(people: people, dark: true),
-                  ])),
+                  SurfaceCard(
+                      color: SendohColors.teal,
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              const Expanded(
+                                  child: Text('Your group’s progress',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600))),
+                              StatusBadge(data['status'] as String)
+                            ]),
+                            const SizedBox(height: 20),
+                            CollectionProgress(data: data, dark: true),
+                            const SizedBox(height: 20),
+                            PeoplePreview(people: people, dark: true),
+                          ])),
                   const SizedBox(height: 16),
                   Row(children: [
-                    CoordinationAction(icon: Icons.share_outlined, label: 'Copy link', onTap: data['share_url'] == null ? null : () => copyCollectionLink(context, data['share_url'])),
-                    CoordinationAction(icon: Icons.person_add_outlined, label: 'Invite', onTap: busy || data['status'] != 'ACTIVE' ? null : () => invitePerson()),
-                    CoordinationAction(icon: Icons.receipt_long_outlined, label: 'Receipts', onTap: busy ? null : () => openPayments()),
+                    CoordinationAction(
+                        icon: Icons.share_outlined,
+                        label: 'Copy link',
+                        onTap: data['share_url'] == null
+                            ? null
+                            : () =>
+                                copyCollectionLink(context, data['share_url'])),
+                    CoordinationAction(
+                        icon: Icons.person_add_outlined,
+                        label: 'Invite',
+                        onTap: busy || data['status'] != 'ACTIVE'
+                            ? null
+                            : () => invitePerson()),
+                    CoordinationAction(
+                        icon: Icons.receipt_long_outlined,
+                        label: 'Receipts',
+                        onTap: busy ? null : () => openPayments()),
                   ]),
                   const SizedBox(height: 16),
-                  const Text('One link for the whole group. Everyone joins as themselves.', style: TextStyle(fontSize: 12, height: 1.5, color: SendohColors.secondary)),
+                  const Text(
+                      'One link for the whole group. Everyone joins as themselves.',
+                      style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: SendohColors.secondary)),
                   const SizedBox(height: 16),
-                  if (data['status'] == 'ACTIVE') FilledButton.icon(onPressed: busy ? null : () => openPayments(contribute: true), icon: const Icon(Icons.add_card_outlined), label: const Text('Make a test contribution')),
+                  if (data['status'] == 'ACTIVE')
+                    FilledButton.icon(
+                        onPressed:
+                            busy ? null : () => openPayments(contribute: true),
+                        icon: const Icon(Icons.add_card_outlined),
+                        label: const Text('Make a test contribution')),
                   const SizedBox(height: 8),
-                  const Text('Test mode · No real money moves.', style: TextStyle(fontSize: 12, color: SendohColors.amber)),
+                  const Text('Test mode · No real money moves.',
+                      style:
+                          TextStyle(fontSize: 12, color: SendohColors.amber)),
                   const SizedBox(height: 20),
                   Row(
                       children: ['About', 'People']
@@ -904,7 +1154,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     const Divider(),
                     const EmptyState(
                         title: 'A shared view for your group',
-                        message: 'Use People to see who has joined and Receipts to follow test contributions. No real funds are collected yet.',
+                        message:
+                            'Use People to see who has joined and Receipts to follow test contributions. No real funds are collected yet.',
                         icon: Icons.receipt_long_outlined)
                   ] else ...[
                     SingleChildScrollView(
@@ -939,8 +1190,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             subtitle: Text(
                                 '${invitationLabel(p['invitation_state'])}\nTest: ${money(p['test_paid_amount'] ?? 0)} / ${p['expected_amount'] == null ? 'Any amount' : money(p['expected_amount'])}',
                                 style: const TextStyle(fontSize: 12)),
-                            trailing:
-                                StatusBadge('Test ${p['test_payment_status'] ?? 'Unpaid'}', pending: (p['test_paid_amount'] ?? 0) == 0),
+                            trailing: StatusBadge(
+                                'Test ${p['test_payment_status'] ?? 'Unpaid'}',
+                                pending: (p['test_paid_amount'] ?? 0) == 0),
                             onTap: () => participant(p));
                       })
                   ],

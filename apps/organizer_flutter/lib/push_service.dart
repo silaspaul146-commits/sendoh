@@ -20,8 +20,10 @@ class PushService {
   static Future<void>? _starting;
   static Future<NotificationSettings>? _permissionRequest;
 
-  static bool get supported => !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+  static bool get supported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   static Future<void> initialize() => _starting ??= _initialize();
   static Future<void> _initialize() async {
@@ -31,17 +33,25 @@ class PushService {
     const project = String.fromEnvironment('FIREBASE_PROJECT_ID');
     const sender = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
     final ios = defaultTargetPlatform == TargetPlatform.iOS;
-    final appId = ios ? const String.fromEnvironment('FIREBASE_IOS_APP_ID') :
-        const String.fromEnvironment('FIREBASE_ANDROID_APP_ID');
-    final apiKey = ios ? const String.fromEnvironment('FIREBASE_IOS_API_KEY') :
-        const String.fromEnvironment('FIREBASE_ANDROID_API_KEY');
+    final appId = ios
+        ? const String.fromEnvironment('FIREBASE_IOS_APP_ID')
+        : const String.fromEnvironment('FIREBASE_ANDROID_APP_ID');
+    final apiKey = ios
+        ? const String.fromEnvironment('FIREBASE_IOS_API_KEY')
+        : const String.fromEnvironment('FIREBASE_ANDROID_API_KEY');
     if ([project, sender, appId, apiKey].any((v) => v.isEmpty)) {
       return;
     }
     try {
-      await Firebase.initializeApp(options: FirebaseOptions(apiKey: apiKey,
-          appId: appId, messagingSenderId: sender, projectId: project,
-          iosBundleId: ios ? const String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID') : null));
+      await Firebase.initializeApp(
+          options: FirebaseOptions(
+              apiKey: apiKey,
+              appId: appId,
+              messagingSenderId: sender,
+              projectId: project,
+              iosBundleId: ios
+                  ? const String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID')
+                  : null));
       await FirebaseMessaging.instance.setAutoInitEnabled(false);
       FirebaseMessaging.onMessage.listen((_) => updates.value++);
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -94,8 +104,8 @@ class PushService {
       if (generation != _generation) {
         return false;
       }
-      _permissionRequest = FirebaseMessaging.instance.requestPermission(
-          alert: true, badge: true, sound: true);
+      _permissionRequest = FirebaseMessaging.instance
+          .requestPermission(alert: true, badge: true, sound: true);
       try {
         permission = await _permissionRequest!;
       } finally {
@@ -109,7 +119,7 @@ class PushService {
         permission.authorizationStatus != AuthorizationStatus.provisional) {
       try {
         await api.request('/me/push-devices/disable', body: {});
-      } catch (_) { /* Device expiry remains the fallback. */ }
+      } catch (_) {/* Device expiry remains the fallback. */}
       return false;
     }
     final registered = await _register(generation);
@@ -117,7 +127,7 @@ class PushService {
       _refresh = FirebaseMessaging.instance.onTokenRefresh.listen((_) async {
         try {
           await _register(generation);
-        } catch (_) { /* Retry on next app resume. */ }
+        } catch (_) {/* Retry on next app resume. */}
       }, onError: (_) {});
     }
     return registered;
@@ -130,18 +140,21 @@ class PushService {
     final api = _api!;
     if (defaultTargetPlatform == TargetPlatform.iOS &&
         await FirebaseMessaging.instance.getAPNSToken() == null) {
-      throw StateError('Apple push registration is not ready. Please try again shortly.');
+      throw StateError(
+          'Apple push registration is not ready. Please try again shortly.');
     }
     final token = await FirebaseMessaging.instance.getToken();
     if (generation != _generation) {
       return false;
     }
     if (token == null) {
-      throw StateError('Push token is not ready. Check connectivity and try again.');
+      throw StateError(
+          'Push token is not ready. Check connectivity and try again.');
     }
     await api.request('/me/push-devices/register', body: {
       'token': token,
-      'platform': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+      'platform':
+          defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
     });
     return generation == _generation;
   }
@@ -152,8 +165,8 @@ class PushService {
       return 'Push alerts are not configured in this build. Your inbox still works.';
     }
     await _store.write(key: 'sendoh_push_permission_asked', value: 'true');
-    final permission = await FirebaseMessaging.instance.requestPermission(
-        alert: true, badge: true, sound: true);
+    final permission = await FirebaseMessaging.instance
+        .requestPermission(alert: true, badge: true, sound: true);
     if (permission.authorizationStatus != AuthorizationStatus.authorized &&
         permission.authorizationStatus != AuthorizationStatus.provisional) {
       return 'Notifications are not allowed. You can enable them in your phone settings.';
@@ -184,7 +197,7 @@ class PushService {
       try {
         await FirebaseMessaging.instance.setAutoInitEnabled(false);
         await FirebaseMessaging.instance.deleteToken();
-      } catch (_) { /* Server logout revokes this session's push devices. */ }
+      } catch (_) {/* Server logout revokes this session's push devices. */}
     }
   }
 

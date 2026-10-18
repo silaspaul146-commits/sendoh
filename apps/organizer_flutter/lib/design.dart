@@ -201,12 +201,28 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final value = text.toLowerCase();
     final failed = value.contains('failed') || value == 'declined';
-    final waiting = pending || value.contains('partial') || value.contains('unpaid') || value.contains('pending') || value.contains('test');
-    final foreground = failed ? SendohColors.red : waiting ? SendohColors.amber : SendohColors.teal;
+    final waiting = pending ||
+        value.contains('partial') ||
+        value.contains('unpaid') ||
+        value.contains('pending') ||
+        value.contains('test');
+    final foreground = failed
+        ? SendohColors.red
+        : waiting
+            ? SendohColors.amber
+            : SendohColors.teal;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(color: failed ? const Color(0xFFFCEBE9) : waiting ? SendohColors.amberSoft : SendohColors.tealSoft, borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: foreground)),
+      decoration: BoxDecoration(
+          color: failed
+              ? const Color(0xFFFCEBE9)
+              : waiting
+                  ? SendohColors.amberSoft
+                  : SendohColors.tealSoft,
+          borderRadius: BorderRadius.circular(6)),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w600, color: foreground)),
     );
   }
 }
@@ -264,9 +280,13 @@ class EmptyState extends StatelessWidget {
 }
 
 String displayDate(dynamic raw) {
-  if (raw == null) { return 'No deadline'; }
+  if (raw == null) {
+    return 'No deadline';
+  }
   final date = DateTime.tryParse(raw.toString());
-  if (date == null) { return 'No deadline'; }
+  if (date == null) {
+    return 'No deadline';
+  }
   final d = date.toUtc().add(const Duration(hours: 1));
   const months = [
     'Jan',

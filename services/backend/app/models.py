@@ -66,9 +66,10 @@ class Notification(Base):
     __tablename__ = 'notifications'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
-    collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'))
-    participant_id: Mapped[str] = mapped_column(ForeignKey('participants.id'))
-    invitation_version: Mapped[int] = mapped_column(Integer)
+    collection_id: Mapped[str | None] = mapped_column(ForeignKey('collections.id'))
+    participant_id: Mapped[str | None] = mapped_column(ForeignKey('participants.id'))
+    invitation_version: Mapped[int | None] = mapped_column(Integer)
+    request_id: Mapped[str | None] = mapped_column(String(36))
     kind: Mapped[str] = mapped_column(String(32))
     event_key: Mapped[str] = mapped_column(String(160), unique=True)
     created_at: Mapped[int] = mapped_column(BigInteger)
@@ -176,3 +177,22 @@ class TestPayment(Base):
     status: Mapped[str] = mapped_column(String(12), default='PENDING')
     created_at: Mapped[int] = mapped_column(BigInteger)
     completed_at: Mapped[int | None] = mapped_column(BigInteger)
+
+class MoneyRequest(Base):
+    __tablename__ = 'money_requests'
+    __table_args__ = (
+        UniqueConstraint('requester_id', 'request_key', name='uq_money_request_key'),
+        CheckConstraint('amount > 0 AND amount <= 1000000000'),
+        CheckConstraint('requester_id != recipient_id'),
+        CheckConstraint("status IN ('PENDING','DECLINED','CANCELLED')"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    requester_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    recipient_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    amount: Mapped[int] = mapped_column(BigInteger)
+    reason: Mapped[str] = mapped_column(String(140))
+    expires_at: Mapped[int | None] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(12), default='PENDING')
+    request_key: Mapped[str] = mapped_column(String(120))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[int] = mapped_column(BigInteger)

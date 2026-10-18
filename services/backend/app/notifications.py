@@ -7,9 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update, func, or_, and_
 from sqlalchemy.exc import IntegrityError
 from .models import (Notification, PushDevice, PushDelivery, Participant, Collection,
-                     PhoneIdentity, AuthSession, RefreshSession, User)
+                     PhoneIdentity, AuthSession, RefreshSession, User, MoneyRequest)
 
 KINDS = {
+    'REQUEST_RECEIVED': 'You received a money request',
+    'REQUEST_DECLINED': 'Your money request was declined',
+    'REQUEST_CANCELLED': 'A money request was cancelled',
     'TEST_PAYMENT': 'A test contribution was recorded',
     'INVITED': 'You have a collection invitation',
     'ACCEPTED': 'Someone joined your collection',
@@ -54,6 +57,11 @@ def materialize_invitations(db, user):
         emit(db, user.id, p, 'INVITED', deliver=False)
 
 def serialize(db, n):
+    if n.request_id:
+        r = db.get(MoneyRequest, n.request_id)
+        return dict(id=n.id, kind=n.kind, title=KINDS[n.kind], request_id=n.request_id,
+            collection_name=r.reason if r else 'Money request', created_at=n.created_at,
+            read_at=n.read_at, invitation_available=False)
     c = db.get(Collection, n.collection_id)
     p = db.get(Participant, n.participant_id)
     available = bool(p and c and c.status == 'ACTIVE' and
