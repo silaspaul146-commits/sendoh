@@ -191,40 +191,8 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                               text:
                                   'Create a collection and invite your people.')
                         else
-                          Stack(children: [
-                            if (entries.length > 3) ...[
-                              Positioned(
-                                  top: 12,
-                                  bottom: 12,
-                                  right: 0,
-                                  width: 28,
-                                  child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                          color: SendohColors.tealSoft,
-                                          borderRadius:
-                                              BorderRadius.circular(20)))),
-                              Positioned(
-                                  top: 6,
-                                  bottom: 6,
-                                  right: 6,
-                                  width: 28,
-                                  child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                          color: SendohColors.border,
-                                          borderRadius:
-                                              BorderRadius.circular(20)))),
-                            ],
-                            Padding(
-                                padding: EdgeInsets.only(
-                                    right: entries.length > 3 ? 14 : 0),
-                                child: HomeCollectionCard(
-                                    data: Map<String, dynamic>.from(
-                                        entries.first),
-                                    featured: true,
-                                    onTap: () => widget.onOpenOwned(
-                                        Map<String, dynamic>.from(
-                                            entries.first)))),
-                          ]),
+                          CollectionDeck(
+                              entries: entries, onOpen: widget.onOpenOwned),
                       ]);
                 }),
             const SizedBox(height: 16),
@@ -263,12 +231,8 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                           ]));
                 }),
             if (widget.onViewRequests != null)
-              Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                      onPressed: widget.onViewRequests,
-                      icon: const Icon(Icons.swap_horiz, size: 18),
-                      label: const Text('Your money requests'))),
+              RequestSummary(
+                  requests: widget.requests, onOpen: widget.onViewRequests!),
           ]));
 }
 
@@ -449,13 +413,7 @@ class HomeJoinedCircle extends StatelessWidget {
   Widget build(BuildContext context) {
     final collection = Map<String, dynamic>.from(item['collection']);
     final name = collection['name'] as String;
-    final status = switch (collection['status']) {
-      'CLOSED' => 'Closed',
-      'SETTLED' => 'Settled',
-      'CANCELLED' => 'Cancelled',
-      'DRAFT' => 'Draft',
-      _ => 'Open',
-    };
+    final status = joinedPersonalStatus(item);
     final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
     final initials =
         words.take(2).map((w) => w.characters.first).join().toUpperCase();
@@ -590,4 +548,203 @@ class _Action extends StatelessWidget {
               ),
             )),
       ));
+}
+
+/// A deck sizes to its active card, including large text. No fixed card height.
+class CollectionDeck extends StatefulWidget {
+  const CollectionDeck(
+      {super.key, required this.entries, required this.onOpen});
+  final List<dynamic> entries;
+  final ValueChanged<Map<String, dynamic>> onOpen;
+  @override
+  State<CollectionDeck> createState() => _CollectionDeckState();
+}
+
+class _CollectionDeckState extends State<CollectionDeck> {
+  int index = 0;
+  String identity(dynamic row) => '${row['id'] ?? row['name']}';
+  @override
+  void didUpdateWidget(covariant CollectionDeck oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entries.isNotEmpty && index < oldWidget.entries.length) {
+      final id = identity(oldWidget.entries[index]);
+      final found = widget.entries.indexWhere((row) => identity(row) == id);
+      index = found < 0 ? 0 : found;
+    } else {
+      index = 0;
+    }
+  }
+
+  void move(int delta) {
+    final next = (index + delta).clamp(0, widget.entries.length - 1).toInt();
+    if (next != index) {
+      setState(() => index = next);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.entries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final data = Map<String, dynamic>.from(widget.entries[index]);
+    final layers = (widget.entries.length - 1).clamp(0, 2).toInt();
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Semantics(
+          label: 'Collection ${index + 1} of ${widget.entries.length}',
+          onIncrease: index < widget.entries.length - 1 ? () => move(1) : null,
+          onDecrease: index > 0 ? () => move(-1) : null,
+          child: GestureDetector(
+              onHorizontalDragEnd: (details) {
+                final speed = details.primaryVelocity ?? 0;
+                final distance = dragDistance;
+                dragDistance = 0;
+                if (speed.abs() < 80 && distance.abs() < 40) {
+                  return;
+                }
+                final direction = speed.abs() >= 80 ? speed : distance;
+                final rtl = Directionality.of(context) == TextDirection.rtl;
+                move((direction < 0) != rtl ? 1 : -1);
+              },
+              onHorizontalDragUpdate: (details) {
+                dragDistance += details.delta.dx;
+              },
+              onHorizontalDragStart: (_) {
+                dragDistance = 0;
+              },
+              onHorizontalDragCancel: () {
+                dragDistance = 0;
+              },
+              child: Stack(children: [
+                for (var layer = layers; layer >= 1; layer--)
+                  Positioned(
+                      top: layer * 5.0,
+                      bottom: (layers - layer) * 5.0,
+                      left: layer * 8.0,
+                      right: (layers - layer) * 8.0,
+                      child: DecoratedBox(
+                          decoration: BoxDecoration(
+                              color: SendohColors.tealSoft,
+                              border: Border.all(
+                                  color: SendohColors.teal.withAlpha(46)),
+                              borderRadius: BorderRadius.circular(20)))),
+                Padding(
+                    padding: EdgeInsets.only(
+                        right: layers * 8.0, bottom: layers * 5.0),
+                    child: AnimatedSize(
+                        duration:
+                            Duration(milliseconds: reducedMotion ? 0 : 180),
+                        alignment: Alignment.topCenter,
+                        child: AnimatedSwitcher(
+                            duration:
+                                Duration(milliseconds: reducedMotion ? 0 : 180),
+                            child: HomeCollectionCard(
+                                key: ValueKey(identity(data)),
+                                data: data,
+                                featured: true,
+                                onTap: () => widget.onOpen(data))))),
+              ]))),
+      if (widget.entries.length > 1)
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          IconButton(
+              tooltip: 'Previous collection',
+              onPressed: index > 0 ? () => move(-1) : null,
+              icon: const Icon(Icons.chevron_left)),
+          Semantics(
+              liveRegion: true,
+              child: Text('${index + 1} / ${widget.entries.length}',
+                  style: SendohTextStyles.caption)),
+          IconButton(
+              tooltip: 'Next collection',
+              onPressed:
+                  index < widget.entries.length - 1 ? () => move(1) : null,
+              icon: const Icon(Icons.chevron_right)),
+        ]),
+    ]);
+  }
+
+  double dragDistance = 0;
+}
+
+String joinedPersonalStatus(Map<String, dynamic> item) {
+  final c = Map<String, dynamic>.from(item['collection']);
+  if (c['status'] == 'CLOSED') {
+    return 'Closed';
+  }
+  if (c['status'] == 'SETTLED') {
+    return 'Settled';
+  }
+  if (c['status'] == 'CANCELLED') {
+    return 'Cancelled';
+  }
+  final summary = item['contribution_summary'] as Map?;
+  final expected = (item['expected_amount'] as num?)?.toInt();
+  // Only a server-confirmed live ledger may establish paid / remaining states.
+  if (summary?['live_available'] == true) {
+    final confirmed = (summary?['confirmed_amount'] as num?)?.toInt();
+    if (summary?['payment_pending'] == true) {
+      return 'Payment pending';
+    }
+    if (confirmed != null) {
+      if (expected != null && expected > 0) {
+        if (confirmed >= expected) {
+          return 'Your part done ✓';
+        }
+        return '${coordinationMoney(expected - confirmed)} remaining';
+      }
+      return confirmed > 0
+          ? '${coordinationMoney(confirmed)} contributed'
+          : 'Any amount welcome';
+    }
+  }
+  final testPaid = (summary?['test_paid_amount'] as num?)?.toInt() ?? 0;
+  if (testPaid > 0) {
+    return '${coordinationMoney(testPaid)} · test';
+  }
+  return expected != null && expected > 0
+      ? '${coordinationMoney(expected)} expected'
+      : 'Any amount welcome';
+}
+
+class RequestSummary extends StatelessWidget {
+  const RequestSummary(
+      {super.key, required this.requests, required this.onOpen});
+  final Future<List<dynamic>>? requests;
+  final VoidCallback onOpen;
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
+      future: requests,
+      builder: (context, snapshot) {
+        final sent = (snapshot.data ?? [])
+            .where((r) => r['direction'] == 'SENT' && r['status'] == 'PENDING')
+            .toList();
+        final people = sent.map((r) => r['recipient']['id']).toSet().length;
+        final total =
+            sent.fold<int>(0, (sum, r) => sum + (r['amount'] as num).toInt());
+        return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: SendohColors.border)),
+              tileColor: SendohColors.surface,
+              leading: const Icon(Icons.swap_horiz, color: SendohColors.teal),
+              title: Text(
+                  sent.isEmpty
+                      ? 'Your money requests'
+                      : 'Waiting on $people ${people == 1 ? 'person' : 'people'}',
+                  style: SendohTextStyles.bodyMedium),
+              subtitle: snapshot.hasError
+                  ? const Text('Open to retry loading requests')
+                  : sent.isEmpty
+                      ? null
+                      : Text(
+                          '${coordinationMoney(total)} outstanding${(snapshot.data?.length ?? 0) >= 100 ? ' · recent requests' : ''}'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onOpen,
+            ));
+      });
 }

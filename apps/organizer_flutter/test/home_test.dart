@@ -14,6 +14,81 @@ Map<String, dynamic> collection(String name) => {
     };
 
 void main() {
+  testWidgets(
+      'Deck supports swipe, arrow navigation and opens active collection',
+      (tester) async {
+    String? opened;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: CollectionDeck(entries: [
+      collection('First'),
+      collection('Second'),
+      collection('Third')
+    ], onOpen: (row) => opened = row['name'] as String))));
+    expect(find.text('1 / 3'), findsOneWidget);
+    await tester.drag(find.byType(HomeCollectionCard), const Offset(-240, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Second'), findsOneWidget);
+    expect(find.text('2 / 3'), findsOneWidget);
+    await tester.tap(find.text('Second'));
+    expect(opened, 'Second');
+    await tester.tap(find.byTooltip('Previous collection'));
+    await tester.pumpAndSettle();
+    expect(find.text('First'), findsOneWidget);
+  });
+
+  test('Joined membership and test payments never imply live completion', () {
+    final row = {'collection': collection('Family'), 'expected_amount': 5000};
+    expect(joinedPersonalStatus(row), '5,000 FCFA expected');
+    row['contribution_summary'] = {
+      'live_available': false,
+      'test_paid_amount': 5000
+    };
+    expect(joinedPersonalStatus(row), '5,000 FCFA · test');
+    row['contribution_summary'] = {
+      'live_available': true,
+      'confirmed_amount': 5000
+    };
+    expect(joinedPersonalStatus(row), 'Your part done ✓');
+    row['contribution_summary'] = {
+      'live_available': true,
+      'confirmed_amount': 2000
+    };
+    expect(joinedPersonalStatus(row), '3,000 FCFA remaining');
+  });
+
+  testWidgets(
+      'Request summary excludes resolved requests and counts distinct people',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: RequestSummary(
+                onOpen: () {},
+                requests: Future.value([
+                  {
+                    'direction': 'SENT',
+                    'status': 'PENDING',
+                    'amount': 2000,
+                    'recipient': {'id': 'a'}
+                  },
+                  {
+                    'direction': 'SENT',
+                    'status': 'PENDING',
+                    'amount': 3000,
+                    'recipient': {'id': 'a'}
+                  },
+                  {
+                    'direction': 'SENT',
+                    'status': 'DECLINED',
+                    'amount': 9000,
+                    'recipient': {'id': 'b'}
+                  },
+                ])))));
+    await tester.pumpAndSettle();
+    expect(find.text('Waiting on 1 person'), findsOneWidget);
+    expect(find.text('5,000 FCFA outstanding'), findsOneWidget);
+  });
+
   testWidgets('Empty attention stays hidden and near2pay remains reachable',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
