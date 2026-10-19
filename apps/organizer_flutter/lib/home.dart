@@ -24,7 +24,11 @@ class CoordinationHome extends StatefulWidget {
       this.peopleGateway,
       this.onViewRequests,
       this.requests,
-      this.onReviewRequest});
+      this.onReviewRequest,
+      this.onNotifications,
+      this.unread = 0});
+  final VoidCallback? onNotifications;
+  final int unread;
   final Future<List<dynamic>>? requests;
   final ValueChanged<Map<String, dynamic>>? onReviewRequest;
   final PeopleFlowGateway? peopleGateway;
@@ -44,152 +48,138 @@ class CoordinationHome extends StatefulWidget {
 }
 
 class _CoordinationHomeState extends State<CoordinationHome> {
-  bool showAll = false;
-
   Future<void> refresh() async {
     try {
       await widget.onRefresh();
-    } catch (_) {
-      // Each section displays its own failure and retry action.
-    }
+    } catch (_) {/* Section retry remains available. */}
   }
+
+  void viewOwned(List<dynamic> entries) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Your collections')),
+              body: ListView.separated(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: entries.length,
+                  separatorBuilder: (_, index) => const SizedBox(height: 12),
+                  itemBuilder: (_, index) {
+                    final data = Map<String, dynamic>.from(entries[index]);
+                    return HomeCollectionCard(
+                        data: data, onTap: () => widget.onOpenOwned(data));
+                  }),
+            )));
+  }
+
+  Widget attention() => FutureBuilder<List<dynamic>>(
+        future: widget.requests,
+        builder: (context, requests) => FutureBuilder<List<dynamic>>(
+          future: widget.invitations,
+          builder: (context, invites) {
+            final pending = (requests.data ?? [])
+                .where((r) =>
+                    r['direction'] == 'RECEIVED' && r['status'] == 'PENDING')
+                .toList();
+            final invitations = invites.data ?? [];
+            if (requests.hasError || invites.hasError) {
+              return _SectionMessage(
+                  text: 'Some updates couldn’t load.', onRetry: refresh);
+            }
+            if (pending.isEmpty && invitations.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            final isRequest = pending.isNotEmpty;
+            final item = Map<String, dynamic>.from(
+                isRequest ? pending.first : invitations.first);
+            final total = pending.length + invitations.length;
+            return Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 8),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SectionTitle(
+                          title: 'Needs your attention', count: total),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const CircleAvatar(
+                              backgroundColor: SendohColors.tealSoft,
+                              child: Icon(Icons.notifications_outlined,
+                                  color: SendohColors.teal)),
+                          title: Text(
+                              isRequest
+                                  ? '${item['requester']['name']} requested ${coordinationMoney(item['amount'])}'
+                                  : item['collection']['name'] as String,
+                              style: SendohTextStyles.bodyMedium),
+                          subtitle: Text(isRequest
+                              ? item['reason'] as String
+                              : '${item['collection']['organizer_name'] ?? 'Organizer'} invited you'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            if (isRequest) {
+                              widget.onReviewRequest?.call(item);
+                            } else {
+                              widget.onReviewInvitation?.call(item);
+                            }
+                          }),
+                      if (total > 1)
+                        Wrap(spacing: 8, children: [
+                          if (pending.isNotEmpty)
+                            TextButton(
+                                onPressed: widget.onViewRequests,
+                                child: Text('Requests (${pending.length})')),
+                          if (invitations.isNotEmpty)
+                            TextButton(
+                                onPressed: widget.onViewInvitations,
+                                child: Text(
+                                    'Invitations (${invitations.length})')),
+                        ]),
+                    ]));
+          },
+        ),
+      );
 
   @override
   Widget build(BuildContext context) => RefreshIndicator(
-        onRefresh: refresh,
-        child: ListView(
+      onRefresh: refresh,
+      child: ListView(
           key: const PageStorageKey('coordination-home'),
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           children: [
             Row(children: [
               widget.avatar,
               const SizedBox(width: 12),
               Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    const Text('Welcome back',
-                        style: TextStyle(
-                            color: SendohColors.secondary, fontSize: 12)),
-                    Text(widget.name,
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.w700)),
-                  ])),
+                  child: Text('Hi, ${widget.name}',
+                      style: SendohTextStyles.headingMedium)),
+              if (widget.onNotifications != null)
+                IconButton(
+                    tooltip: 'Notifications (${widget.unread} unread)',
+                    onPressed: widget.onNotifications,
+                    icon: Badge(
+                        isLabelVisible: widget.unread > 0,
+                        backgroundColor: SendohColors.orange,
+                        child: const Icon(Icons.notifications_outlined))),
             ]),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             HomeActionBar(
                 onCollect: widget.onCreate, gateway: widget.peopleGateway),
-            if (widget.onViewRequests != null)
-              Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                      onPressed: widget.onViewRequests,
-                      child: const Text('Your money requests'))),
+            attention(),
             const SizedBox(height: 24),
-            if (widget.invitations != null) ...[
-              _SectionTitle(
-                  title: 'Needs your attention',
-                  action: TextButton(
-                      onPressed: widget.onViewInvitations,
-                      child: const Text('View all'))),
-              FutureBuilder<List<dynamic>>(
-                  future: widget.invitations,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return _SectionMessage(
-                          text: 'Invitations couldn’t load.', onRetry: refresh);
-                    }
-                    if (!snapshot.hasData) {
-                      return const _LoadingSection();
-                    }
-                    if (snapshot.data!.isEmpty) {
-                      return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('No invitations waiting for a response.',
-                              style: TextStyle(color: SendohColors.secondary)));
-                    }
-                    return Column(
-                        children: snapshot.data!.take(2).map((raw) {
-                      final item = Map<String, dynamic>.from(raw);
-                      final collection =
-                          Map<String, dynamic>.from(item['collection']);
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const CircleAvatar(
-                            backgroundColor: SendohColors.amberSoft,
-                            child: Icon(Icons.mail_outline,
-                                color: SendohColors.amber)),
-                        title: Text(collection['name'] as String,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600)),
-                        subtitle: Text(
-                            '${collection['organizer_name'] ?? 'Organizer'} invited you'),
-                        trailing: const Icon(Icons.chevron_right, size: 20),
-                        onTap: widget.onReviewInvitation == null
-                            ? null
-                            : () => widget.onReviewInvitation!(item),
-                      );
-                    }).toList());
-                  }),
-              const SizedBox(height: 24),
-            ],
-            if (widget.requests != null)
-              FutureBuilder<List<dynamic>>(
-                  future: widget.requests,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return _SectionMessage(
-                          text: 'Money requests couldn’t load.',
-                          onRetry: refresh);
-                    }
-                    if (!snapshot.hasData) return const _LoadingSection();
-                    final rows = snapshot.data!
-                        .where((r) =>
-                            r['direction'] == 'RECEIVED' &&
-                            r['status'] == 'PENDING')
-                        .take(2)
-                        .toList();
-                    if (rows.isEmpty) return const SizedBox.shrink();
-                    return Column(children: [
-                      _SectionTitle(title: 'Requests to review'),
-                      ...rows.map((raw) {
-                        final r = Map<String, dynamic>.from(raw);
-                        return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const CircleAvatar(
-                                backgroundColor: SendohColors.tealSoft,
-                                child: Icon(Icons.call_received,
-                                    color: SendohColors.teal)),
-                            title: Text(
-                                '${r['requester']['name']} requested ${coordinationMoney(r['amount'])}'),
-                            subtitle: Text(r['reason']),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: widget.onReviewRequest == null
-                                ? null
-                                : () => widget.onReviewRequest!(r));
-                      }),
-                      const SizedBox(height: 24),
-                    ]);
-                  }),
             FutureBuilder<List<dynamic>>(
                 future: widget.owned,
                 builder: (context, snapshot) {
-                  final entries = snapshot.data ?? <dynamic>[];
+                  final entries = snapshot.data ?? [];
                   return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _SectionTitle(
                             title: 'You organize',
-                            count: snapshot.hasData ? entries.length : null,
-                            action: entries.length > 2
+                            action: entries.length > 1
                                 ? TextButton(
-                                    onPressed: () =>
-                                        setState(() => showAll = !showAll),
-                                    child: Text(
-                                        showAll ? 'Show less' : 'View all'))
+                                    onPressed: () => viewOwned(entries),
+                                    child: Text('View all ${entries.length}'))
                                 : null),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         if (snapshot.hasError)
                           _SectionMessage(
                               text: 'Your collections couldn’t load.',
@@ -199,31 +189,50 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                         else if (entries.isEmpty)
                           const _SectionMessage(
                               text:
-                                  'Bring your group together. Create a collection, then invite people with one link.')
+                                  'Create a collection and invite your people.')
                         else
-                          ...entries
-                              .take(showAll ? entries.length : 2)
-                              .toList()
-                              .asMap()
-                              .entries
-                              .map((entry) {
-                            final data = Map<String, dynamic>.from(entry.value);
-                            return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
+                          Stack(children: [
+                            if (entries.length > 3) ...[
+                              Positioned(
+                                  top: 12,
+                                  bottom: 12,
+                                  right: 0,
+                                  width: 28,
+                                  child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                          color: SendohColors.tealSoft,
+                                          borderRadius:
+                                              BorderRadius.circular(20)))),
+                              Positioned(
+                                  top: 6,
+                                  bottom: 6,
+                                  right: 6,
+                                  width: 28,
+                                  child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                          color: SendohColors.border,
+                                          borderRadius:
+                                              BorderRadius.circular(20)))),
+                            ],
+                            Padding(
+                                padding: EdgeInsets.only(
+                                    right: entries.length > 3 ? 14 : 0),
                                 child: HomeCollectionCard(
-                                    data: data,
-                                    featured: entry.key == 0,
-                                    onTap: () => widget.onOpenOwned(data)));
-                          }),
+                                    data: Map<String, dynamic>.from(
+                                        entries.first),
+                                    featured: true,
+                                    onTap: () => widget.onOpenOwned(
+                                        Map<String, dynamic>.from(
+                                            entries.first)))),
+                          ]),
                       ]);
                 }),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _SectionTitle(
                 title: 'You joined',
                 action: TextButton(
                     onPressed: widget.onViewJoined,
                     child: const Text('View all'))),
-            const SizedBox(height: 10),
             FutureBuilder<List<dynamic>>(
                 future: widget.joined,
                 builder: (context, snapshot) {
@@ -236,72 +245,31 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                     return const _LoadingSection();
                   }
                   if (snapshot.data!.isEmpty) {
-                    return const _SectionMessage(
-                        text:
-                            'Collections you join appear here. Open an invitation from the envelope above, or join through a collection link.');
+                    return const Text('Collections you join will appear here.',
+                        style: SendohTextStyles.caption);
                   }
                   return SingleChildScrollView(
-                    key: const PageStorageKey('joined-home-shelf'),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final raw in snapshot.data!)
-                            Padding(
-                                padding: const EdgeInsets.only(right: 12),
-                                child: HomeJoinedCircle(
-                                    item: Map<String, dynamic>.from(raw),
-                                    onTap: () => widget.onOpenJoined(
-                                        Map<String, dynamic>.from(raw)))),
-                        ]),
-                  );
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final raw in snapshot.data!)
+                              Padding(
+                                  padding: const EdgeInsets.only(right: 12),
+                                  child: HomeJoinedCircle(
+                                      item: Map<String, dynamic>.from(raw),
+                                      onTap: () => widget.onOpenJoined(
+                                          Map<String, dynamic>.from(raw)))),
+                          ]));
                 }),
-            if (widget.recentActivity != null) ...[
-              const SizedBox(height: 24),
-              _SectionTitle(
-                  title: 'Recent activity',
-                  action: TextButton(
-                      onPressed: widget.onViewActivity,
-                      child: const Text('View all'))),
-              FutureBuilder<List<dynamic>>(
-                  future: widget.recentActivity,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return _SectionMessage(
-                          text: 'Recent activity couldn’t load.',
-                          onRetry: refresh);
-                    }
-                    if (!snapshot.hasData) {
-                      return const _LoadingSection();
-                    }
-                    final entries = snapshot.data!
-                        .where((e) =>
-                            !(e['message'] as String).startsWith('TEST:'))
-                        .take(3)
-                        .toList();
-                    if (entries.isEmpty) {
-                      return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('Collection updates will appear here.',
-                              style: TextStyle(color: SendohColors.secondary)));
-                    }
-                    return Column(
-                        children: entries
-                            .map((e) => ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: const Icon(Icons.history,
-                                      color: SendohColors.teal),
-                                  title: Text(e['message'] as String,
-                                      style: const TextStyle(fontSize: 14)),
-                                  subtitle: Text(displayDate(e['created_at'])),
-                                  onTap: widget.onViewActivity,
-                                ))
-                            .toList());
-                  }),
-            ],
-          ],
-        ),
-      );
+            if (widget.onViewRequests != null)
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                      onPressed: widget.onViewRequests,
+                      icon: const Icon(Icons.swap_horiz, size: 18),
+                      label: const Text('Your money requests'))),
+          ]));
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -314,7 +282,7 @@ class _SectionTitle extends StatelessWidget {
         Expanded(
             child: Text(count == null ? title : '$title · $count',
                 style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w700))),
+                    fontSize: 20, fontWeight: FontWeight.w700))),
         if (action != null) action!,
       ]);
 }
@@ -326,7 +294,7 @@ class _SectionMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: SendohColors.surface,
             border: Border.all(color: SendohColors.border),
@@ -365,10 +333,15 @@ class HomeCollectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final actual = (data['collected_amount'] as num? ?? 0).toInt();
     final target = (data['target_amount'] as num?)?.toInt();
-    final people = data['participants'] as List?;
-    final ink = featured ? Colors.white : SendohColors.ink;
-    final secondary =
-        featured ? const Color(0xFFD1E4E0) : SendohColors.secondary;
+    final people = data['participants'] as List? ?? [];
+    final ink = featured ? SendohColors.surface : SendohColors.ink;
+    final status = switch (data['status']) {
+      'ACTIVE' => 'OPEN',
+      'CLOSED' => 'CLOSED',
+      'SETTLED' => 'SETTLED',
+      'DRAFT' => 'DRAFT',
+      _ => '${data['status'] ?? 'OPEN'}',
+    };
     return Semantics(
         button: true,
         label: 'Open ${data['name']}',
@@ -382,7 +355,7 @@ class HomeCollectionCard extends StatelessWidget {
           child: InkWell(
               onTap: onTap,
               child: Padding(
-                  padding: const EdgeInsets.all(18),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -391,80 +364,78 @@ class HomeCollectionCard extends StatelessWidget {
                             children: [
                               Expanded(
                                   child: Text(data['name'] as String,
-                                      style: TextStyle(
-                                          color: ink,
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w700))),
+                                      style: SendohTextStyles.titleSmall
+                                          .copyWith(color: ink))),
                               const SizedBox(width: 8),
-                              StatusBadge(data['status'] as String),
+                              Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                      color: SendohColors.surface,
+                                      borderRadius: BorderRadius.circular(28)),
+                                  child: Text(status,
+                                      style: SendohTextStyles.badgeLabel)),
                             ]),
-                        const SizedBox(height: 14),
-                        Text(coordinationMoney(actual),
-                            style: TextStyle(
-                                color: ink,
-                                fontSize: featured ? 26 : 22,
-                                fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 4),
-                        Text(
-                            target != null && target > 0
-                                ? 'collected of ${coordinationMoney(target)}'
-                                : 'collected · No target set',
-                            style: TextStyle(fontSize: 12, color: secondary)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
+                            children: [
+                              Text(coordinationMoney(actual),
+                                  style: SendohTextStyles.headingMedium
+                                      .copyWith(color: ink)),
+                              Text(
+                                  target != null && target > 0
+                                      ? '/ ${coordinationMoney(target)}'
+                                      : 'collected · No target',
+                                  style: SendohTextStyles.caption
+                                      .copyWith(color: ink)),
+                            ]),
                         if (target != null && target > 0) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
                           ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(4),
                               child: LinearProgressIndicator(
                                   value: (actual / target)
                                       .clamp(0.0, 1.0)
                                       .toDouble(),
-                                  minHeight: 6,
+                                  minHeight: 4,
+                                  color: SendohColors.orange,
+                                  backgroundColor: featured
+                                      ? const Color(0x33FFFFFF)
+                                      : SendohColors.tealSoft,
                                   semanticsLabel: 'Collection progress',
                                   semanticsValue:
-                                      '${(actual / target * 100).round()} percent',
-                                  color: actual >= target
-                                      ? SendohColors.green
-                                      : (featured
-                                          ? const Color(0xFF73C5BD)
-                                          : SendohColors.teal),
-                                  backgroundColor: featured
-                                      ? const Color(0xFF316260)
-                                      : SendohColors.tealSoft)),
+                                      '${(actual / target * 100).round()} percent')),
                         ],
-                        if (target != null &&
-                            target > 0 &&
-                            actual >= target) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                              actual == target
-                                  ? 'Target reached'
-                                  : '${coordinationMoney(actual - target)} above target',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: ink)),
-                        ],
-                        const SizedBox(height: 14),
-                        if (featured &&
-                            people != null &&
-                            people.isNotEmpty) ...[
-                          PeoplePreview(people: people, dark: true),
-                          const SizedBox(height: 12),
-                        ],
-                        Row(children: [
-                          Icon(Icons.schedule_outlined,
-                              size: 15, color: secondary),
-                          const SizedBox(width: 6),
-                          Expanded(
-                              child: Text(
-                                  data['deadline_at'] == null
-                                      ? 'No deadline'
-                                      : 'Due ${displayDate(data['deadline_at'])}',
-                                  style: TextStyle(
-                                      color: secondary, fontSize: 12))),
-                          Icon(Icons.arrow_forward_rounded,
-                              color: ink, size: 18),
-                        ]),
+                        const SizedBox(height: 12),
+                        Wrap(
+                            spacing: 16,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              if (people.isNotEmpty)
+                                Wrap(
+                                    spacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      for (final person in people.take(3))
+                                        MemberAvatar(
+                                            Map<String, dynamic>.from(person),
+                                            radius: 12),
+                                      Text('${people.length} people',
+                                          style: SendohTextStyles.caption
+                                              .copyWith(color: ink)),
+                                    ]),
+                              if (target != null && target > 0)
+                                Text(
+                                    actual >= target
+                                        ? 'Target reached'
+                                        : '${coordinationMoney(target - actual)} to go',
+                                    style: SendohTextStyles.caption
+                                        .copyWith(color: ink)),
+                            ]),
                       ]))),
         ));
   }
@@ -478,6 +449,13 @@ class HomeJoinedCircle extends StatelessWidget {
   Widget build(BuildContext context) {
     final collection = Map<String, dynamic>.from(item['collection']);
     final name = collection['name'] as String;
+    final status = switch (collection['status']) {
+      'CLOSED' => 'Closed',
+      'SETTLED' => 'Settled',
+      'CANCELLED' => 'Cancelled',
+      'DRAFT' => 'Draft',
+      _ => 'Open',
+    };
     final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
     final initials =
         words.take(2).map((w) => w.characters.first).join().toUpperCase();
@@ -518,6 +496,8 @@ class HomeJoinedCircle extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 12, fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        Text(status, style: SendohTextStyles.caption),
                       ])),
                 ),
               ))),
@@ -554,6 +534,12 @@ class HomeActionBar extends StatelessWidget {
             icon: Icons.north_east,
             label: 'Pay',
             onTap: () => showPlannedFlow(context, true),
+            planned: true),
+        _Action(
+            icon: Icons.qr_code_scanner,
+            label: 'Near2Pay',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => PeopleFlow(nearby: true, gateway: gateway))),
             planned: true),
       ]);
 }

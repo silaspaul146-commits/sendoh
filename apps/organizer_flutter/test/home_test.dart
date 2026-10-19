@@ -14,6 +14,28 @@ Map<String, dynamic> collection(String name) => {
     };
 
 void main() {
+  testWidgets('Empty attention stays hidden and near2pay remains reachable',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: CoordinationHome(
+                name: 'Alain',
+                avatar: const CircleAvatar(),
+                owned: Future.value([]),
+                joined: Future.value([]),
+                invitations: Future.value([]),
+                requests: Future.value([]),
+                onRefresh: () async {},
+                onCreate: () {},
+                onOpenOwned: (_) {},
+                onOpenJoined: (_) {},
+                onViewJoined: () {}))));
+    await tester.pumpAndSettle();
+    expect(find.text('Needs your attention'), findsNothing);
+    expect(find.text('Near2Pay'), findsOneWidget);
+    expect(find.text('Recent activity'), findsNothing);
+  });
+
   testWidgets(
       'Home limits organized preview and opens the selected joined collection',
       (tester) async {
@@ -41,11 +63,13 @@ void main() {
                 onViewJoined: () {}))));
     await tester.pumpAndSettle();
     expect(find.text('Third'), findsNothing);
-    await tester.tap(find.text('View all').first);
+    await tester.tap(find.text('View all 3'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Third'), 150,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Third'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Joined group'), 150,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Joined group'));

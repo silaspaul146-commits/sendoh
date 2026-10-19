@@ -2,14 +2,17 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 abstract final class SendohColors {
-  static const teal = Color(0xFF0B3D3B),
-      tealSoft = Color(0xFFE1EEEC),
-      orange = Color(0xFFE8A33D);
+  static const success = Color(0xFF10B981),
+      warning = Color(0xFFF59E0B),
+      error = Color(0xFFEF4444);
+  static const teal = Color(0xFF008080),
+      tealSoft = Color(0xFFE6FFFA),
+      orange = Color(0xFFFF7A00);
   static const canvas = Color(0xFFFBF9F6),
       surface = Colors.white,
       border = Color(0xFFE1DFD9);
-  static const ink = Color(0xFF15221F),
-      secondary = Color(0xFF4A5754),
+  static const ink = Color(0xFF0D3232),
+      secondary = Color(0xFF718096),
       muted = Color(0xFF657069);
   static const green = Color(0xFF1E7A46),
       amber = Color(0xFF97690A),
@@ -322,4 +325,34 @@ class MemberAvatar extends StatelessWidget {
     }
     return PersonAvatar(name, radius: radius);
   }
+}
+
+abstract final class SendohTextStyles {
+  static const displayLarge = TextStyle(
+      fontSize: 28,
+      height: 1.2,
+      fontWeight: FontWeight.w800,
+      color: SendohColors.ink);
+  static const headingMedium = TextStyle(
+      fontSize: 20,
+      height: 1.3,
+      fontWeight: FontWeight.w700,
+      color: SendohColors.ink);
+  static const titleSmall = TextStyle(
+      fontSize: 16,
+      height: 1.4,
+      fontWeight: FontWeight.w600,
+      color: SendohColors.ink);
+  static const bodyMedium =
+      TextStyle(fontSize: 14, height: 1.5, color: SendohColors.ink);
+  static const caption = TextStyle(
+      fontSize: 12,
+      height: 1.4,
+      fontWeight: FontWeight.w500,
+      color: SendohColors.secondary);
+  static const badgeLabel = TextStyle(
+      fontSize: 11,
+      height: 1,
+      fontWeight: FontWeight.w700,
+      color: SendohColors.teal);
 }

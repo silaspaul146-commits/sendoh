@@ -17,7 +17,6 @@ import 'invitations.dart';
 import 'notifications.dart';
 import 'payment_demo.dart';
 import 'push_service.dart';
-import 'people_flows.dart';
 import 'money_requests.dart';
 
 final apiProvider =
@@ -277,41 +276,24 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-            title: tab == 0
-                ? const SendohBrand()
-                : Text(tab == 1 ? 'Activity' : 'Profile'),
-            actions: [
-              if (tab == 0)
-                IconButton(
-                    tooltip: 'Near2Pay',
-                    icon: const Icon(Icons.qr_code_scanner),
-                    onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                            builder: (_) => PeopleFlow(
-                                nearby: true,
-                                gateway: ApiPeopleGateway(ref.read(apiProvider),
-                                    account['id'] as String))))),
-              IconButton(
-                  tooltip: 'Notifications ($unread unread)',
-                  onPressed: openNotifications,
-                  icon: Badge(
-                      isLabelVisible: unread > 0,
-                      label: Text(unread > 99 ? '99+' : '$unread'),
-                      child: const Icon(Icons.notifications_outlined))),
-              IconButton(
-                  tooltip: 'Invitations and joined collections',
-                  onPressed: () => Navigator.of(context)
-                          .push(MaterialPageRoute<void>(
-                              builder: (_) => InvitationsScreen(
-                                  api: ref.read(apiProvider))))
-                          .then((_) {
-                        if (mounted) {
-                          reload();
-                        }
-                      }),
-                  icon: const Icon(Icons.mail_outline)),
-            ]),
+        appBar: tab == 0
+            ? null
+            : AppBar(
+                title: Text(tab == 1
+                    ? 'Collections'
+                    : tab == 2
+                        ? 'Activity'
+                        : 'Profile'),
+                actions: [
+                  IconButton(
+                      tooltip: 'Notifications ($unread unread)',
+                      onPressed: openNotifications,
+                      icon: Badge(
+                          isLabelVisible: unread > 0,
+                          backgroundColor: SendohColors.orange,
+                          child: const Icon(Icons.notifications_outlined)))
+                ],
+              ),
         bottomNavigationBar: NavigationBar(
             selectedIndex: tab,
             onDestinationSelected: (v) => setState(() => tab = v),
@@ -321,87 +303,154 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                   selectedIcon: Icon(Icons.home),
                   label: 'Home'),
               NavigationDestination(
+                  icon: Icon(Icons.groups_outlined), label: 'Collections'),
+              NavigationDestination(
                   icon: Icon(Icons.history), label: 'Activity'),
               NavigationDestination(
                   icon: Icon(Icons.person_outline),
                   selectedIcon: Icon(Icons.person),
                   label: 'Profile')
             ]),
-        body: tab == 2
+        body: tab == 3
             ? profile()
-            : tab == 1
+            : tab == 2
                 ? const ActivityView()
-                : CoordinationHome(
-                    peopleGateway: ApiPeopleGateway(
-                        ref.read(apiProvider), account['id'] as String),
-                    requests: homeRequests,
-                    onReviewRequest: (item) async {
-                      await Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => MoneyRequestDetail(
-                              api: ref.read(apiProvider), id: item['id'])));
-                      if (mounted) reload();
-                    },
-                    onViewRequests: () async {
-                      await Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => MoneyRequestInbox(
-                              api: ref.read(apiProvider),
-                              userId: account['id'] as String)));
-                      if (mounted) reload();
-                    },
-                    name: displayName,
-                    avatar: accountAvatar(22),
-                    owned: items,
-                    joined: joinedItems,
-                    invitations: homeInvitations,
-                    recentActivity: homeActivity,
-                    onViewActivity: () => setState(() => tab = 1),
-                    onViewInvitations: () async {
-                      await Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) =>
-                              InvitationsScreen(api: ref.read(apiProvider))));
-                      if (mounted) {
-                        reload();
-                      }
-                    },
-                    onReviewInvitation: (item) async {
-                      await Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => InvitationDetail(
-                              api: ref.read(apiProvider), invitation: item)));
-                      if (mounted) {
-                        reload();
-                      }
-                    },
-                    onRefresh: () async {
+                : tab == 1
+                    ? collectionLibrary()
+                    : SafeArea(
+                        child: CoordinationHome(
+                        onNotifications: openNotifications,
+                        unread: unread,
+                        peopleGateway: ApiPeopleGateway(
+                            ref.read(apiProvider), account['id'] as String),
+                        requests: homeRequests,
+                        onReviewRequest: (item) async {
+                          await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => MoneyRequestDetail(
+                                      api: ref.read(apiProvider),
+                                      id: item['id'])));
+                          if (mounted) reload();
+                        },
+                        onViewRequests: () async {
+                          await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => MoneyRequestInbox(
+                                      api: ref.read(apiProvider),
+                                      userId: account['id'] as String)));
+                          if (mounted) reload();
+                        },
+                        name: displayName,
+                        avatar: accountAvatar(22),
+                        owned: items,
+                        joined: joinedItems,
+                        invitations: homeInvitations,
+                        recentActivity: homeActivity,
+                        onViewActivity: () => setState(() => tab = 2),
+                        onViewInvitations: () async {
+                          await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => InvitationsScreen(
+                                      api: ref.read(apiProvider))));
+                          if (mounted) {
+                            reload();
+                          }
+                        },
+                        onReviewInvitation: (item) async {
+                          await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => InvitationDetail(
+                                      api: ref.read(apiProvider),
+                                      invitation: item)));
+                          if (mounted) {
+                            reload();
+                          }
+                        },
+                        onRefresh: () async {
+                          reload();
+                          await Future.wait([
+                            items,
+                            joinedItems,
+                            homeInvitations,
+                            homeActivity,
+                            homeRequests,
+                            refreshUnread()
+                          ]);
+                        },
+                        onCreate: create,
+                        onOpenOwned: open,
+                        onOpenJoined: (item) async {
+                          await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => InvitationDetail(
+                                      api: ref.read(apiProvider),
+                                      invitation: item)));
+                          if (mounted) {
+                            reload();
+                          }
+                        },
+                        onViewJoined: () async {
+                          await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => InvitationsScreen(
+                                      api: ref.read(apiProvider),
+                                      initiallyJoined: true)));
+                          if (mounted) {
+                            reload();
+                          }
+                        },
+                      )),
+      );
+  Widget collectionLibrary() => RefreshIndicator(
+        onRefresh: () async {
+          reload();
+          await Future.wait([items, joinedItems]);
+        },
+        child: ListView(
+            padding: const EdgeInsets.all(20),
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              const Text('You organise', style: SendohTextStyles.headingMedium),
+              const SizedBox(height: 16),
+              FutureBuilder<List<dynamic>>(
+                  future: items,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return TextButton(
+                          onPressed: reload,
+                          child:
+                              const Text('Couldn’t load collections. Retry'));
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.data!.isEmpty) {
+                      return const Text('Your collections will appear here.');
+                    }
+                    return Column(children: [
+                      for (final raw in snapshot.data!)
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: HomeCollectionCard(
+                                data: Map<String, dynamic>.from(raw),
+                                onTap: () =>
+                                    open(Map<String, dynamic>.from(raw))))
+                    ]);
+                  }),
+              const SizedBox(height: 12),
+              ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Joined collections and invitations'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) =>
+                            InvitationsScreen(api: ref.read(apiProvider))));
+                    if (mounted) {
                       reload();
-                      await Future.wait([
-                        items,
-                        joinedItems,
-                        homeInvitations,
-                        homeActivity,
-                        homeRequests,
-                        refreshUnread()
-                      ]);
-                    },
-                    onCreate: create,
-                    onOpenOwned: open,
-                    onOpenJoined: (item) async {
-                      await Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => InvitationDetail(
-                              api: ref.read(apiProvider), invitation: item)));
-                      if (mounted) {
-                        reload();
-                      }
-                    },
-                    onViewJoined: () async {
-                      await Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => InvitationsScreen(
-                              api: ref.read(apiProvider),
-                              initiallyJoined: true)));
-                      if (mounted) {
-                        reload();
-                      }
-                    },
-                  ),
+                    }
+                  }),
+            ]),
       );
   Widget accountAvatar(double radius) => account['avatar'] == null
       ? PersonAvatar(displayName, radius: radius)
@@ -474,7 +523,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
               leading: const Icon(Icons.history),
               title: const Text('Activity', style: TextStyle(fontSize: 14)),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => setState(() => tab = 1))
+              onTap: () => setState(() => tab = 2))
         ])),
         const SizedBox(height: 28),
         OutlinedButton(

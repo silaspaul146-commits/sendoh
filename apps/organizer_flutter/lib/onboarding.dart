@@ -230,7 +230,8 @@ class _OnboardingState extends State<Onboarding> {
   }
 
   @override
-  Widget build(BuildContext context) => hasSavedSession && step == 0
+  Widget build(BuildContext context) => (restoring || hasSavedSession) &&
+          step == 0
       ? Scaffold(
           body: SafeArea(
               child: Center(
@@ -245,7 +246,7 @@ class _OnboardingState extends State<Onboarding> {
                         const SizedBox(height: 12),
                         Text(
                             restoring
-                                ? 'Connecting to Sendoh. The server may take a moment to wake up.'
+                                ? 'Opening your account…'
                                 : (error ??
                                     'Unlock to continue where you left off.'),
                             textAlign: TextAlign.center),
