@@ -593,6 +593,14 @@ class _CollectionDeckState extends State<CollectionDeck> {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Semantics(
           label: 'Collection ${index + 1} of ${widget.entries.length}',
+          container: true,
+          explicitChildNodes: true,
+          value: '${index + 1} of ${widget.entries.length}',
+          increasedValue: index < widget.entries.length - 1
+              ? '${index + 2} of ${widget.entries.length}'
+              : null,
+          decreasedValue:
+              index > 0 ? '$index of ${widget.entries.length}' : null,
           onIncrease: index < widget.entries.length - 1 ? () => move(1) : null,
           onDecrease: index > 0 ? () => move(-1) : null,
           child: GestureDetector(
