@@ -7,7 +7,8 @@ export const metadata:Metadata={
  title:{default:'Sendoh · Organize money together',template:'%s · Sendoh'},
  description:'Collections, requests and person-to-person money flows for Cameroon. Explore Sendoh early access; payments are not yet enabled.',
  applicationName:'Sendoh',
- robots:{index:true,follow:true},
+ verification:{google:'PvBmCQJVWMxyjK-kuk40C-GX0mNjb8o0__ClLV_8GPY'},
+ robots:{index:false,follow:false},
  openGraph:{
   type:'website',url:'/',siteName:'Sendoh',title:'Sendoh · Organize money together',
   description:'Collect together. Request simply. Send with confidence. Cameroon early access.',
