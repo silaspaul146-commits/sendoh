@@ -79,6 +79,13 @@ def validate_transaction(transaction: dict, *, amount: int, service: str,
     checks['identifier'] = isinstance(pk, str) and 0 < len(pk) <= 120
     checks['identifier_binding'] = provider_id is None or pk == provider_id
     checks['status'] = isinstance(transaction.get('status'), str) and 0 < len(transaction['status']) <= 40
+    if not checks['type']:
+        provider_type = transaction.get('type')
+        safe_type = (provider_type if isinstance(provider_type, str)
+                     and re.fullmatch(r'[A-Za-z_]{1,32}', provider_type)
+                     else 'MISSING_OR_INVALID')
+        __import__('logging').getLogger(__name__).warning(
+            'MESOMB_TYPE expected=COLLECT actual=%s', safe_type)
     failed = [name for name, valid in checks.items() if not valid]
     if failed:
         # Only fixed field names; no provider payload, phone, or credentials.
