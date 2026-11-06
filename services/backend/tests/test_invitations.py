@@ -54,6 +54,8 @@ def test_accept_binds_identity_without_granting_organizer_access(client):
     assert client.get('/api/v1/me/invitations', headers=headers('bob')).json() == []
     joined = client.get('/api/v1/me/joined-collections', headers=headers('bob')).json()
     assert len(joined) == 1 and joined[0]['id'] == p['id']
+    assert joined[0]['contribution_summary'] == {
+        'live_available': False, 'confirmed_amount': None, 'test_paid_amount': 0}
     assert client.get('/api/v1/collections/' + c['id'], headers=headers('bob')).status_code == 404
     assert client.get('/api/v1/collections', headers=headers('bob')).json() == []
     detail = client.get('/api/v1/collections/' + c['id'], headers=headers()).json()

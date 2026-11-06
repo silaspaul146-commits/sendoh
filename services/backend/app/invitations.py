@@ -66,7 +66,10 @@ def consume_rate(db, user):
 def invitation_view(db, p, c, web_url):
     # Recipient view contains only their own participant row, never the roster.
     info = serialize(db, c, web_url, public=True)
-    return dict(id=p.id, invitation_version=p.invitation_version, collection_id=c.id, collection=info,
+    personal = participant_summary(db, p)
+    return dict(contribution_summary=dict(live_available=False, confirmed_amount=None,
+                    test_paid_amount=personal['test_paid_amount']),
+                id=p.id, invitation_version=p.invitation_version, collection_id=c.id, collection=info,
                 participant_name=p.name, expected_amount=p.expected_amount,
                 invitation_state=participant_state(p), expires_at=p.expires_at,
                 share_url=f'{web_url}/c/{c.public_token}' if c.status == 'ACTIVE' else None)

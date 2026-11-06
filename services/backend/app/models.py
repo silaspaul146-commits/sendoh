@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text
+from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text, Index, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -196,3 +196,56 @@ class MoneyRequest(Base):
     request_key: Mapped[str] = mapped_column(String(120))
     fingerprint: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class ProviderPayment(Base):
+    __tablename__ = 'provider_payments'
+    __table_args__ = (
+        UniqueConstraint('payer_id', 'request_key', name='uq_provider_payment_request'),
+        UniqueConstraint('application_hash', 'provider_id', name='uq_provider_transaction'),
+        Index('uq_pending_provider_collection', 'payer_id', 'collection_id', unique=True,
+              sqlite_where=text("status = 'PENDING'"), postgresql_where=text("status = 'PENDING'")),
+        CheckConstraint("mode = 'SANDBOX'"),
+        CheckConstraint("status IN ('PENDING','SUCCEEDED','FAILED','REFUNDED')"),
+        CheckConstraint('amount > 0 AND amount <= 1000000000'),
+        CheckConstraint("method IN ('MTN','ORANGE')"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'), index=True)
+    participant_id: Mapped[str] = mapped_column(ForeignKey('participants.id'))
+    payer_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    beneficiary_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    request_key: Mapped[str] = mapped_column(String(120))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    application_hash: Mapped[str] = mapped_column(String(64))
+    mode: Mapped[str] = mapped_column(String(12), default='SANDBOX')
+    amount: Mapped[int] = mapped_column(BigInteger)
+    method: Mapped[str] = mapped_column(String(8))
+    payer_phone: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(12), default='PENDING')
+    provider_id: Mapped[str | None] = mapped_column(String(120))
+    provider_status: Mapped[str | None] = mapped_column(String(40))
+    review_reason: Mapped[str | None] = mapped_column(String(80))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_check_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    lease_until: Mapped[int] = mapped_column(BigInteger, default=0)
+    lease_owner: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    updated_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class ProviderPaymentEvent(Base):
+    __tablename__ = 'provider_payment_events'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    payment_id: Mapped[str] = mapped_column(ForeignKey('provider_payments.id'), index=True)
+    status: Mapped[str] = mapped_column(String(12))
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    __table_args__ = (UniqueConstraint('payment_id','status',name='uq_provider_payment_effect'),)
+
+
+class MeSombWebhook(Base):
+    __tablename__ = 'mesomb_webhooks'
+    event_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    body_hash: Mapped[str] = mapped_column(String(64))
+    event_type: Mapped[str] = mapped_column(String(120))
+    received_at: Mapped[int] = mapped_column(BigInteger)

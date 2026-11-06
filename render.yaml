@@ -6,8 +6,7 @@ services:
     region: frankfurt
     rootDir: services/backend
     buildCommand: pip install -r requirements.lock
-    preDeployCommand: python -m alembic upgrade head
-    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:

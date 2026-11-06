@@ -11,10 +11,11 @@ def participant_state(p):
     return p.invitation_state
 
 def participant_summary(db, p):
+    from .mesomb_payments import sandbox_total
     member = db.get(User, p.user_id) if p.user_id else None
     paid = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.participant_id == p.id, TestPayment.status == 'SUCCEEDED')))
     state = 'Unpaid' if paid == 0 else 'Partial' if p.expected_amount and paid < p.expected_amount else 'Paid'
-    return dict(test_paid_amount=paid, test_payment_status=state, id=p.id, name=member.display_name if member else p.name,
+    return dict(sandbox_paid_amount=sandbox_total(db, p.collection_id, p.id), test_paid_amount=paid, test_payment_status=state, id=p.id, name=member.display_name if member else p.name,
                 expected_amount=p.expected_amount, user_id=p.user_id,
                 username=member.username if member else None,
                 avatar=member.avatar if member else None,
@@ -23,11 +24,13 @@ def participant_summary(db, p):
                 identity_verified=member is not None)
 
 def serialize(db, collection, web_url, public=False):
+    from .mesomb_payments import sandbox_total
     result = dict(id=collection.id, name=collection.name, description=collection.description,
                   currency=collection.currency, target_amount=collection.target_amount,
                   deadline_at=collection.deadline_at.isoformat() if collection.deadline_at else None,
                   mode=collection.mode, expected_amount=collection.expected_amount,
                   status=collection.status, collected_amount=0)
+    result['sandbox_collected_amount'] = sandbox_total(db, collection.id)
     result['test_collected_amount'] = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.collection_id == collection.id, TestPayment.status == 'SUCCEEDED')))
     if public:
         result['organizer_name'] = db.get(User, collection.organizer_id).display_name

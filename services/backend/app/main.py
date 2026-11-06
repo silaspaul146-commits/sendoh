@@ -18,6 +18,8 @@ from .notifications import router as notification_router
 from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
 from .people import router as people_router
+from .mesomb_payments import configuration, router as mesomb_router, lifespan_with_payments
+from .providers.mesomb import MeSombClient
 
 
 def create_app(database_url=None):
@@ -33,8 +35,12 @@ def create_app(database_url=None):
         def foreign_keys(connection, _): connection.execute('PRAGMA foreign_keys=ON')
     sessions = sessionmaker(engine, expire_on_commit=False)
     sender = configured_sender()
+    mesomb_config = configuration(settings)
     app = FastAPI(title='Sendoh API', version='0.6.0',
-        lifespan=lifespan_for(sessions, sender, settings.environment))
+        lifespan=lifespan_with_payments(lifespan_for(sessions, sender, settings.environment), sessions, mesomb_config))
+    app.state.mesomb_client = MeSombClient(mesomb_config.credentials) if mesomb_config else None
+    app.state.mesomb_config = mesomb_config
+    app.state.sessions = sessions
     app.add_middleware(RequestSizeLimit)
     app.state.engine = engine
     app.state.settings = settings
@@ -96,7 +102,7 @@ def create_app(database_url=None):
         db.execute(text('SELECT 1'))
         return {'status': 'ok', 'stage': settings.environment, 'version': '0.6.0',
                 'push_configured': sender is not None,
-                'otp_provider': settings.otp_provider, 'payments_enabled': False, 'test_payments_enabled': test_payments_enabled(settings)}
+                'otp_provider': settings.otp_provider, 'payments_enabled': False, 'mesomb_sandbox_enabled': mesomb_config is not None, 'test_payments_enabled': test_payments_enabled(settings)}
 
     @app.get('/')
     def root():
@@ -140,6 +146,7 @@ def create_app(database_url=None):
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     app.include_router(payment_router(database, actor, settings))
     app.include_router(people_router(database, actor))
+    app.include_router(mesomb_router(database, actor, sessions, mesomb_config))
     return app
 
 app = create_app()
