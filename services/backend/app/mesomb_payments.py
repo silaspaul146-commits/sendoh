@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .models import (User, Collection, Participant, PhoneIdentity, Activity,
                      ProviderPayment as Payment, ProviderPaymentEvent, MeSombWebhook)
-from .providers.mesomb import Credentials, MeSombClient, ReconciliationRequired, local_phone, validate_transaction
+from .providers.mesomb import Credentials, MeSombClient, ReconciliationRequired, local_phone, validate_transaction, safe_amount_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -115,8 +115,11 @@ def reconcile(sessions, config, api, payment_id):
             desired = validate_transaction(transaction, **expected)
             if len(transaction['pk']) > 120 or len(str(transaction.get('status', ''))) > 40:
                 raise ReconciliationRequired('Malformed provider identifier/status.')
-    except ReconciliationRequired:
+    except ReconciliationRequired as exc:
         reason = 'PROVIDER_UNVERIFIED'
+        logger.warning('MESOMB_DIAGNOSTIC attempt=%s check=%s amounts=%s',
+                       payment_id, str(exc),
+                       safe_amount_evidence(transaction) if isinstance(transaction, dict) else {})
     except Exception:
         # Unexpected SDK/transport behaviour must not result in a new debit.
         reason = 'RECONCILIATION_ERROR'

@@ -33,9 +33,9 @@ class Credentials:
 
 
 def local_phone(phone: str) -> str:
-    if not isinstance(phone, str) or not re.fullmatch(r'(?:\+237)?6[0-9]{8}', phone):
+    if not isinstance(phone, str) or not re.fullmatch(r'(?:\+?237)?6[0-9]{8}', phone):
         raise ValueError('Use a Cameroon mobile number in local or +237 format.')
-    return phone.removeprefix('+237')
+    return phone[-9:]
 
 
 def reference(value: str) -> str:
@@ -62,23 +62,45 @@ def validate_transaction(transaction: dict, *, amount: int, service: str,
     """
     if not isinstance(transaction, dict):
         raise ReconciliationRequired('Invalid provider transaction.')
+    checks = {}
     try:
-        actual_amount = Decimal(str(transaction['amount']))
-        matches = (
-            actual_amount.is_finite() and actual_amount == Decimal(amount)
-            and transaction['currency'] == 'XAF'
-            and transaction['country'] == 'CM'
-            and transaction['service'] == service
-            and transaction['type'] == 'COLLECT'
-            and local_phone(transaction['b_party']) == local_phone(payer)
-            and isinstance(transaction['pk'], str) and bool(transaction['pk'])
-            and (provider_id is None or transaction['pk'] == provider_id)
-        )
-    except (KeyError, ValueError, TypeError, InvalidOperation):
-        matches = False
-    if not matches:
-        raise ReconciliationRequired('Provider transaction does not match the payment.')
-    return payment_state(transaction.get('status'))
+        actual_amount = Decimal(str(transaction.get('amount')))
+        checks['amount'] = actual_amount.is_finite() and actual_amount == Decimal(amount)
+    except (ValueError, TypeError, InvalidOperation):
+        checks['amount'] = False
+    for name, expected in (('currency', 'XAF'), ('country', 'CM'),
+                           ('service', service), ('type', 'COLLECT')):
+        checks[name] = transaction.get(name) == expected
+    try:
+        checks['payer'] = local_phone(transaction.get('b_party')) == local_phone(payer)
+    except (ValueError, TypeError):
+        checks['payer'] = False
+    pk = transaction.get('pk')
+    checks['identifier'] = isinstance(pk, str) and 0 < len(pk) <= 120
+    checks['identifier_binding'] = provider_id is None or pk == provider_id
+    checks['status'] = isinstance(transaction.get('status'), str) and 0 < len(transaction['status']) <= 40
+    failed = [name for name, valid in checks.items() if not valid]
+    if failed:
+        # Only fixed field names; no provider payload, phone, or credentials.
+        raise ReconciliationRequired('FIELD_MISMATCH:' + ','.join(failed))
+    return payment_state(transaction['status'])
+
+
+def safe_amount_evidence(transaction):
+    """Allowlisted numeric evidence only; never log arbitrary provider text."""
+    result = {}
+    for name in ('amount', 'fees', 'trxamount'):
+        value = transaction.get(name)
+        if type(value) not in (str, int, float) or len(str(value)) > 32:
+            result[name] = 'missing_or_invalid'
+            continue
+        try:
+            number = Decimal(str(value))
+            result[name] = str(number) if number.is_finite() else 'invalid'
+        except InvalidOperation:
+            result[name] = 'invalid'
+    return result
+
 
 
 class MeSombClient:
@@ -114,11 +136,11 @@ class MeSombClient:
                               follow_redirects=False) as client:
                 response = client.request(method, url, headers=headers, content=content)
             if not 200 <= response.status_code < 300:
-                raise ReconciliationRequired('Provider response requires reconciliation.')
+                raise ReconciliationRequired('HTTP_STATUS:' + str(response.status_code))
             return response.json()
         except (httpx.HTTPError, ValueError) as exc:
             # Do not leak provider bodies, credentials or payer details to clients.
-            raise ReconciliationRequired('Provider outcome could not be established.') from exc
+            raise ReconciliationRequired('TRANSPORT_OR_JSON_ERROR') from exc
 
     def collect(self, *, external_id: str, amount: int, payer: str,
                 service: str, fees_included: bool):
@@ -140,7 +162,7 @@ class MeSombClient:
         data = self._request('GET', 'payment/transactions/?ids=' +
                              reference(external_id) + '&source=EXTERNAL')
         if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
-            raise ReconciliationRequired('Invalid transaction lookup response.')
+            raise ReconciliationRequired('LOOKUP_SHAPE_INVALID')
         # Empty is unresolved, not permission to initiate again. Multiple records
         # require investigation; do not pick one arbitrarily.
         return data
