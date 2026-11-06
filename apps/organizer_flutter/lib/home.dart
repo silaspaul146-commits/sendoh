@@ -362,7 +362,7 @@ class HomeCollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actual = (data['collected_amount'] as num? ?? 0).toInt();
+    final actual = displayedCollectionAmount(data);
     final target = (data['target_amount'] as num?)?.toInt();
     final people = data['participants'] as List? ?? [];
     final ink = featured ? SendohColors.surface : SendohColors.ink;
@@ -428,8 +428,10 @@ class HomeCollectionCard extends StatelessWidget {
                     ),
                     Text(
                       target != null && target > 0
-                          ? '/ ${coordinationMoney(target)}'
-                          : 'collected · No target',
+                          ? '/ ${coordinationMoney(target)}${showingProviderTest(data) ? ' · Test' : ''}'
+                          : showingProviderTest(data)
+                              ? 'collected · Test environment'
+                              : 'collected · No target',
                       style: SendohTextStyles.caption.copyWith(color: ink),
                     ),
                   ],

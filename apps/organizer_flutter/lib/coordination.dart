@@ -5,6 +5,18 @@ String coordinationMoney(dynamic value) => value == null
     ? 'No target'
     : '${value.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
 
+// Keep provider sandbox, legacy simulations and live money distinct.
+bool showingProviderTest(Map<String, dynamic> data) =>
+    (data['collected_amount'] as num? ?? 0) == 0 &&
+    (data['sandbox_collected_amount'] as num? ?? 0) > 0;
+
+int displayedCollectionAmount(Map<String, dynamic> data) =>
+    ((showingProviderTest(data)
+                ? data['sandbox_collected_amount']
+                : data['collected_amount']) as num? ??
+            0)
+        .toInt();
+
 /// The same progress language for organizers and invited members.
 class CollectionProgress extends StatelessWidget {
   const CollectionProgress({super.key, required this.data, this.dark = false});
@@ -12,13 +24,17 @@ class CollectionProgress extends StatelessWidget {
   final bool dark;
   @override
   Widget build(BuildContext context) {
-    final actual = (data['collected_amount'] as num? ?? 0).toInt();
+    final actual = displayedCollectionAmount(data);
     final test = (data['test_collected_amount'] as num? ?? 0).toInt();
     final target = (data['target_amount'] as num?)?.toInt();
     final color = dark ? Colors.white : SendohColors.teal;
     final muted = dark ? const Color(0xFFD1E4E0) : SendohColors.secondary;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Collected', style: TextStyle(color: muted, fontSize: 12)),
+      Text(
+          showingProviderTest(data)
+              ? 'Collected · Test environment'
+              : 'Collected',
+          style: TextStyle(color: muted, fontSize: 12)),
       const SizedBox(height: 6),
       Text(coordinationMoney(actual),
           style: TextStyle(
@@ -33,7 +49,7 @@ class CollectionProgress extends StatelessWidget {
             child: LinearProgressIndicator(
                 value: (actual / target).clamp(0.0, 1.0).toDouble(),
                 minHeight: 7,
-                color: dark ? SendohColors.orange : SendohColors.teal,
+                color: SendohColors.orange,
                 backgroundColor:
                     dark ? const Color(0xFF316260) : SendohColors.tealSoft)),
         const SizedBox(height: 8),

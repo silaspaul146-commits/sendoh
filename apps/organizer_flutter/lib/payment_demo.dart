@@ -1,4 +1,7 @@
 import 'dart:math';
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'design.dart';
@@ -8,7 +11,7 @@ String paymentKey() => List.generate(24,
         (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
     .join();
 
-/// Persisted test payments. The server owns identity, status and receipts.
+/// Provider-backed contributions using the existing checkout layout.
 class PaymentDemo extends StatefulWidget {
   const PaymentDemo(
       {super.key,
@@ -33,7 +36,11 @@ class _PaymentDemoState extends State<PaymentDemo> {
   Map<String, dynamic>? payment;
   Map<String, dynamic>? submission;
   String requestKey = paymentKey(), method = 'MTN';
-  String? error, pendingOutcome;
+  String? error, storageKey;
+  Timer? poll;
+  final phone = TextEditingController();
+  final storage = const FlutterSecureStorage();
+  bool ready = false;
   bool busy = false, confirmed = false;
   int step = 0;
 
@@ -41,6 +48,7 @@ class _PaymentDemoState extends State<PaymentDemo> {
   void initState() {
     super.initState();
     payment = widget.existing;
+    restore();
     if (payment != null) {
       amount.text = '${payment!['amount']}';
       note.text = payment!['note'] as String? ?? '';
@@ -51,9 +59,61 @@ class _PaymentDemoState extends State<PaymentDemo> {
 
   @override
   void dispose() {
+    poll?.cancel();
+    phone.dispose();
     amount.dispose();
     note.dispose();
     super.dispose();
+  }
+
+  bool get legacy => payment != null && payment!['provider'] != 'MESOMB';
+
+  void schedule() {
+    poll?.cancel();
+    if (mounted && payment?['status'] == 'PENDING' && !legacy) {
+      poll = Timer(const Duration(seconds: 5), () async {
+        await reload();
+        schedule();
+      });
+    }
+  }
+
+  Future<void> restore() async {
+    await run(() async {
+      final me = await widget.api.request('/me');
+      storageKey =
+          'sendoh-payment:${widget.api.baseUrl}:${me['id']}:${widget.collectionId}';
+      if (payment == null) {
+        final saved = await storage.read(key: storageKey!);
+        if (saved != null) {
+          final draft = jsonDecode(saved) as Map<String, dynamic>;
+          requestKey = draft['key'] as String;
+          submission = Map<String, dynamic>.from(draft['body']);
+          amount.text = '${submission!['amount']}';
+          method = submission!['method'] as String;
+          phone.text = submission!['payer_phone'] as String;
+          step = 2;
+          if (draft['id'] != null) {
+            payment = Map<String, dynamic>.from(
+                await widget.api.request('/provider-payments/${draft['id']}'));
+            step = payment!['status'] == 'PENDING' ? 3 : 4;
+          }
+        }
+        final history = await widget.api.request('/me/provider-payments');
+        final pending = (history['items'] as List).where((p) =>
+            p['collection_id'] == widget.collectionId &&
+            p['payer_id'] == me['id'] &&
+            p['status'] == 'PENDING');
+        if (pending.isNotEmpty && payment == null) {
+          payment = Map<String, dynamic>.from(pending.first);
+          step = 3;
+        }
+      }
+      if (mounted) {
+        setState(() => ready = true);
+      }
+    });
+    schedule();
   }
 
   Future<void> run(Future<void> Function() action) async {
@@ -79,7 +139,7 @@ class _PaymentDemoState extends State<PaymentDemo> {
 
   void review() {
     final n = int.tryParse(amount.text);
-    if (n == null || n <= 0 || n > 1000000000000) {
+    if (n == null || n <= 0 || n > 1000000000) {
       setState(() => error = 'Enter a positive whole FCFA amount.');
       return;
     }
@@ -90,15 +150,27 @@ class _PaymentDemoState extends State<PaymentDemo> {
   }
 
   Future<void> create() => run(() async {
-        // Retain the body AND key after a timeout; retry cannot create a duplicate.
+        if (!ready || storageKey == null) {
+          return;
+        }
+        if (!RegExp(r'^(?:\+237)?6[0-9]{8}$').hasMatch(phone.text.trim())) {
+          throw const FormatException('Enter a valid Mobile Money number.');
+        }
         submission ??= {
           'collection_id': widget.collectionId,
           'amount': int.parse(amount.text),
           'method': method,
-          'note': note.text.trim()
+          'payer_phone': phone.text.trim()
         };
+        await storage.write(
+            key: storageKey!,
+            value: jsonEncode({'key': requestKey, 'body': submission}));
         final result = await widget.api
-            .request('/test-payments', body: submission, key: requestKey);
+            .request('/provider-payments', body: submission, key: requestKey);
+        await storage.write(
+            key: storageKey!,
+            value: jsonEncode(
+                {'key': requestKey, 'body': submission, 'id': result['id']}));
         if (mounted) {
           setState(() {
             payment = Map<String, dynamic>.from(result);
@@ -107,28 +179,17 @@ class _PaymentDemoState extends State<PaymentDemo> {
         }
       });
 
-  Future<void> finish(String status) => run(() async {
-        pendingOutcome ??= status;
-        final result = await widget.api.request(
-            '/test-payments/${payment!['id']}/simulate',
-            body: {'status': pendingOutcome});
-        if (mounted) {
-          setState(() {
-            payment = Map<String, dynamic>.from(result);
-            pendingOutcome = null;
-            step = 4;
-          });
-        }
-      });
-
   Future<void> reload({bool receipt = false}) => run(() async {
-        final result =
-            await widget.api.request('/test-payments/${payment!['id']}');
+        final result = await widget.api.request(
+            legacy
+                ? '/test-payments/${payment!['id']}'
+                : '/provider-payments/${payment!['id']}/refresh',
+            body: legacy ? null : <String, dynamic>{});
         if (mounted) {
           setState(() {
             payment = Map<String, dynamic>.from(result);
             if (payment!['status'] != 'PENDING') {
-              pendingOutcome = null;
+              poll?.cancel();
             }
             step = payment!['status'] == 'PENDING'
                 ? 3
@@ -139,14 +200,22 @@ class _PaymentDemoState extends State<PaymentDemo> {
         }
       });
 
-  void restart() => setState(() {
-        requestKey = paymentKey();
-        payment = null;
-        submission = null;
-        pendingOutcome = null;
-        confirmed = false;
-        error = null;
-        step = 0;
+  Future<void> restart() => run(() async {
+        if (storageKey != null) {
+          await storage.delete(key: storageKey!);
+        }
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          requestKey = paymentKey();
+          payment = null;
+          submission = null;
+          poll?.cancel();
+          confirmed = false;
+          error = null;
+          step = 0;
+        });
       });
 
   @override
@@ -158,9 +227,9 @@ class _PaymentDemoState extends State<PaymentDemo> {
         'Contribute',
         'Confirm contribution',
         'Choose payment method',
-        'Test payment',
+        'Contribution status',
         'Payment result',
-        'Test receipt'
+        'Contribution record'
       ][step])),
       body: ListView(padding: const EdgeInsets.all(24), children: [
         if (step < 4) ...[
@@ -174,7 +243,8 @@ class _PaymentDemoState extends State<PaymentDemo> {
               backgroundColor: SendohColors.tealSoft),
           const SizedBox(height: 16),
         ],
-        const StatusBadge('TEST • No money moves'),
+        const Text('Test environment',
+            style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
         const SizedBox(height: 20),
         Text(payment?['collection_name'] ?? widget.collection,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
@@ -182,6 +252,8 @@ class _PaymentDemoState extends State<PaymentDemo> {
         Text('Contributing as ${payment?['payer_name'] ?? widget.name}'),
         const SizedBox(height: 24),
         if (busy) const LinearProgressIndicator(),
+        if (!ready && !busy)
+          TextButton(onPressed: restore, child: const Text('Reconnect')),
         if (error != null)
           Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -211,20 +283,12 @@ class _PaymentDemoState extends State<PaymentDemo> {
                           : () => setState(() => amount.text = '$value')))
                   .toList()),
           const SizedBox(height: 16),
-          TextField(
-              controller: note,
-              enabled: !busy,
-              maxLength: 200,
-              decoration: const InputDecoration(labelText: 'Note (optional)')),
           FilledButton(
-              onPressed: busy ? null : review, child: const Text('Continue')),
+              onPressed: busy || !ready ? null : review,
+              child: const Text('Continue')),
         ],
         if (step == 1) ...[
           SummaryRow('Your contribution', '${amount.text} FCFA'),
-          const SummaryRow('Test provider fee', '0 FCFA'),
-          SummaryRow('Test total', '${amount.text} FCFA', bold: true),
-          const Text(
-              'The full test amount goes toward the test collection total. Live pricing and collection settlement fees will be shown separately when payments launch.'),
           CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: confirmed,
@@ -246,38 +310,36 @@ class _PaymentDemoState extends State<PaymentDemo> {
                       : Icons.circle_outlined),
                   label: Text(
                       value == 'MTN' ? 'MTN Mobile Money' : 'Orange Money')))),
+          TextField(
+              controller: phone,
+              enabled: !busy && submission == null,
+              keyboardType: TextInputType.phone,
+              decoration:
+                  const InputDecoration(labelText: 'Mobile Money number')),
+          const SizedBox(height: 16),
           FilledButton(
-              onPressed: busy ? null : create,
+              onPressed: busy || !ready
+                  ? null
+                  : () async {
+                      await create();
+                      schedule();
+                    },
               child: Text(busy
                   ? 'Saving payment…'
                   : submission != null
-                      ? 'Retry same payment request'
+                      ? 'Recover contribution'
                       : 'Continue to pay')),
         ],
         if (step == 3) ...[
-          SummaryRow('Test amount', coordinationMoney(payment!['amount'])),
+          SummaryRow('Amount', coordinationMoney(payment!['amount'])),
           SummaryRow(
               'Using',
               payment!['method'] == 'MTN'
                   ? 'MTN Mobile Money'
                   : 'Orange Money'),
           const Text(
-              'Your payment attempt is saved on Sendoh. Choose a test result; no provider is charged.'),
+              'Confirming your contribution. You can return to the collection while we check the result.'),
           const SizedBox(height: 24),
-          if (pendingOutcome == null) ...[
-            FilledButton(
-                onPressed: busy ? null : () => finish('SUCCEEDED'),
-                child: const Text('Simulate successful payment')),
-            OutlinedButton(
-                onPressed: busy ? null : () => finish('FAILED'),
-                child: const Text('Simulate failed payment')),
-            TextButton(
-                onPressed: busy ? null : () => finish('CANCELLED'),
-                child: const Text('Cancel test payment')),
-          ] else
-            FilledButton(
-                onPressed: busy ? null : () => finish(pendingOutcome!),
-                child: const Text('Retry saving this result')),
           TextButton(
               onPressed: busy ? null : reload,
               child: const Text('Refresh payment status')),
@@ -287,25 +349,24 @@ class _PaymentDemoState extends State<PaymentDemo> {
               color: SendohColors.teal, size: 64),
           Text(
               success
-                  ? 'Test contribution successful'
-                  : 'Test payment ${payment!['status'].toString().toLowerCase()}',
+                  ? 'Contribution confirmed'
+                  : 'Contribution ${payment!['status'].toString().toLowerCase()}',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 22)),
           const SizedBox(height: 16),
           Text(success
-              ? 'Your contribution is recorded for this test. Your organizer can see it, and your receipt is ready. No money moved.'
-              : 'The result is saved. This attempt did not increase the test total.'),
+              ? 'Your contribution has been recorded. Return to the collection to see the updated progress.'
+              : 'This attempt has not added to the collection total.'),
           FilledButton(
               onPressed: busy
                   ? null
                   : success
                       ? () => reload(receipt: true)
                       : restart,
-              child:
-                  Text(success ? 'View test receipt' : 'Start a new attempt')),
+              child: Text(success ? 'View record' : 'Start a new attempt')),
         ],
         if (step == 5) ...[
-          const Text('TEST • Not proof of payment',
+          const Text('Test environment · Contribution record',
               style: TextStyle(fontWeight: FontWeight.bold)),
           SummaryRow('Reference', payment!['reference']),
           SummaryRow('Amount', coordinationMoney(payment!['amount'])),
@@ -316,14 +377,19 @@ class _PaymentDemoState extends State<PaymentDemo> {
                   : 'Orange Money'),
           SummaryRow(
               'Recorded',
-              DateTime.fromMillisecondsSinceEpoch(
-                      (payment!['completed_at'] as int) * 1000)
+              DateTime.fromMillisecondsSinceEpoch(((payment!['updated_at'] ??
+                          payment!['completed_at']) as int) *
+                      1000)
                   .toLocal()
                   .toString()),
-          if ((payment!['note'] as String).isNotEmpty)
+          if ((payment!['note'] as String? ?? '').isNotEmpty)
             SummaryRow('Note', payment!['note']),
-          const Text('Saved test receipt. No real funds were received.'),
+          const Text('Sandbox record · Not proof of live payment.'),
         ],
+        if (step >= 4 && success)
+          TextButton(
+              onPressed: busy ? null : restart,
+              child: const Text('Make another contribution')),
         if (step >= 3)
           OutlinedButton(
               onPressed: busy ? null : () => Navigator.pop(context),
@@ -353,7 +419,7 @@ class TestPaymentHistory extends StatefulWidget {
 class _TestPaymentHistoryState extends State<TestPaymentHistory> {
   List<dynamic> rows = [];
   String? error, cursor;
-  bool busy = false;
+  bool busy = false, legacy = false;
   @override
   void initState() {
     super.initState();
@@ -372,13 +438,15 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
       final path = widget.organizer
           ? '/collections/${widget.collectionId}/test-payments?'
           : '/me/test-payments?collection_id=${widget.collectionId}&';
-      final data = await widget.api.request(
-          '$path${more && cursor != null ? 'before=${Uri.encodeQueryComponent(cursor!)}' : ''}');
+      final data = await widget.api.request(legacy
+          ? '$path${more && cursor != null ? 'before=${Uri.encodeQueryComponent(cursor!)}' : ''}'
+          : '/me/provider-payments');
+      final items = (data['items'] as List)
+          .where((p) => legacy || p['collection_id'] == widget.collectionId)
+          .toList();
       if (mounted) {
         setState(() {
-          rows = more
-              ? [...rows, ...data['items']]
-              : List<dynamic>.from(data['items']);
+          rows = more ? [...rows, ...items] : List<dynamic>.from(items);
           cursor = data['next_cursor'];
         });
       }
@@ -398,16 +466,15 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
       await showDialog<void>(
           context: context,
           builder: (context) => AlertDialog(
-                  title: const Text('Test payment record'),
+                  title: const Text('Contribution record'),
                   content: SingleChildScrollView(
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Text(
-                        '${p['payer_name']} • ${coordinationMoney(p['amount'])}'),
+                        '${p['payer_name'] ?? 'Contribution'} • ${coordinationMoney(p['amount'])}'),
                     Text('${p['status']} • ${p['method']}'),
                     SelectableText(p['reference']),
                     Text(p['note'] ?? ''),
-                    const Text(
-                        'TEST ONLY. No money moved. Not proof of payment.'),
+                    const Text('Test environment · Not proof of live payment.'),
                   ])),
                   actions: [
                     TextButton(
@@ -419,8 +486,8 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
           builder: (_) => PaymentDemo(
               api: widget.api,
               collectionId: widget.collectionId,
-              collection: p['collection_name'],
-              name: p['payer_name'],
+              collection: p['collection_name'] ?? 'Collection',
+              name: p['payer_name'] ?? 'your verified profile',
               existing: p)));
     }
     if (mounted) {
@@ -430,7 +497,7 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Test payment history'), actions: [
+        appBar: AppBar(title: const Text('Contribution history'), actions: [
           IconButton(
               onPressed: busy ? null : () => load(),
               icon: const Icon(Icons.refresh))
@@ -441,7 +508,20 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(22),
                 children: [
-                  const Text('Your contributions and receipts • Test mode'),
+                  const Text('Test environment'),
+                  SwitchListTile(
+                      title: const Text('Previous simulator records'),
+                      value: legacy,
+                      onChanged: busy
+                          ? null
+                          : (value) {
+                              setState(() {
+                                legacy = value;
+                                rows = [];
+                                cursor = null;
+                              });
+                              load();
+                            }),
                   if (busy) const LinearProgressIndicator(),
                   if (error != null) ...[
                     Text(error!),
@@ -450,12 +530,12 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
                         child: const Text('Retry'))
                   ],
                   if (!busy && error == null && rows.isEmpty)
-                    const Text('No test payments yet.'),
+                    const Text('No contributions yet.'),
                   ...rows.map((raw) {
                     final p = Map<String, dynamic>.from(raw);
                     return ListTile(
                         title: Text(
-                            '${p['payer_name']} • ${coordinationMoney(p['amount'])}'),
+                            '${p['payer_name'] ?? 'Contribution'} • ${coordinationMoney(p['amount'])}'),
                         subtitle: Text('${p['status']} • ${p['method']}'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => open(p));
