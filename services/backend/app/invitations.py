@@ -68,7 +68,9 @@ def invitation_view(db, p, c, web_url):
     info = serialize(db, c, web_url, public=True)
     personal = participant_summary(db, p)
     return dict(contribution_summary=dict(live_available=False, confirmed_amount=None,
-                    test_paid_amount=personal['test_paid_amount']),
+                    test_paid_amount=personal['test_paid_amount'],
+                    sandbox_paid_amount=personal['sandbox_paid_amount'],
+                    sandbox_payment_pending=personal['sandbox_payment_pending']),
                 id=p.id, invitation_version=p.invitation_version, collection_id=c.id, collection=info,
                 participant_name=p.name, expected_amount=p.expected_amount,
                 invitation_state=participant_state(p), expires_at=p.expires_at,

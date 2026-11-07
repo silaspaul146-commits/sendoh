@@ -369,6 +369,38 @@ class InvitationDetail extends StatefulWidget {
 }
 
 class _InvitationDetailState extends State<InvitationDetail> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.invitation['invitation_state'] == 'ACCEPTED') {
+      refreshCurrent();
+    }
+  }
+
+  Future<void> refreshCurrent() async {
+    try {
+      final result = await widget.api
+          .request('/me/invitations/${widget.invitation['id']}');
+      if (result is! Map ||
+          result['id'] != widget.invitation['id'] ||
+          result['collection'] is! Map ||
+          result['invitation_state'] is! String) {
+        throw const FormatException(
+            'Could not refresh this collection. Please reopen it.');
+      }
+      if (mounted) {
+        setState(() {
+          current = Map<String, dynamic>.from(result);
+          error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    }
+  }
+
   late Map<String, dynamic> current =
       Map<String, dynamic>.from(widget.invitation);
   Future<void> payments({bool history = false}) async {

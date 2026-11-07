@@ -944,6 +944,18 @@ String joinedPersonalStatus(Map<String, dynamic> item) {
           : 'Any amount welcome';
     }
   }
+  final providerPaid = (summary?['sandbox_paid_amount'] as num?)?.toInt() ?? 0;
+  if (summary?['sandbox_payment_pending'] == true) {
+    return 'Payment pending';
+  }
+  if (providerPaid > 0) {
+    if (expected != null && expected > 0) {
+      return providerPaid >= expected
+          ? 'Your part done ✓'
+          : '${coordinationMoney(expected - providerPaid)} remaining';
+    }
+    return '${coordinationMoney(providerPaid)} contributed';
+  }
   final testPaid = (summary?['test_paid_amount'] as num?)?.toInt() ?? 0;
   if (testPaid > 0) {
     return '${coordinationMoney(testPaid)} · test';

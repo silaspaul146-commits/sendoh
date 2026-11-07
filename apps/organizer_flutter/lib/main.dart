@@ -831,6 +831,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
     super.initState();
     data = widget.data;
     PushService.updates.addListener(paymentUpdate);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        refresh();
+      }
+    });
   }
 
   void paymentUpdate() {
@@ -998,13 +1003,13 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             p['expected_amount'] == null
                                 ? 'Any amount'
                                 : money(p['expected_amount'])),
-                        SummaryRow('Test contributed',
-                            money(p['test_paid_amount'] ?? 0)),
+                        SummaryRow('Contributed',
+                            money(p['sandbox_paid_amount'] ?? 0)),
                         if (p['expected_amount'] != null)
                           SummaryRow(
-                              'Test remaining',
+                              'Remaining',
                               money(((p['expected_amount'] as int) -
-                                      ((p['test_paid_amount'] ?? 0) as int))
+                                      ((p['sandbox_paid_amount'] ?? 0) as int))
                                   .clamp(0, 1000000000000))),
                         SummaryRow('Membership',
                             invitationLabel(p['invitation_state'])),
@@ -1080,7 +1085,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final people = data['participants'] as List;
     final visiblePeople = people
         .where((p) =>
-            filter == 'All' || (p['test_payment_status'] ?? 'Unpaid') == filter)
+            filter == 'All' ||
+            (p['sandbox_payment_status'] ?? 'Unpaid') == filter)
         .toList();
     return Scaffold(
         appBar: AppBar(title: Text(data['name']), actions: [
@@ -1237,11 +1243,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 style: const TextStyle(
                                     fontSize: 14, fontWeight: FontWeight.w500)),
                             subtitle: Text(
-                                '${invitationLabel(p['invitation_state'])}\nTest: ${money(p['test_paid_amount'] ?? 0)} / ${p['expected_amount'] == null ? 'Any amount' : money(p['expected_amount'])}',
+                                '${invitationLabel(p['invitation_state'])}\nContributed: ${money(p['sandbox_paid_amount'] ?? 0)} / ${p['expected_amount'] == null ? 'Any amount' : money(p['expected_amount'])}',
                                 style: const TextStyle(fontSize: 12)),
                             trailing: StatusBadge(
-                                'Test ${p['test_payment_status'] ?? 'Unpaid'}',
-                                pending: (p['test_paid_amount'] ?? 0) == 0),
+                                '${p['sandbox_payment_status'] ?? 'Unpaid'}',
+                                pending: (p['sandbox_paid_amount'] ?? 0) == 0),
                             onTap: () => participant(p));
                       })
                   ],

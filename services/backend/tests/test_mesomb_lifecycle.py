@@ -262,3 +262,29 @@ def test_observed_payment_fee_response_recovers_once(client):
     summary = client.get('/api/v1/collections/' + c['id'], headers=headers()).json()
     assert summary['sandbox_collected_amount'] == 1000
     assert summary['collected_amount'] == 0
+
+
+def test_joined_and_organizer_read_same_provider_contribution(client):
+    c, _ = setup(client)
+    fake = client.app.state.mesomb_client
+    pid = create(client, c).json()['id']
+    joined = client.get('/api/v1/me/joined-collections', headers=headers('bob')).json()
+    personal = joined[0]['contribution_summary']
+    assert personal['sandbox_paid_amount'] == 0
+    assert personal['sandbox_payment_pending'] is True
+    due(client, pid)
+    joined = client.get('/api/v1/me/joined-collections', headers=headers('bob')).json()
+    personal = joined[0]['contribution_summary']
+    assert personal['sandbox_paid_amount'] == 1000
+    assert personal['sandbox_payment_pending'] is False
+    assert personal['confirmed_amount'] is None
+    assert personal['live_available'] is False
+    assert joined[0]['collection']['sandbox_collected_amount'] == 1000
+    owned = client.get('/api/v1/collections/' + c['id'], headers=headers()).json()
+    member = next(p for p in owned['participants'] if p['id'] == joined[0]['id'])
+    assert member['sandbox_paid_amount'] == 1000
+    assert member['sandbox_payment_status'] == 'Paid'
+    fake.status = 'REFUNDED'
+    due(client, pid)
+    joined = client.get('/api/v1/me/joined-collections', headers=headers('bob')).json()
+    assert joined[0]['contribution_summary']['sandbox_paid_amount'] == 0
