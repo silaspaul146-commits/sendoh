@@ -240,3 +240,25 @@ def test_sandbox_requires_explicit_settings(client,monkeypatch):
     with pytest.raises(RuntimeError):configuration(settings)
     monkeypatch.setenv('SENDOH_MESOMB_MODE','disabled')
     assert configuration(settings) is None
+
+
+def test_observed_payment_fee_response_recovers_once(client):
+    c, _ = setup(client)
+    fake = client.app.state.mesomb_client
+    pid = create(client, c).json()['id']
+    original = fake.lookup
+    def observed(external_id):
+        row = original(external_id)[0]
+        row.update(type='PAYMENT', amount=980.0, fees=20.0, trxamount=1000.0)
+        return [row]
+    fake.lookup = observed
+    due(client, pid)
+    assert result(client, pid)['status'] == 'SUCCEEDED'
+    due(client, pid)
+    assert len(fake.calls) == 1
+    with client.app.state.sessions() as db:
+        assert db.scalar(select(func.count()).select_from(ProviderPaymentEvent)
+                         .where(ProviderPaymentEvent.payment_id == pid)) == 1
+    summary = client.get('/api/v1/collections/' + c['id'], headers=headers()).json()
+    assert summary['sandbox_collected_amount'] == 1000
+    assert summary['collected_amount'] == 0

@@ -64,13 +64,27 @@ def validate_transaction(transaction: dict, *, amount: int, service: str,
         raise ReconciliationRequired('Invalid provider transaction.')
     checks = {}
     try:
-        actual_amount = Decimal(str(transaction.get('amount')))
-        checks['amount'] = actual_amount.is_finite() and actual_amount == Decimal(amount)
+        net = Decimal(str(transaction.get('amount')))
+        # PAYMENT is the observed sandbox collect response. COLLECT is the
+        # documented variant; older COLLECT responses may omit fee details.
+        detailed = transaction.get('type') == 'PAYMENT' or any(
+            key in transaction for key in ('fees', 'trxamount'))
+        if detailed:
+            gross = Decimal(str(transaction.get('trxamount')))
+            fees = Decimal(str(transaction.get('fees')))
+            checks['amount'] = (
+                all(value.is_finite() for value in (net, gross, fees))
+                and gross == Decimal(amount) and gross > 0
+                and net >= 0 and fees >= 0 and net + fees == gross
+            )
+        else:
+            checks['amount'] = net.is_finite() and net == Decimal(amount) and net > 0
     except (ValueError, TypeError, InvalidOperation):
         checks['amount'] = False
     for name, expected in (('currency', 'XAF'), ('country', 'CM'),
-                           ('service', service), ('type', 'COLLECT')):
+                           ('service', service)):
         checks[name] = transaction.get(name) == expected
+    checks['type'] = transaction.get('type') in ('COLLECT', 'PAYMENT')
     try:
         checks['payer'] = local_phone(transaction.get('b_party')) == local_phone(payer)
     except (ValueError, TypeError):
