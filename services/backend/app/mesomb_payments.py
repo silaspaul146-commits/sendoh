@@ -17,12 +17,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select, update, func, or_
+from sqlalchemy import select, update, func, or_, and_
 from sqlalchemy.exc import IntegrityError
 
 from .models import (User, Collection, Participant, PhoneIdentity, Activity,
                      ProviderPayment as Payment, ProviderPaymentEvent, MeSombWebhook)
-from .providers.mesomb import Credentials, MeSombClient, ReconciliationRequired, local_phone, validate_transaction, safe_amount_evidence
+from .providers.mesomb import Credentials, MeSombClient, ReconciliationRequired, local_phone, validate_transaction, safe_amount_evidence, collection_amounts
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,12 @@ def view(p):
                 reconciliation_required=p.status == 'PENDING' or p.review_reason is not None,
                 review_reason=p.review_reason, created_at=p.created_at, updated_at=p.updated_at,
                 receipt_available=p.status == 'SUCCEEDED',
+                accounting=dict(verified=p.accounting_verified_at is not None,
+                    gross=str(p.confirmed_gross) if p.confirmed_gross is not None else None,
+                    provider_fee=str(p.confirmed_provider_fee) if p.confirmed_provider_fee is not None else None,
+                    net=str(p.confirmed_net) if p.confirmed_net is not None else None,
+                    currency='XAF', verified_at=p.accounting_verified_at,
+                    recipient_delivery_confirmed=False),
                 notice='MeSomb sandbox transaction. No real money moved. Not proof of live payment.')
 
 
@@ -106,6 +112,7 @@ def reconcile(sessions, config, api, payment_id):
     transaction = None
     reason = None
     desired = None
+    amounts = None
     try:
         rows = api.lookup(payment_id)
         if len(rows) != 1:
@@ -113,6 +120,8 @@ def reconcile(sessions, config, api, payment_id):
         else:
             transaction = rows[0]
             desired = validate_transaction(transaction, **expected)
+            if desired == 'SUCCEEDED':
+                amounts = collection_amounts(transaction, amount=expected['amount'])
             if len(transaction['pk']) > 120 or len(str(transaction.get('status', ''))) > 40:
                 raise ReconciliationRequired('Malformed provider identifier/status.')
     except ReconciliationRequired as exc:
@@ -132,6 +141,11 @@ def reconcile(sessions, config, api, payment_id):
         p.attempts += 1
         p.updated_at = int(time.time())
         p.review_reason = reason
+        if amounts is not None and p.accounting_verified_at is not None:
+            saved = (p.confirmed_gross, p.confirmed_provider_fee, p.confirmed_net)
+            if saved != amounts:
+                reason = 'CONFLICTING_PROVIDER_ACCOUNTING'
+                p.review_reason = reason
         if desired is not None and reason is None:
             transitions = {'PENDING': {'PENDING','SUCCEEDED','FAILED','REFUNDED'},
                            'SUCCEEDED': {'SUCCEEDED','REFUNDED'}, 'FAILED': {'FAILED'},
@@ -139,6 +153,9 @@ def reconcile(sessions, config, api, payment_id):
             if desired not in transitions[p.status]:
                 p.review_reason = 'CONFLICTING_PROVIDER_OUTCOME'
             else:
+                if desired == 'SUCCEEDED' and amounts is not None and p.accounting_verified_at is None:
+                    p.confirmed_gross, p.confirmed_provider_fee, p.confirmed_net = amounts
+                    p.accounting_verified_at = p.updated_at
                 p.provider_id = transaction['pk']
                 p.provider_status = transaction['status']
                 if desired != p.status:
@@ -301,10 +318,28 @@ def router(database, actor, sessions, config):
         return view(owned(db, payment_id, user))
 
     @routes.get('/me/provider-payments')
-    def history(user=Depends(actor), db=Depends(database)):
-        rows = db.scalars(select(Payment).where(or_(Payment.payer_id == user.id,
-            Payment.beneficiary_id == user.id)).order_by(Payment.created_at.desc(), Payment.id.desc()).limit(100))
-        return dict(items=[view(p) for p in rows], limit=100)
+    def history(collection_token: str | None = None, before: str | None = None,
+                payer_only: bool = False, user=Depends(actor), db=Depends(database)):
+        access = (Payment.payer_id == user.id if payer_only else
+                  or_(Payment.payer_id == user.id, Payment.beneficiary_id == user.id))
+        query = select(Payment).where(access)
+        if collection_token is not None:
+            collection_id = db.scalar(select(Collection.id).where(
+                Collection.public_token == collection_token))
+            if collection_id is None:
+                raise HTTPException(404, 'Collection not found.')
+            query = query.where(Payment.collection_id == collection_id)
+        if before is not None:
+            cursor = db.scalar(query.where(Payment.id == before))
+            if cursor is None:
+                raise HTTPException(404, 'Payment cursor not found.')
+            query = query.where(or_(Payment.created_at < cursor.created_at,
+                and_(Payment.created_at == cursor.created_at, Payment.id < cursor.id)))
+        rows = list(db.scalars(query.order_by(
+            Payment.created_at.desc(), Payment.id.desc()).limit(101)))
+        page = rows[:100]
+        return dict(items=[view(p) for p in page], limit=100,
+                    next_cursor=page[-1].id if len(rows) > 100 else None)
 
     @routes.post('/provider-payments/{payment_id}/refresh')
     def refresh(payment_id: str, request: Request, user=Depends(actor), db=Depends(database)):

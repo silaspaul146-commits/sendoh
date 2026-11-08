@@ -1,6 +1,7 @@
 import uuid
+from decimal import Decimal
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text, Index, text
+from sqlalchemy import Numeric, String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text, Index, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -225,6 +226,11 @@ class ProviderPayment(Base):
     status: Mapped[str] = mapped_column(String(12), default='PENDING')
     provider_id: Mapped[str | None] = mapped_column(String(120))
     provider_status: Mapped[str | None] = mapped_column(String(40))
+    confirmed_gross: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    confirmed_provider_fee: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    confirmed_net: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    accounting_verified_at: Mapped[int | None] = mapped_column(BigInteger)
+
     review_reason: Mapped[str | None] = mapped_column(String(80))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_check_at: Mapped[int] = mapped_column(BigInteger, index=True)

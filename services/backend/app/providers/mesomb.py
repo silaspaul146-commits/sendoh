@@ -107,6 +107,26 @@ def validate_transaction(transaction: dict, *, amount: int, service: str,
     return payment_state(transaction['status'])
 
 
+def collection_amounts(transaction: dict, *, amount: int):
+    """Verified collect gross/fee/net evidence; None means unknown, never zero.
+
+    Call only after validate_transaction. Legacy COLLECT responses can confirm
+    a contribution but cannot authorize spending net proceeds without fee data.
+    """
+    if not all(key in transaction for key in ('amount', 'fees', 'trxamount')):
+        return None
+    try:
+        net, fee, gross = (Decimal(str(transaction[key]))
+                           for key in ('amount', 'fees', 'trxamount'))
+        if (not all(v.is_finite() and v >= 0 and v <= 1_000_000_000
+                    and v == v.quantize(Decimal('0.000001')) for v in (net, fee, gross))
+                or gross != Decimal(amount) or net + fee != gross):
+            raise ValueError()
+    except (ValueError, TypeError, InvalidOperation):
+        raise ReconciliationRequired('ACCOUNTING_EVIDENCE_INVALID') from None
+    return gross, fee, net
+
+
 def safe_amount_evidence(transaction):
     """Allowlisted numeric evidence only; never log arbitrary provider text."""
     result = {}
@@ -177,6 +197,27 @@ class MeSombClient:
         if not isinstance(data, dict):
             raise ReconciliationRequired('Invalid provider response.')
         # Initiation response is evidence for recovery, never a ledger write.
+        return data
+
+    def deposit(self, *, external_id: str, amount: int, receiver: str, service: str):
+        """Internal transport only; caller MUST persist/claim before dispatch.
+
+        SDK 2.1.2 uses receiver, payment/deposit/ and body trxID. This is not
+        a public payout endpoint or a guarantee of provider idempotency.
+        Initiation never proves recipient delivery; resolve by lookup.
+        """
+        if type(amount) is not int or not 0 < amount <= 1_000_000_000:
+            raise ValueError('Amount must be a positive whole XAF value within the limit.')
+        if service not in ('MTN', 'ORANGE'):
+            raise ValueError('Specify a supported operator.')
+        external_id = reference(external_id)
+        data = self._request('POST', 'payment/deposit/', external_id=external_id, body={
+            'amount': amount, 'receiver': local_phone(receiver), 'service': service,
+            'country': 'CM', 'currency': 'XAF', 'amount_currency': 'XAF',
+            'conversion': False, 'trxID': external_id,
+        })
+        if not isinstance(data, dict):
+            raise ReconciliationRequired('Invalid provider response.')
         return data
 
     def lookup(self, external_id: str) -> list[dict]:
