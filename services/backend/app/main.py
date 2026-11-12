@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import create_engine, select, text, event
 from sqlalchemy.orm import sessionmaker
+from .payout_probe import router as payout_probe_router
 from .models import User, Collection, Activity, AuthSession
 from .auth import router, profile
 from .schemas import CollectionInput
@@ -18,6 +19,7 @@ from .notifications import router as notification_router
 from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
 from .people import router as people_router
+from .receiving import router as receiving_router
 from .mesomb_payments import configuration, router as mesomb_router, lifespan_with_payments
 from .providers.mesomb import MeSombClient
 
@@ -146,7 +148,9 @@ def create_app(database_url=None):
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     app.include_router(payment_router(database, actor, settings))
     app.include_router(people_router(database, actor))
+    app.include_router(receiving_router(database, actor))
     app.include_router(mesomb_router(database, actor, sessions, mesomb_config))
+    app.include_router(payout_probe_router(sessions, mesomb_config, settings.environment))
     return app
 
 app = create_app()

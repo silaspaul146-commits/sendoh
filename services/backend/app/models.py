@@ -255,3 +255,19 @@ class MeSombWebhook(Base):
     body_hash: Mapped[str] = mapped_column(String(64))
     event_type: Mapped[str] = mapped_column(String(120))
     received_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class ReceivingDestination(Base):
+    """Immutable recipient consent versions; never a provider verification claim."""
+    __tablename__ = 'receiving_destinations'
+    __table_args__ = (
+        UniqueConstraint('user_id', 'version', name='uq_receiving_destination_version'),
+        CheckConstraint('version > 0'),
+        CheckConstraint("method IN ('MTN','ORANGE')"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    phone: Mapped[str] = mapped_column(String(16))
+    method: Mapped[str] = mapped_column(String(8))
+    created_at: Mapped[int] = mapped_column(BigInteger)
