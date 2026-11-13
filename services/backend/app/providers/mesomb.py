@@ -202,7 +202,8 @@ class MeSombClient:
     def deposit(self, *, external_id: str, amount: int, receiver: str, service: str):
         """Internal transport only; caller MUST persist/claim before dispatch.
 
-        SDK 2.1.2 uses receiver, payment/deposit/ and body trxID. This is not
+        SDK 2.1.2 uses receiver and payment/deposit/, moving trxID into the
+        X-MeSomb-TrxID header before signing. This is not
         a public payout endpoint or a guarantee of provider idempotency.
         Initiation never proves recipient delivery; resolve by lookup.
         """
@@ -214,7 +215,7 @@ class MeSombClient:
         data = self._request('POST', 'payment/deposit/', external_id=external_id, body={
             'amount': amount, 'receiver': local_phone(receiver), 'service': service,
             'country': 'CM', 'currency': 'XAF', 'amount_currency': 'XAF',
-            'conversion': False, 'trxID': external_id,
+            'conversion': False,
         })
         if not isinstance(data, dict):
             raise ReconciliationRequired('Invalid provider response.')

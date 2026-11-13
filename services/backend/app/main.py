@@ -20,6 +20,8 @@ from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
 from .people import router as people_router
 from .receiving import router as receiving_router
+from .person_orders import router as person_orders_router
+from .person_execution import router as person_execution_router
 from .mesomb_payments import configuration, router as mesomb_router, lifespan_with_payments
 from .providers.mesomb import MeSombClient
 
@@ -148,7 +150,9 @@ def create_app(database_url=None):
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     app.include_router(payment_router(database, actor, settings))
     app.include_router(people_router(database, actor))
-    app.include_router(receiving_router(database, actor))
+    app.include_router(receiving_router(database, actor, mesomb_config))
+    app.include_router(person_orders_router(database, actor, mesomb_config))
+    app.include_router(person_execution_router(database, actor, sessions, mesomb_config))
     app.include_router(mesomb_router(database, actor, sessions, mesomb_config))
     app.include_router(payout_probe_router(sessions, mesomb_config, settings.environment))
     return app

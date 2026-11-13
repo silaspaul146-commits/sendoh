@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, or_, update, func
 from sqlalchemy.exc import IntegrityError
-from .models import User, MoneyRequest, Notification, PushDevice, PushDelivery
+from .models import User, MoneyRequest, Notification, PushDevice, PushDelivery, PersonOrder
+
+from .person_execution_state import request_execution, request_payment_state
 
 class Lookup(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
@@ -35,7 +37,7 @@ def view(db, r, actor_id):
     return dict(id=r.id, amount=r.amount, currency='XAF', reason=r.reason,
         requester=person(db.get(User, r.requester_id)), recipient=person(db.get(User, r.recipient_id)),
         direction='SENT' if actor_id == r.requester_id else 'RECEIVED',
-        status=state(r), expires_at=r.expires_at, created_at=r.created_at,
+        status=request_payment_state(db, r.id) or state(r), expires_at=r.expires_at, created_at=r.created_at,
         payment_available=False)
 
 def notify(db, r, recipient, kind):
@@ -117,13 +119,17 @@ def router(database, actor):
 
     @routes.post('/money-requests/{id}/respond')
     def respond(id: str, data: Respond, user=Depends(actor), db=Depends(database)):
-        r = owned(db, id, user)
+        r = db.scalar(select(MoneyRequest).where(MoneyRequest.id == id).with_for_update())
+        if r is None or user.id not in (r.requester_id, r.recipient_id):
+            raise HTTPException(404, 'Request not found.')
         decline = data.action == 'DECLINE'
         if user.id != (r.recipient_id if decline else r.requester_id):
             raise HTTPException(403, 'This action is not yours.')
         desired = 'DECLINED' if decline else 'CANCELLED'
         if r.status == desired:
             return view(db, r, user.id)
+        if request_execution(db, r.id):
+            raise HTTPException(409, 'A payment is in progress or completed. Check its status.')
         if state(r) != 'PENDING':
             raise HTTPException(409, 'This request is no longer pending.')
         changed = db.execute(update(MoneyRequest).where(MoneyRequest.id == id, MoneyRequest.status == 'PENDING',
@@ -131,6 +137,10 @@ def router(database, actor):
             .values(status=desired))
         if changed.rowcount != 1:
             db.rollback(); raise HTTPException(409, 'Request changed. Refresh its status.')
+        # Prepared orders have not collected funds and can be invalidated atomically.
+        db.execute(update(PersonOrder).where(PersonOrder.request_id == id,
+            PersonOrder.status == 'READY', PersonOrder.collection_status == 'NOT_STARTED',
+            PersonOrder.delivery_status == 'NOT_STARTED').values(status='CANCELLED'))
         notify(db, r, r.requester_id if decline else r.recipient_id,
             'REQUEST_DECLINED' if decline else 'REQUEST_CANCELLED')
         db.commit(); db.refresh(r)

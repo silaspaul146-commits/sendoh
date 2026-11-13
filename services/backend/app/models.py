@@ -65,6 +65,7 @@ class Participant(Base):
 
 class Notification(Base):
     __tablename__ = 'notifications'
+    order_id: Mapped[str | None] = mapped_column(String(36))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     collection_id: Mapped[str | None] = mapped_column(ForeignKey('collections.id'))
@@ -271,3 +272,94 @@ class ReceivingDestination(Base):
     phone: Mapped[str] = mapped_column(String(16))
     method: Mapped[str] = mapped_column(String(8))
     created_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class PersonQuote(Base):
+    __tablename__ = 'person_quotes'
+    __table_args__ = (CheckConstraint('expires_at > created_at'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    payer_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    beneficiary_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    request_id: Mapped[str | None] = mapped_column(ForeignKey('money_requests.id'))
+    destination_id: Mapped[str] = mapped_column(ForeignKey('receiving_destinations.id'))
+    application_hash: Mapped[str] = mapped_column(String(64))
+    policy_hash: Mapped[str] = mapped_column(String(64))
+    policy: Mapped[dict] = mapped_column(JSON)
+    amounts: Mapped[dict] = mapped_column(JSON)
+    payer_phone: Mapped[str] = mapped_column(String(16))
+    payer_method: Mapped[str] = mapped_column(String(8))
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class PersonOrder(Base):
+    __tablename__ = 'person_orders'
+    __table_args__ = (
+        UniqueConstraint('payer_id', 'request_key', name='uq_person_order_key'),
+        UniqueConstraint('quote_id', name='uq_person_order_quote'),
+        Index('uq_ready_order_request', 'request_id', unique=True,
+              sqlite_where=text("status = 'READY'"), postgresql_where=text("status = 'READY'")),
+        CheckConstraint("status IN ('READY','CANCELLED','EXPIRED')"),
+        CheckConstraint("collection_status = 'NOT_STARTED'"),
+        CheckConstraint("delivery_status = 'NOT_STARTED'"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    quote_id: Mapped[str] = mapped_column(ForeignKey('person_quotes.id'))
+    payer_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    beneficiary_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    request_id: Mapped[str | None] = mapped_column(ForeignKey('money_requests.id'))
+    request_key: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(16), default='READY')
+    collection_status: Mapped[str] = mapped_column(String(16), default='NOT_STARTED')
+    delivery_status: Mapped[str] = mapped_column(String(16), default='NOT_STARTED')
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class PersonExecution(Base):
+    __tablename__ = 'person_executions'
+    __table_args__ = (
+        Index('uq_active_request_execution', 'request_id', unique=True,
+              sqlite_where=text("state != 'FAILED'"), postgresql_where=text("state != 'FAILED'")),
+        CheckConstraint("state IN ('COLLECTING','FUNDED','DELIVERING','SUCCEEDED','FAILED','REVIEW')"),
+    )
+    order_id: Mapped[str] = mapped_column(ForeignKey('person_orders.id'), primary_key=True)
+    request_id: Mapped[str | None] = mapped_column(ForeignKey('money_requests.id'))
+    application_hash: Mapped[str] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(16), default='COLLECTING')
+    reason: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    updated_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class PersonPaymentLeg(Base):
+    __tablename__ = 'person_payment_legs'
+    __table_args__ = (
+        UniqueConstraint('order_id', 'kind', name='uq_person_order_leg'),
+        CheckConstraint("kind IN ('COLLECT','DELIVER')"),
+        CheckConstraint("status IN ('PENDING','SUCCEEDED','FAILED','REFUNDED')"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    order_id: Mapped[str] = mapped_column(ForeignKey('person_executions.order_id'))
+    application_hash: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(8))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    method: Mapped[str] = mapped_column(String(8))
+    phone: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default='PENDING')
+    provider_id: Mapped[str | None] = mapped_column(String(120))
+    net: Mapped[Decimal | None] = mapped_column(Numeric(20,6))
+    fee: Mapped[Decimal | None] = mapped_column(Numeric(20,6))
+    review_reason: Mapped[str | None] = mapped_column(String(80))
+    lease_owner: Mapped[str | None] = mapped_column(String(36))
+    lease_until: Mapped[int] = mapped_column(BigInteger, default=0)
+    next_check_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class ProviderReferenceClaim(Base):
+    __tablename__ = 'provider_reference_claims'
+    application_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    sendoh_reference: Mapped[str] = mapped_column(String(36))

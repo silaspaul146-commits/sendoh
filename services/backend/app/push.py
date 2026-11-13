@@ -32,7 +32,7 @@ class FCMSender:
         self.transport = Request()
         self.url = f'https://fcm.googleapis.com/v1/projects/{project}/messages:send'
 
-    def send(self, token, notification_id, *, otp=None):
+    def send(self, token, notification_id, *, otp=None, body=None):
         try:
             if not self.credentials.valid:
                 # Limit OAuth transport waits as well as the FCM request.
@@ -41,7 +41,7 @@ class FCMSender:
                 'Authorization': 'Bearer ' + self.credentials.token}, timeout=15,
                 json={'message': {
                     'token': token,
-                    'notification': {'title': 'Sendoh', 'body': f'Testing code: {otp}. Expires in 5 minutes. Do not share it.' if otp else 'You have a new update. Open Sendoh to view it.'},
+                    'notification': {'title': 'Sendoh', 'body': f'Testing code: {otp}. Expires in 5 minutes. Do not share it.' if otp else (body or 'You have a new update. Open Sendoh to view it.')},
                     'data': {'kind': 'staging_otp'} if otp else {'notification_id': notification_id},
                     'android': {'priority': 'high', 'ttl': '300s' if otp else '3600s',
                         'notification': {'tag': notification_id}},
@@ -115,13 +115,18 @@ def process_one(sessions, sender, environment):
         if valid and notification.kind == 'REQUEST_RECEIVED':
             from .models import MoneyRequest
             request = db.get(MoneyRequest, notification.request_id)
-            valid = bool(request and request.status == 'PENDING' and
+            from .person_execution_state import request_execution
+            valid = bool(request and not request_execution(db, request.id) and request.status == 'PENDING' and
                 (request.expires_at is None or request.expires_at > now))
         state, code = ('SKIPPED', 'NO_LONGER_ELIGIBLE') if not valid else ('SENT', None)
         invalidate = False
         if valid:
             try:
-                sender.send(device.token, notification.id)
+                if notification.order_id:
+                    from .notifications import serialize
+                    sender.send(device.token, notification.id, body=serialize(db, notification)['title'])
+                else:
+                    sender.send(device.token, notification.id)
             except SendFailure as exc:
                 code, invalidate = exc.code, exc.invalid_token
                 state = 'DEAD' if exc.permanent or job.attempts >= 6 else 'PENDING'

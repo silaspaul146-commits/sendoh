@@ -18,7 +18,7 @@ def test_deposit_uses_receiver_and_separate_endpoint_and_reference():
         assert request.headers['x-mesomb-trxid'] == 'sendoh-payout-001'
         assert request.headers['authorization'].startswith('HMAC-SHA1 Credential=access/')
         assert json.loads(request.content) == dict(amount=1000, receiver='600000001', service='MTN',
-            country='CM', currency='XAF', amount_currency='XAF', conversion=False, trxID='sendoh-payout-001')
+            country='CM', currency='XAF', amount_currency='XAF', conversion=False)
         return httpx.Response(202, json={'status': 'PENDING'})
     api = MeSombClient(Credentials('app', 'access', 'secret'), transport=httpx.MockTransport(handler))
     assert deposit(api)['status'] == 'PENDING'

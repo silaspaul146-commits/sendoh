@@ -1,7 +1,7 @@
 """Recipient-owned destinations and non-charging Request/Pay preflight.
 
 An authenticated phone identity is not proof of an active mobile-money account.
-No provider execution or quote is exposed until settlement policy is implemented.
+Provider execution remains disabled; quotes require explicit sandbox fee policy.
 """
 import time
 from typing import Literal
@@ -14,6 +14,8 @@ from sqlalchemy.exc import IntegrityError
 from .models import User, PhoneIdentity, ReceivingDestination, MoneyRequest
 from .people import state, person
 from .providers.mesomb import local_phone
+from .fee_quotes import configured_policy
+from .person_execution_state import request_execution
 
 
 class DestinationConsent(BaseModel):
@@ -66,7 +68,7 @@ def own_view(db, user_id):
         provider_verified=False, created_at=d.created_at))
 
 
-def router(database, actor):
+def router(database, actor, config=None):
     routes = APIRouter(prefix='/api/v1')
 
     @routes.get('/me/receiving-destination')
@@ -105,6 +107,8 @@ def router(database, actor):
             r = db.get(MoneyRequest, data.request_id)
             if r is None or r.recipient_id != user.id:
                 raise HTTPException(404, 'Payable request not found.')
+            if request_execution(db, r.id):
+                raise HTTPException(409, 'This request has a payment in progress or completed.')
             if state(r) != 'PENDING':
                 raise HTTPException(409, 'This request is no longer payable.')
             recipient_id, amount = r.requester_id, r.amount
@@ -122,7 +126,9 @@ def router(database, actor):
             blockers.append('PAYER_IDENTITY_REQUIRED')
         if not receiving_ready:
             blockers.append('RECIPIENT_RECEIVING_DETAILS_REQUIRED')
-        blockers.extend(['FEE_QUOTE_NOT_CONFIGURED', 'RECIPIENT_DELIVERY_NOT_ENABLED'])
+        if config is None or configured_policy() is None:
+            blockers.append('FEE_QUOTE_NOT_CONFIGURED')
+        blockers.append('RECIPIENT_DELIVERY_NOT_ENABLED')
         # Do not expose a recipient phone or internal destination ID to a payer.
         # This is not a quote/reservation: later execution MUST recheck expiry,
         # ownership, consent version and fee policy atomically before charging.

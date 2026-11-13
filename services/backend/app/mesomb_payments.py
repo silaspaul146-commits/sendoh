@@ -147,6 +147,11 @@ def reconcile(sessions, config, api, payment_id):
                 reason = 'CONFLICTING_PROVIDER_ACCOUNTING'
                 p.review_reason = reason
         if desired is not None and reason is None:
+            from .provider_claims import claim
+            if not claim(db, config.application_hash, transaction['pk'], p.id):
+                reason = 'DUPLICATE_PROVIDER_TRANSACTION'
+                p.review_reason = reason
+        if desired is not None and reason is None:
             transitions = {'PENDING': {'PENDING','SUCCEEDED','FAILED','REFUNDED'},
                            'SUCCEEDED': {'SUCCEEDED','REFUNDED'}, 'FAILED': {'FAILED'},
                            'REFUNDED': {'REFUNDED'}}
@@ -186,6 +191,8 @@ def run_due(sessions, config, api):
             .order_by(Payment.next_check_at).limit(20)))
     for payment_id in ids:
         reconcile(sessions, config, api, payment_id)
+    from .person_execution import run_due as run_person_due
+    run_person_due(sessions, config, api)
 
 
 def lifespan_with_payments(base_lifespan, sessions, config):

@@ -7,9 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update, func, or_, and_
 from sqlalchemy.exc import IntegrityError
 from .models import (Notification, PushDevice, PushDelivery, Participant, Collection,
-                     PhoneIdentity, AuthSession, RefreshSession, User, MoneyRequest)
+                     PhoneIdentity, AuthSession, RefreshSession, User, MoneyRequest, PersonOrder, PersonQuote)
 
 KINDS = {
+    'PERSON_RECEIVED': 'Payment received',
+    'PERSON_DELIVERED': 'Payment delivered',
+    'PERSON_FAILED': 'Payment failed',
+    'PERSON_REVIEW': 'Payment needs review',
     'REQUEST_RECEIVED': 'You received a money request',
     'REQUEST_DECLINED': 'Your money request was declined',
     'REQUEST_CANCELLED': 'A money request was cancelled',
@@ -57,6 +61,21 @@ def materialize_invitations(db, user):
         emit(db, user.id, p, 'INVITED', deliver=False)
 
 def serialize(db, n):
+    if n.order_id:
+        o = db.get(PersonOrder, n.order_id)
+        q = db.get(PersonQuote, o.quote_id)
+        sender = db.get(User, o.payer_id).display_name
+        recipient = db.get(User, o.beneficiary_id).display_name
+        amount = q.amounts['recipient_amount']
+        title = {
+            'PERSON_RECEIVED': f'{sender} sent you {amount} FCFA',
+            'PERSON_DELIVERED': f'{amount} FCFA delivered to {recipient}',
+            'PERSON_FAILED': f'Payment of {amount} FCFA to {recipient} failed',
+            'PERSON_REVIEW': f'Payment of {amount} FCFA to {recipient} needs review',
+        }[n.kind]
+        return dict(id=n.id, kind=n.kind, title=title, order_id=o.id, request_id=o.request_id,
+            collection_name='Payment update', created_at=n.created_at, read_at=n.read_at,
+            invitation_available=False)
     if n.request_id:
         r = db.get(MoneyRequest, n.request_id)
         return dict(id=n.id, kind=n.kind, title=KINDS[n.kind], request_id=n.request_id,
