@@ -2,6 +2,7 @@ import os
 from alembic import context
 from sqlalchemy import create_engine
 from app.models import Base
+from app.payout_probe import SandboxPayoutProbe  # Register its table in Base.metadata.
 url=os.getenv('DATABASE_URL',context.config.get_main_option('sqlalchemy.url'))
 if context.is_offline_mode():
     context.configure(url=url,target_metadata=Base.metadata,literal_binds=True)
