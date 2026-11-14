@@ -5,6 +5,19 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api.dart';
 import 'design.dart';
 import 'people_flows.dart';
+import 'person_payments.dart';
+
+String requestStatus(dynamic value) =>
+    const {
+      'PENDING': 'Awaiting payment',
+      'PROCESSING': 'Payment in progress',
+      'PAYMENT_REVIEW': 'Payment under review',
+      'PAID': 'Paid',
+      'DECLINED': 'Declined',
+      'CANCELLED': 'Cancelled',
+      'EXPIRED': 'Expired',
+    }[value] ??
+    'Checking status';
 
 class ApiPeopleGateway implements PeopleFlowGateway {
   ApiPeopleGateway(this.api, this.userId);
@@ -38,17 +51,16 @@ class ApiPeopleGateway implements PeopleFlowGateway {
   @override
   Future<void> openCheckout(BuildContext context, PeopleDraft draft) async {
     if (draft.intent == PeopleIntent.pay) {
-      await showDialog<void>(
-          context: context,
-          builder: (c) => AlertDialog(
-                  title: const Text('Payments are not available yet'),
-                  content: const Text(
-                      'No payment has been submitted. Live quotes and provider authorisation are still being connected.'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(c),
-                        child: const Text('Done'))
-                  ]));
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => PersonCheckout(
+                  api: api,
+                  target: {
+                    'recipient_id': draft.person.id,
+                    'amount': draft.amount
+                  },
+                  method: draft.method == 'Orange Money' ? 'ORANGE' : 'MTN')));
       return;
     }
     final body = <String, dynamic>{
@@ -103,7 +115,9 @@ class _RequestSendState extends State<RequestSend> {
   Future<void> restore() async {
     try {
       final saved = await storage.read(key: storageKey);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       if (saved != null) {
         envelope = Map<String, dynamic>.from(jsonDecode(saved));
       } else if (widget.body != null) {
@@ -119,11 +133,15 @@ class _RequestSendState extends State<RequestSend> {
     } catch (_) {
       error = 'Couldn’t restore the request. Please try again.';
     }
-    if (mounted) setState(() => busy = false);
+    if (mounted) {
+      setState(() => busy = false);
+    }
   }
 
   Future<void> send() async {
-    if (busy || envelope == null) return;
+    if (busy || envelope == null) {
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -134,7 +152,9 @@ class _RequestSendState extends State<RequestSend> {
       final data = await widget.api.request('/money-requests',
           body: Map<String, dynamic>.from(envelope!['body']),
           key: envelope!['key']);
-      if (mounted) setState(() => result = Map<String, dynamic>.from(data));
+      if (mounted) {
+        setState(() => result = Map<String, dynamic>.from(data));
+      }
       await storage.delete(key: storageKey);
     } catch (e) {
       if (e is ApiException && [403, 404, 422, 429].contains(e.status)) {
@@ -151,7 +171,9 @@ class _RequestSendState extends State<RequestSend> {
             : 'Request saved. Local cleanup needs a retry; reopening will check the same request.');
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -187,8 +209,8 @@ class _RequestSendState extends State<RequestSend> {
         if (result != null) ...[
           const Icon(Icons.check_circle_outline, size: 40),
           const SizedBox(height: 16),
-          Text('Status: ${result!['status']}'),
-          const Text('The request is saved on Sendoh. No money has moved.'),
+          Text(requestStatus(result!['status'])),
+          const Text('Your request has been sent. Track the response here.'),
           TextButton(
               onPressed: () => Navigator.pushReplacement(
                   context,
@@ -238,7 +260,9 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
                   MaterialPageRoute<void>(
                       builder: (_) =>
                           RequestSend(api: widget.api, userId: widget.userId)));
-              if (mounted) setState(load);
+              if (mounted) {
+                setState(load);
+              }
             },
             child: const Text('Resume an interrupted request')),
         FutureBuilder<dynamic>(
@@ -248,9 +272,13 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
                 return const Text(
                     'Requests could not load. Use Refresh to try again.');
               }
-              if (!snapshot.hasData) return const LinearProgressIndicator();
+              if (!snapshot.hasData) {
+                return const LinearProgressIndicator();
+              }
               final rows = snapshot.data['items'] as List;
-              if (rows.isEmpty) return const Text('No money requests yet.');
+              if (rows.isEmpty) {
+                return const Text('No money requests yet.');
+              }
               return Column(children: [
                 const Text('Latest 100 requests · sent and received'),
                 ...rows.map((r) => ListTile(
@@ -258,7 +286,7 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
                     title: Text(
                         '${r['amount']} FCFA · ${r['direction'] == 'SENT' ? r['recipient']['name'] : r['requester']['name']}'),
                     subtitle: Text(
-                        '${r['reason']} · ${r['direction']} · ${r['status']}'),
+                        '${r['reason']} · ${r['direction'] == 'SENT' ? 'Sent' : 'Received'} · ${requestStatus(r['status'])}'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
                       await Navigator.push(
@@ -266,7 +294,9 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
                           MaterialPageRoute<void>(
                               builder: (_) => MoneyRequestDetail(
                                   api: widget.api, id: r['id'])));
-                      if (mounted) setState(load);
+                      if (mounted) {
+                        setState(load);
+                      }
                     })),
               ]);
             }),
@@ -298,11 +328,17 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
     });
     try {
       final r = await widget.api.request('/money-requests/${widget.id}');
-      if (mounted) setState(() => data = Map<String, dynamic>.from(r));
+      if (mounted) {
+        setState(() => data = Map<String, dynamic>.from(r));
+      }
     } catch (e) {
-      if (mounted) setState(() => error = '$e');
+      if (mounted) {
+        setState(() => error = '$e');
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -322,7 +358,9 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
                       onPressed: () => Navigator.pop(c, true),
                       child: const Text('Confirm'))
                 ]));
-    if (!mounted || yes != true) return;
+    if (!mounted || yes != true) {
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -330,11 +368,17 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
     try {
       final r = await widget.api.request('/money-requests/${widget.id}/respond',
           body: {'action': action});
-      if (mounted) setState(() => data = Map<String, dynamic>.from(r));
+      if (mounted) {
+        setState(() => data = Map<String, dynamic>.from(r));
+      }
     } catch (e) {
-      if (mounted) setState(() => error = '$e');
+      if (mounted) {
+        setState(() => error = '$e');
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -360,15 +404,43 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
                   const TextStyle(fontSize: 32, fontWeight: FontWeight.w600)),
           Text(data!['reason']),
           const SizedBox(height: 20),
-          Text('Status: ${data!['status']}'),
+          StatusBadge(requestStatus(data!['status']),
+              pending: data!['status'] == 'PENDING'),
+          if (data!['payment_order_id'] != null)
+            TextButton(
+                onPressed: () async {
+                  await Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => PersonCheckout(
+                              api: widget.api,
+                              orderId: data!['payment_order_id'])));
+                  if (mounted) {
+                    load();
+                  }
+                },
+                child: const Text('View payment')),
           if (data!['expires_at'] != null)
             Text(
                 'Expires: ${DateTime.fromMillisecondsSinceEpoch((data!['expires_at'] as int) * 1000).toLocal()}'),
           const SizedBox(height: 24),
           if (data!['status'] == 'PENDING') ...[
             if (data!['direction'] == 'RECEIVED')
-              const Text(
-                  'Payment is not available yet. This request has not charged you.'),
+              FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          await Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                  builder: (_) => PersonCheckout(
+                                      api: widget.api,
+                                      target: {'request_id': widget.id})));
+                          if (mounted) {
+                            load();
+                          }
+                        },
+                  child: const Text('Review payment')),
             OutlinedButton(
                 onPressed: busy ? null : respond,
                 child: Text(data!['direction'] == 'SENT'

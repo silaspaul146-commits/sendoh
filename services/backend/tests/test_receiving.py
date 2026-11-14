@@ -50,7 +50,7 @@ def test_consent_replay_version_history_and_privacy(client):
             ReceivingDestination.user_id == uid).order_by(ReceivingDestination.version)).all()
         assert [r.method for r in rows] == ['MTN', 'ORANGE']
     assert client.get('/api/v1/me/receiving-destination', headers=headers('bob')).json() == {
-        'version': 0, 'destination': None}
+        'version': 0, 'destination': None, 'account_masked_phone': None}
 
 
 def test_identity_change_invalidates_old_destination(client):

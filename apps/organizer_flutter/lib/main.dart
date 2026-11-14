@@ -1,3 +1,4 @@
+import 'person_payments.dart';
 import 'home.dart';
 import 'coordination.dart';
 import 'package:flutter/material.dart';
@@ -478,6 +479,22 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
               }
             },
             child: const Text('Edit profile')),
+        ListTile(
+            leading: const Icon(Icons.account_balance_outlined),
+            title: const Text('Receiving details'),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                    builder: (_) =>
+                        ReceivingDetails(api: ref.read(apiProvider))))),
+        ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: const Text('Person payments'),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                    builder: (_) =>
+                        PersonPaymentHistory(api: ref.read(apiProvider))))),
         ListTile(
             leading: const Icon(Icons.fingerprint),
             title: const Text('Device unlock'),

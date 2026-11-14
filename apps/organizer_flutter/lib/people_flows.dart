@@ -97,7 +97,9 @@ class _PeopleFlowState extends State<PeopleFlow> {
     try {
       final result =
           await gateway.resolve(identity.text.trim(), fromQr: widget.nearby);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         person = result;
         step = 1;
@@ -108,7 +110,9 @@ class _PeopleFlowState extends State<PeopleFlow> {
             'We couldn’t confirm this person. Check the details and try again.');
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -124,7 +128,9 @@ class _PeopleFlowState extends State<PeopleFlow> {
     });
     try {
       final value = await gateway.scan(context);
-      if (!mounted || value == null) return;
+      if (!mounted || value == null) {
+        return;
+      }
       identity.text = value;
       // Require an explicit lookup and identity confirmation after scanning.
     } catch (_) {
@@ -133,7 +139,9 @@ class _PeopleFlowState extends State<PeopleFlow> {
             'Camera unavailable. You can paste the Sendoh code instead.');
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -144,11 +152,15 @@ class _PeopleFlowState extends State<PeopleFlow> {
         initialDate: expiry ?? now.add(const Duration(days: 7)),
         firstDate: DateTime(now.year, now.month, now.day),
         lastDate: now.add(const Duration(days: 365)));
-    if (mounted && date != null) setState(() => expiry = date);
+    if (mounted && date != null) {
+      setState(() => expiry = date);
+    }
   }
 
   Future<void> checkout() async {
-    if (busy || person == null || widget.gateway == null) return;
+    if (busy || person == null || widget.gateway == null) {
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -170,7 +182,9 @@ class _PeopleFlowState extends State<PeopleFlow> {
             'Couldn’t open the next step. Check Activity before repeating an action.');
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -346,16 +360,18 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                         ? 'Enter an amount greater than zero.'
                                         : null),
                             const SizedBox(height: 20),
-                            TextFormField(
-                                controller: note,
-                                maxLength: 140,
-                                decoration: InputDecoration(
-                                    labelText:
-                                        request ? 'Reason' : 'Note (optional)'),
-                                validator: (v) =>
-                                    request && (v ?? '').trim().isEmpty
-                                        ? 'Add a reason for this request.'
-                                        : null),
+                            if (request)
+                              TextFormField(
+                                  controller: note,
+                                  maxLength: 140,
+                                  decoration: InputDecoration(
+                                      labelText: request
+                                          ? 'Reason'
+                                          : 'Note (optional)'),
+                                  validator: (v) =>
+                                      request && (v ?? '').trim().isEmpty
+                                          ? 'Add a reason for this request.'
+                                          : null),
                             if (request) ...[
                               ListTile(
                                   contentPadding: EdgeInsets.zero,
@@ -392,11 +408,17 @@ class _PeopleFlowState extends State<PeopleFlow> {
                             ],
                             const SizedBox(height: 24),
                             FilledButton(
-                                onPressed: () {
-                                  if (form.currentState!.validate()) {
-                                    setState(() => step = 3);
-                                  }
-                                },
+                                onPressed: busy
+                                    ? null
+                                    : () {
+                                        if (form.currentState!.validate()) {
+                                          if (request) {
+                                            setState(() => step = 3);
+                                          } else {
+                                            checkout();
+                                          }
+                                        }
+                                      },
                                 child: const Text('Review details')),
                           ],
                           if (step == 3) ...[

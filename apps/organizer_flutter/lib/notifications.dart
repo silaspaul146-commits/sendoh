@@ -1,3 +1,4 @@
+import 'person_payments.dart';
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'design.dart';
@@ -155,7 +156,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return;
       }
 
-      if (item['request_id'] != null) {
+      if (item['order_id'] != null) {
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) =>
+                PersonCheckout(api: widget.api, orderId: item['order_id'])));
+      } else if (item['request_id'] != null) {
         await Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) =>
                 MoneyRequestDetail(api: widget.api, id: item['request_id'])));

@@ -34,10 +34,12 @@ def state(r):
     return 'EXPIRED' if r.status == 'PENDING' and r.expires_at is not None and r.expires_at <= int(time.time()) else r.status
 
 def view(db, r, actor_id):
+    execution = request_execution(db, r.id)
     return dict(id=r.id, amount=r.amount, currency='XAF', reason=r.reason,
         requester=person(db.get(User, r.requester_id)), recipient=person(db.get(User, r.recipient_id)),
         direction='SENT' if actor_id == r.requester_id else 'RECEIVED',
         status=request_payment_state(db, r.id) or state(r), expires_at=r.expires_at, created_at=r.created_at,
+        payment_order_id=execution.order_id if execution else None,
         payment_available=False)
 
 def notify(db, r, recipient, kind):

@@ -29,25 +29,28 @@ class AcceptQuote(BaseModel):
     consent: Literal['ACCEPT_QUOTED_TOTAL']
 
 
-def quote_view(db, q):
+def quote_view(db, q, config=None):
     d = db.get(ReceivingDestination, q.destination_id)
     return dict(id=q.id, purpose='REQUEST_PAYMENT' if q.request_id else 'PERSON_PAYMENT',
         request_id=q.request_id, recipient=person(db.get(User, q.beneficiary_id)),
         payer_method=q.payer_method, receiving_method=d.method,
         amounts=q.amounts, fee_policy_version=q.policy['version'],
         created_at=q.created_at, expires_at=q.expires_at,
-        expired=q.expires_at <= int(time.time()), mode='SANDBOX', execution_available=False)
+        expired=q.expires_at <= int(time.time()), mode='SANDBOX', execution_available=bool(enabled(config) and q.expires_at > int(time.time())
+            and q.amounts['delivery_fee'] == 0 and q.payer_phone in config.test_phones
+            and d.phone in config.test_phones))
 
 
 def order_view(db, o, config=None):
     from .person_execution import execution_view
     execution = execution_view(db, o.id)
-    result = dict(id=o.id, quote=quote_view(db, db.get(PersonQuote, o.quote_id)),
+    quote = quote_view(db, db.get(PersonQuote, o.quote_id), config)
+    result = dict(id=o.id, quote=quote,
         status='EXPIRED' if o.status == 'READY' and o.expires_at <= int(time.time()) else o.status,
         collection_status=o.collection_status, delivery_status=o.delivery_status,
         receipt_available=False, execution_available=bool(enabled(config) and not execution
             and o.status == 'READY' and o.expires_at > int(time.time())
-            and db.get(PersonQuote, o.quote_id).amounts['delivery_fee'] == 0),
+            and quote['execution_available']),
         created_at=o.created_at, expires_at=o.expires_at)
     if execution:
         result.update(status=execution['state'], collection_status=execution['collection_status'],
@@ -116,14 +119,14 @@ def router(database, actor, config):
             expires_at=min(now + 300, r.expires_at) if r and r.expires_at else now + 300)
         db.add(q)
         db.commit()
-        return quote_view(db, q)
+        return quote_view(db, q, config)
 
     @routes.get('/quotes/{id}')
     def get_quote(id: str, user=Depends(actor), db=Depends(database)):
         q = db.get(PersonQuote, id)
         if q is None or q.payer_id != user.id:
             raise HTTPException(404, 'Quote not found.')
-        return quote_view(db, q)
+        return quote_view(db, q, config)
 
     @routes.post('/orders', status_code=201)
     def accept(data: AcceptQuote, idempotency_key: str = Header(min_length=8, max_length=120),

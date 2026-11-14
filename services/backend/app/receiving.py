@@ -1,7 +1,7 @@
 """Recipient-owned destinations and non-charging Request/Pay preflight.
 
 An authenticated phone identity is not proof of an active mobile-money account.
-Provider execution remains disabled; quotes require explicit sandbox fee policy.
+Execution is separately gated; quotes require explicit sandbox fee policy.
 """
 import time
 from typing import Literal
@@ -15,7 +15,7 @@ from .models import User, PhoneIdentity, ReceivingDestination, MoneyRequest
 from .people import state, person
 from .providers.mesomb import local_phone
 from .fee_quotes import configured_policy
-from .person_execution_state import request_execution
+from .person_execution_state import request_execution, enabled
 
 
 class DestinationConsent(BaseModel):
@@ -62,7 +62,8 @@ def destination_current(db, destination):
 
 def own_view(db, user_id):
     d = current_destination(db, user_id)
-    return dict(version=d.version if d else 0, destination=None if d is None else dict(
+    phone = identity_phone(db, user_id)
+    return dict(account_masked_phone=('+237 •••••' + phone[-4:]) if phone else None, version=d.version if d else 0, destination=None if d is None else dict(
         id=d.id, method=d.method, masked_phone='+237 •••••' + d.phone[-4:],
         identity_current=destination_current(db, d),
         provider_verified=False, created_at=d.created_at))
@@ -128,7 +129,11 @@ def router(database, actor, config=None):
             blockers.append('RECIPIENT_RECEIVING_DETAILS_REQUIRED')
         if config is None or configured_policy() is None:
             blockers.append('FEE_QUOTE_NOT_CONFIGURED')
-        blockers.append('RECIPIENT_DELIVERY_NOT_ENABLED')
+        if not enabled(config):
+            blockers.append('RECIPIENT_DELIVERY_NOT_ENABLED')
+        if config and (identity_phone(db, user.id) not in config.test_phones or
+                       (destination is not None and destination.phone not in config.test_phones)):
+            blockers.append('PAYMENT_ROUTE_UNAVAILABLE')
         # Do not expose a recipient phone or internal destination ID to a payer.
         # This is not a quote/reservation: later execution MUST recheck expiry,
         # ownership, consent version and fee policy atomically before charging.
@@ -137,6 +142,6 @@ def router(database, actor, config=None):
             recipient_amount=amount, currency='XAF',
             receiving_details_ready=receiving_ready,
             receiving_method=destination.method if receiving_ready else None,
-            quote=None, can_pay=False, blockers=blockers)
+            quote=None, can_pay=False, can_review=not blockers, blockers=blockers)
 
     return routes
