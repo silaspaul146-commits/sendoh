@@ -41,3 +41,34 @@ test('guest proxy enforces origin, session and action boundaries and hides token
   assert.match(logout.headers.get('set-cookie'),/Expires=Thu, 01 Jan 1970/i);
  }finally{global.fetch=originalFetch;if(originalBase===undefined)delete process.env.API_INTERNAL_URL;else process.env.API_INTERNAL_URL=originalBase;}
 });
+
+test('provider proxy fixes payment purpose and never accepts client-set outcomes',async()=>{
+ const originalFetch=global.fetch,originalBase=process.env.API_INTERNAL_URL;
+ process.env.API_INTERNAL_URL='https://backend.example';
+ const calls=[];
+ global.fetch=async(url,options)=>{calls.push({url,options});return Response.json({id:'attempt',status:'PENDING'});};
+ const send=body=>POST(new NextRequest('https://sendoh.example/api/guest',{
+  method:'POST',headers:{Origin:'https://sendoh.example','Content-Type':'application/json',
+  Cookie:'sendoh_guest_session=private-access'},body:JSON.stringify(body)}));
+ try{
+  const body={action:'payment-create',token:'a/b',amount:1000,method:'MTN',
+   payer_phone:'600000001',request_key:'persisted-key',status:'SUCCEEDED',beneficiary_id:'attacker'};
+  assert.equal((await send(body)).status,200);
+  assert.equal(calls[0].url,'https://backend.example/api/v1/provider-payments');
+  assert.deepEqual(JSON.parse(calls[0].options.body),{
+   collection_token:'a/b',amount:1000,method:'MTN',payer_phone:'600000001'});
+  assert.equal(calls[0].options.headers['Idempotency-Key'],'persisted-key');
+  await send(body);
+  assert.equal(calls[1].options.headers['Idempotency-Key'],'persisted-key');
+  assert.equal((await send({action:'payment-result',id:'attempt',status:'SUCCEEDED'})).status,400);
+  assert.equal(calls.length,2);
+  assert.equal((await send({...body,amount:0})).status,400);
+  assert.equal((await send({...body,payer_phone:'wrong'})).status,400);
+  assert.equal((await send({...body,method:'OTHER'})).status,400);
+  await send({action:'payment-refresh',id:'attempt/a'});
+  assert.equal(calls[2].url,'https://backend.example/api/v1/provider-payments/attempt%2Fa/refresh');
+  assert.equal(calls[2].options.body,'{}');
+  await send({action:'payment-history',token:'a/b',before:'previous'});
+  assert.equal(calls[3].url,'https://backend.example/api/v1/me/provider-payments?payer_only=true&collection_token=a%2Fb&before=previous');
+ }finally{global.fetch=originalFetch;if(originalBase===undefined)delete process.env.API_INTERNAL_URL;else process.env.API_INTERNAL_URL=originalBase;}
+});
