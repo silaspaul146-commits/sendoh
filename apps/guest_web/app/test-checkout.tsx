@@ -3,106 +3,161 @@ import {useEffect,useRef,useState} from 'react';
 import {guestRequest} from './guest-identity';
 import {money,PaymentLogo,Row,Icon} from './components';
 
-type Payment={id:string;reference:string;collection_name:string;payer_name:string;amount:number;fee_amount:number;total_amount:number;method:'MTN'|'ORANGE';note:string;status:'PENDING'|'SUCCEEDED'|'FAILED'|'CANCELLED';created_at:number;completed_at:number|null};
-type Stage='amount'|'review'|'method'|'pay'|'result'|'receipt'|'history';
-export default function TestCheckout({token,name,collection,expected,onBack}:{token:string;name:string;collection:string;expected:number|null;onBack:()=>void}) {
+type Payment={id:string;reference:string;amount:number;method:'MTN'|'ORANGE';status:'PENDING'|'SUCCEEDED'|'FAILED'|'REFUNDED';mode:string;created_at:number;updated_at:number};
+type Stage='amount'|'review'|'pay'|'result'|'receipt'|'history';
+type Draft={action:'payment-create';token:string;amount:number;method:'MTN'|'ORANGE';payer_phone:string;request_key:string;id?:string};
+export default function ProviderCheckout({token,name,collection,expected,onBack}:{token:string;name:string;collection:string;expected:number|null;onBack:()=>void}) {
  const [stage,setStage]=useState<Stage>('amount');
- const [amount,setAmount]=useState(expected?.toString()??'');
- const [note,setNote]=useState(''),[method,setMethod]=useState<'MTN'|'ORANGE'>('MTN');
- const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const [payment,setPayment]=useState<Payment|null>(null),[rows,setRows]=useState<Payment[]>([]),[cursor,setCursor]=useState<string|null>(null);
- const lock=useRef(false), request=useRef<Record<string,unknown>|null>(null), outcome=useRef<string|null>(null);
- const [lockedRequest,setLockedRequest]=useState(false);
- const [uncertain,setUncertain]=useState(false);
- const n=Number(amount);
- const heading=useRef<HTMLHeadingElement>(null);
- const title={amount:'Contribute',review:'Confirm contribution',method:'Choose payment method',pay:'Test payment',result:'Payment result',receipt:'Test receipt',history:'My test payments'}[stage];
- useEffect(()=>{heading.current?.focus();window.scrollTo({top:0,behavior:'instant'});},[stage]);
- async function run(action:()=>Promise<void>) {
-  if(lock.current)return;lock.current=true;setBusy(true);setError('');
-  try{await action();}catch(e){setError(e instanceof Error?e.message:'Please retry.');}
-  finally{lock.current=false;setBusy(false);}
+ const [amount,setAmount]=useState(expected?.toString()??''),[phone,setPhone]=useState('');
+ const [method,setMethod]=useState<'MTN'|'ORANGE'>('MTN');
+ const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [payment,setPayment]=useState<Payment|null>(null),[rows,setRows]=useState<Payment[]>([]);
+ const [cursor,setCursor]=useState<string|null>(null),[locked,setLocked]=useState(false);
+ const lock=useRef(false),draft=useRef<Draft|null>(null),storageKey=useRef<string|null>(null);
+ const unresolvedId=useRef<string|null>(null);
+ const alive=useRef(true),heading=useRef<HTMLHeadingElement>(null);
+ const title={amount:'Contribute',review:'Review contribution',pay:'Payment status',result:'Payment result',receipt:'Contribution receipt',history:'Your contributions'}[stage];
+ const methodName=(m:string)=>m==='MTN'?'MTN MoMo':'Orange Money';
+ useEffect(()=>{heading.current?.focus();},[stage]);
+ function present(p:Payment,receipt=false) {
+  if(!alive.current)return;
+  if(p.status==='PENDING')unresolvedId.current=p.id;
+  else if(unresolvedId.current===p.id)unresolvedId.current=null;
+  setPayment(p);
+  setStage(p.status==='PENDING'?'pay':receipt&&p.status==='SUCCEEDED'?'receipt':'result');
  }
- function review(){if(!/^\d+$/.test(amount)||!Number.isSafeInteger(n)||n<=0||n>1e12){setError('Enter a positive whole FCFA amount.');return;}setError('');setStage('review');}
- async function create(){await run(async()=>{
-  if(!request.current){request.current={action:'payment-create',token,amount:n,note:note.trim(),method,request_key:crypto.randomUUID()};setLockedRequest(true);}
-  const data:Payment=await guestRequest(request.current);setPayment(data);setStage(data.status==='PENDING'?'pay':'result');
- });}
- async function finish(status:string){await run(async()=>{
-  outcome.current??=status;setUncertain(true);
-  const data:Payment=await guestRequest({action:'payment-result',id:payment!.id,status:outcome.current});
-  outcome.current=null;setUncertain(false);setPayment(data);setStage('result');
+ async function run(action:()=>Promise<void>) {
+  if(lock.current)return; lock.current=true;setBusy(true);setError('');
+  try {await action();} catch(e){if(alive.current)setError(e instanceof Error?e.message:'Please try again.');}
+  finally{lock.current=false;if(alive.current)setBusy(false);}
+ }
+ async function restore() {
+  await run(async()=>{
+   const context=await guestRequest({action:'context',token});
+   storageKey.current='sendoh-provider:'+context.user_id+':'+token;
+   const saved=sessionStorage.getItem(storageKey.current);
+   if(!saved)setPhone(context.phone??'');
+   if(saved){
+    const envelope=JSON.parse(saved) as Draft;
+    if(envelope.token!==token || typeof envelope.request_key!=='string' ||
+       !Number.isSafeInteger(envelope.amount) || typeof envelope.payer_phone!=='string' ||
+       !['MTN','ORANGE'].includes(envelope.method)) throw new Error('Your saved payment could not be read. Check your contribution history before retrying.');
+    draft.current=envelope;setLocked(true);setAmount(String(envelope.amount));
+    setPhone(envelope.payer_phone);setMethod(envelope.method);setStage('review');
+    if(envelope.id)present(await guestRequest({action:'payment-detail',id:envelope.id}));
+   }
+   const history=await guestRequest({action:'payment-history',token});
+   const pending=(history.items as Payment[]).find(p=>p.status==='PENDING');
+   if(pending && !draft.current?.id)present(pending);
+   if(alive.current)setReady(true);
+  });
+ }
+ useEffect(()=>{
+  alive.current=true;void restore();
+  return()=>{alive.current=false;};
+  // This component is mounted for one collection and authenticated guest.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[token]);
+ useEffect(()=>{
+  if(!payment || payment.status!=='PENDING' || stage!=='pay')return;
+  const id=payment.id;
+  const poll=setInterval(()=>{
+   if(document.visibilityState!=='visible' || lock.current)return;
+   void run(async()=>present(await guestRequest({action:'payment-refresh',id})));
+  },5000);
+  return()=>clearInterval(poll);
+ },[payment?.id,payment?.status,stage]);
+ function review(){
+  if(!/^\d+$/.test(amount)||!Number.isSafeInteger(Number(amount))||Number(amount)<=0||Number(amount)>1000000000){
+   setError('Enter a positive whole FCFA amount.');return;
+  }
+  if(!/^(?:\+?237)?6[0-9]{8}$/.test(phone.trim())){
+   setError('Enter the Mobile Money number that will authorise this contribution.');return;
+  }
+  setError('');setStage('review');
+ }
+ async function submit(){await run(async()=>{
+  if(!ready||!storageKey.current)return;
+  if(!draft.current){
+   draft.current={action:'payment-create',token,amount:Number(amount),method,
+    payer_phone:phone.trim(),request_key:crypto.randomUUID()};
+  }
+  // Persist before dispatch; a timeout reuses this exact attempt and body.
+  sessionStorage.setItem(storageKey.current,JSON.stringify(draft.current));
+  setLocked(true);
+  const {id:_id,...body}=draft.current;
+  const result:Payment=await guestRequest(body);
+  present(result);
+  draft.current.id=result.id;
+  sessionStorage.setItem(storageKey.current,JSON.stringify(draft.current));
  });}
  async function detail(id:string,receipt=false){await run(async()=>{
-  const data:Payment=await guestRequest({action:'payment-detail',id});setPayment(data);
-  if(data.status!=='PENDING'){outcome.current=null;setUncertain(false);}
-  setStage(data.status==='PENDING'?'pay':receipt&&data.status==='SUCCEEDED'?'receipt':'result');
+  present(await guestRequest({action:'payment-detail',id}),receipt);
  });}
  async function history(more=false){await run(async()=>{
   const data=await guestRequest({action:'payment-history',token,...(more&&cursor?{before:cursor}:{})});
-  setRows(old=>more?[...old,...data.items]:data.items);setCursor(data.next_cursor);setStage('history');
+  setRows(old=>more?[...old,...data.items]:data.items);setCursor(data.next_cursor??null);setStage('history');
  });}
- function restart(){request.current=null;outcome.current=null;setLockedRequest(false);setUncertain(false);setPayment(null);setConfirmed(false);setError('');setStage('amount');}
- const methodName=(m:string)=>m==='MTN'?'MTN Mobile Money':'Orange Money';
+ function restart(){
+  if(unresolvedId.current){void detail(unresolvedId.current);return;}
+  if(draft.current && draft.current.id!==payment?.id){
+   if(draft.current.id){void detail(draft.current.id);}
+   else {setStage('review');}
+   return;
+  }
+  if(!payment || payment.status==='PENDING')return;
+  if(storageKey.current)sessionStorage.removeItem(storageKey.current);
+  draft.current=null;setLocked(false);setPayment(null);setError('');setStage('amount');
+ }
  return <>
-  <header className="screen-header"><h1 ref={heading} tabIndex={-1}>{title}</h1><span className="badge">Test only</span></header>
+  <header className="screen-header"><h1 ref={heading} tabIndex={-1}>{title}</h1><span className="badge">Sandbox</span></header>
   <div className="screen-content">
-   {(['amount','review','method','pay'] as Stage[]).includes(stage)&&<nav className="checkout-steps" aria-label="Contribution progress">{['Amount','Review','Method','Pay'].map((label,i)=><span key={label} aria-current={i===['amount','review','method','pay'].indexOf(stage)?'step':undefined} className={i<=['amount','review','method','pay'].indexOf(stage)?'reached':''}><b>{i+1}</b>{label}</span>)}</nav>}
-   <p className="helper">No money moves. Attempts and results are saved on Sendoh.</p>
-   <div className="contribution-context"><span className="avatar" aria-hidden="true">{(payment?.payer_name??name).slice(0,1).toUpperCase()}</span><p><strong>{payment?.collection_name??collection}</strong><br/>Contributing as {payment?.payer_name??name}</p></div>
-   {busy&&<p role="status">Saving / loading…</p>}
+   <div className="contribution-context"><span className="avatar" aria-hidden="true">{name.slice(0,1).toUpperCase()}</span><p><strong>{collection}</strong><br/>Contributing as {name}</p></div>
+   {busy&&<p role="status">Checking your contribution…</p>}
    {error&&<p className="error" role="alert">{error}</p>}
+   {!ready&&!busy&&<button className="button" onClick={()=>void restore()}>Reconnect</button>}
    {stage==='amount'&&<>
-    <h2>How much would you like to contribute?</h2>
-    {expected!==null&&<p>Expected contribution: {money(expected)}</p>}
-    <div className="amount-options">{Array.from(new Set([500,1000,1500,expected??3000])).map(v=><button key={v} className={n===v?'selected':''} aria-pressed={n===v} disabled={busy} onClick={()=>setAmount(String(v))}>{v.toLocaleString('en')}</button>)}</div>
-    <label className="field">Amount (FCFA)<input inputMode="numeric" value={amount} onChange={e=>setAmount(e.target.value)} maxLength={13}/></label>
-    <label className="field">Note (optional)<textarea value={note} onChange={e=>setNote(e.target.value)} maxLength={200}/></label>
-    <button className="button" disabled={busy} onClick={review}>Continue</button>
+    <h2>Your contribution</h2>
+    {expected!==null&&<p>Suggested contribution: {money(expected)}</p>}
+    <label className="field">Amount (FCFA)<input inputMode="numeric" value={amount} disabled={busy||!ready} onChange={e=>setAmount(e.target.value)} maxLength={10}/></label>
+    <fieldset className="methods"><legend>Pay with Mobile Money</legend>{(['MTN','ORANGE'] as const).map(m=><label className={`method ${method===m?'chosen':''}`} key={m}><input type="radio" name="method" checked={method===m} disabled={busy||!ready} onChange={()=>setMethod(m)}/><PaymentLogo method={m}/><strong>{methodName(m)}</strong></label>)}</fieldset>
+    <label className="field">Mobile Money number<input inputMode="tel" autoComplete="tel" value={phone} disabled={busy||!ready} onChange={e=>setPhone(e.target.value)} placeholder="+237" maxLength={13}/></label>
+    <button className="button" disabled={busy||!ready} onClick={review}>Review contribution</button>
    </>}
    {stage==='review'&&<>
-    <div className="summary"><Row label="Your contribution">{money(n)}</Row><Row label="Test provider fee">0 FCFA</Row><Row label="Test total" strong>{money(n)}</Row></div>
-    <p>The full amount goes to the test collection total. Live fees will be shown before real payments launch.</p>
-    {note&&<p>{note}</p>}
-    <label className="confirmation"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I confirm these details.</label>
-    <button className="button" disabled={!confirmed||busy} onClick={()=>setStage('method')}>Continue to payment method</button>
-    <button className="text-button" onClick={()=>setStage('amount')}>Back</button>
-   </>}
-   {stage==='method'&&<>
-    <fieldset className="methods"><legend>Choose payment method</legend>{(['MTN','ORANGE'] as const).map(m=><label className={`method ${method===m?'chosen':''}`} key={m}><input type="radio" name="method" checked={method===m} disabled={busy||lockedRequest} onChange={()=>setMethod(m)}/><PaymentLogo method={m}/><strong>{methodName(m)}</strong></label>)}</fieldset>
-    <button className="button" disabled={busy} onClick={create}>{lockedRequest?'Retry same payment request':'Continue to pay'}</button>
-    {!lockedRequest&&<button className="text-button" onClick={()=>setStage('review')}>Back</button>}
+    <div className="review-amount">{money(Number(amount))}</div><div className="summary"><Row label="Pay with">{methodName(method)}</Row><Row label="Number">{phone}</Row><Row label="Total to authorise" strong>{money(Number(amount))}</Row></div>
+    <p className="helper">Processing fees come out of collection proceeds, not on top of this total.</p>
+    <button className="button" disabled={busy||!ready} onClick={submit}>{locked?'Recover this contribution':`Pay ${money(Number(amount))}`}</button>
+    {!locked&&<button className="text-button" disabled={busy} onClick={()=>setStage('amount')}>Edit details</button>}
    </>}
    {stage==='pay'&&payment&&<>
-    <div className="pay-context"><h2>{money(payment.total_amount)}</h2><PaymentLogo method={payment.method}/><strong>{methodName(payment.method)}</strong></div>
-    <p>Your pending attempt is saved. Choose a test result below. No mobile money request is sent.</p>
-    {uncertain?<button className="button" disabled={busy} onClick={()=>finish(outcome.current!)}>Retry saving the same result</button>:<>
-     <button className="button" disabled={busy} onClick={()=>finish('SUCCEEDED')}>Simulate successful payment</button>
-     <button className="button secondary" disabled={busy} onClick={()=>finish('FAILED')}>Simulate failed payment</button>
-     <button className="text-button" disabled={busy} onClick={()=>finish('CANCELLED')}>Cancel test payment</button>
-    </>}
-    <button className="text-button" disabled={busy} onClick={()=>detail(payment.id)}>Refresh payment status</button>
+    <div className="center"><Icon name="info" size={40}/><h2>Confirming your contribution</h2><p>{money(payment.amount)}</p></div>
+    <p>Approve on your Mobile Money phone if prompted.</p>
+    <p className="helper">You can return to this link to check your contribution.</p>
+    <button className="button" disabled={busy} onClick={()=>void run(async()=>present(await guestRequest({action:'payment-refresh',id:payment.id})))}>Check status</button>
    </>}
    {stage==='result'&&payment&&<>
-    <div className="center"><Icon name={payment.status==='SUCCEEDED'?'check':'info'} size={48}/><h2>{payment.status==='SUCCEEDED'?'Test contribution successful':`Test payment ${payment.status.toLowerCase()}`}</h2><p>{money(payment.amount)}</p></div>
-    <p>{payment.status==='SUCCEEDED'?'Saved. The organizer’s test total and activity have been updated.':'Saved. This attempt did not increase the test total.'} No money moved.</p>
-    {payment.status==='SUCCEEDED'?<button className="button" disabled={busy} onClick={()=>detail(payment.id,true)}>View test receipt</button>:<button className="button" disabled={busy} onClick={restart}>Start a new attempt</button>}
+    <div className="center"><Icon name={payment.status==='SUCCEEDED'?'check':'info'} size={48}/><h2>{payment.status==='SUCCEEDED'?'Contribution confirmed':payment.status==='REFUNDED'?'Contribution refunded':'Payment unsuccessful'}</h2><p>{money(payment.amount)}</p></div>
+    <p>{payment.status==='SUCCEEDED'?'Your contribution is recorded in the collection.':payment.status==='REFUNDED'?'This contribution no longer counts toward the collection.':'This attempt has not increased the collection total.'}</p>
+    {payment.status==='SUCCEEDED'?<button className="button" disabled={busy} onClick={()=>void detail(payment.id,true)}>View receipt</button>:<button className="button" disabled={busy} onClick={restart}>Make another contribution</button>}
+    {payment.status==='SUCCEEDED'&&<button className="text-button" disabled={busy} onClick={restart}>Make another contribution</button>}
    </>}
    {stage==='receipt'&&payment&&<>
-    <h2>TEST • Not proof of payment</h2>
-    <div className="summary"><Row label="Contributor">{payment.payer_name}</Row><Row label="Collection">{payment.collection_name}</Row><Row label="Amount">{money(payment.amount)}</Row><Row label="Fee">{money(payment.fee_amount)}</Row><Row label="Method">{methodName(payment.method)}</Row><Row label="Reference">{payment.reference}</Row><Row label="Recorded">{new Date(payment.completed_at!*1000).toLocaleString()}</Row></div>
-    {payment.note&&<p>{payment.note}</p>}<p>Your saved test receipt. No real funds were received.</p>
+    <h2>{money(payment.amount)}</h2>
+    <div className="summary"><Row label="Contributor">{name}</Row><Row label="Collection">{collection}</Row><Row label="Status">Confirmed</Row><Row label="Method">{methodName(payment.method)}</Row><Row label="Reference">{payment.reference}</Row><Row label="Last verified">{new Date(payment.updated_at*1000).toLocaleString()}</Row></div>
+    <p className="helper">Sandbox receipt</p>
     <button className="button secondary" onClick={()=>window.print()}>Print / save receipt</button>
    </>}
    {stage==='history'&&<>
-    {!rows.length&&<p>No test payments yet.</p>}
-    {rows.map(p=><button className="button secondary" key={p.id} disabled={busy} onClick={()=>detail(p.id,p.status==='SUCCEEDED')}>{money(p.amount)} • {p.status} • {methodName(p.method)}</button>)}
-    {cursor&&<button className="text-button" disabled={busy} onClick={()=>history(true)}>Load older payments</button>}
-    <button className="button" disabled={busy} onClick={restart}>New test contribution</button>
+    {!rows.length&&<p>No contributions yet.</p>}
+    {rows.map(p=><button className="button secondary" key={p.id} disabled={busy} onClick={()=>void detail(p.id,p.status==='SUCCEEDED')}>{money(p.amount)} · {{PENDING:'Confirming',SUCCEEDED:'Confirmed',FAILED:'Unsuccessful',REFUNDED:'Refunded'}[p.status]} · {methodName(p.method)}</button>)}
+    {cursor&&<button className="text-button" disabled={busy} onClick={()=>void history(true)}>Load older contributions</button>}
+    {locked&&!payment&&<button className="button" disabled={busy} onClick={()=>setStage('review')}>Recover saved contribution</button>}
+    {payment&&payment.status!=='PENDING'&&<button className="text-button" disabled={busy} onClick={restart}>Make another contribution</button>}
    </>}
    <div className="screen-actions">
-    {stage!=='history'&&<button className="text-button" disabled={busy} onClick={()=>history()}>My saved payments and receipts</button>}
-    <button className="button secondary" disabled={busy} onClick={onBack}>View collection</button>
+    {stage!=='history'&&<button className="text-button" disabled={busy||!ready} onClick={()=>void history()}>Your contributions and receipts</button>}
+    <button className="button secondary" disabled={busy} onClick={onBack}>Back to collection</button>
    </div>
   </div>
  </>;

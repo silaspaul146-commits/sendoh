@@ -27,3 +27,27 @@
 @media(max-width:480px){.guest-main .screen{border-radius:0;border:0;box-shadow:none}.site-brand{margin:20px auto 16px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 .coordination-progress .summary-row>span:last-child{color:white;font-size:23px}
+
+/* Approved guest coordination treatment; scoped to avoid changing the landing page. */
+.guest-page{--teal:#008080;--teal-soft:#E6FFFA;--orange:#FF7A00;--ink:#0D3232;--secondary:#53656B;color:var(--ink)}
+.guest-page .screen-header h1{font-size:22px;font-weight:700;text-align:left}
+.guest-page .screen-header{justify-content:flex-start}
+.guest-page .screen-header .badge{margin-left:auto;font-size:11px}
+.guest-page .screen-content{gap:24px}
+.guest-page .button:hover:not(:disabled){background:var(--teal);opacity:.85}
+.guest-page .button.secondary:hover:not(:disabled){background:var(--teal-soft)}
+.guest-page .collection-amount,.guest-page .review-amount{display:block;font-size:28px;line-height:1.2;font-weight:800;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.guest-page .collection-amount{color:white;margin-bottom:8px}
+.guest-page .coordination-progress progress{height:6px;background:#ffffff33}
+.guest-page .coordination-progress progress::-webkit-progress-bar{background:#ffffff33}
+.guest-page .coordination-progress small{display:block;font-size:11px;margin-top:12px;color:white}
+.personal-contribution{padding:16px;border:1px solid var(--border);border-radius:16px;background:white}
+.personal-contribution strong{font-size:16px;color:var(--ink)}
+.personal-contribution p{margin-top:6px}
+.guest-details summary{min-height:44px;cursor:pointer;display:list-item;color:var(--teal);font-weight:600;padding:10px 0}
+.guest-details p{margin-top:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.guest-page .review-amount{margin:8px 0;color:var(--ink)}
+.guest-page .contribution-context{background:var(--teal-soft);border:0}
+.guest-page .summary{border-radius:16px}
+.guest-page .screen-content>*{min-width:0}
+@media print{.guest-page .button,.guest-page .text-button,.guest-page .site-footer{display:none!important}.guest-page .screen{border:0;box-shadow:none}}
