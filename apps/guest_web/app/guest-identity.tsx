@@ -1,10 +1,13 @@
 'use client';
 import {useState, type FormEvent} from 'react';
 
+export class GuestRequestError extends Error {
+ constructor(message:string,public status:number){super(message);}
+}
 export async function guestRequest(input:Record<string,unknown>) {
  const response=await fetch('/api/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
- const data=await response.json();
- if(!response.ok) throw new Error(data.error?.message ?? 'Please try again.');
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok) throw new GuestRequestError(data.error?.message ?? (typeof data.detail==='string'?data.detail:'Please try again.'),response.status);
  return data;
 }
 export default function GuestIdentity({onVerified}:{onVerified:()=>Promise<void>}) {
