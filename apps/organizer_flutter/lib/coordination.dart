@@ -19,9 +19,10 @@ int displayedCollectionAmount(Map<String, dynamic> data) =>
 
 /// The same progress language for organizers and invited members.
 class CollectionProgress extends StatelessWidget {
-  const CollectionProgress({super.key, required this.data, this.dark = false});
+  const CollectionProgress(
+      {super.key, required this.data, this.dark = false, this.compact = false});
   final Map<String, dynamic> data;
-  final bool dark;
+  final bool dark, compact;
   @override
   Widget build(BuildContext context) {
     final actual = displayedCollectionAmount(data);
@@ -30,10 +31,7 @@ class CollectionProgress extends StatelessWidget {
     final color = dark ? Colors.white : SendohColors.teal;
     final muted = dark ? const Color(0xFFD1E4E0) : SendohColors.secondary;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(
-          showingProviderTest(data)
-              ? 'Collected · Test environment'
-              : 'Collected',
+      Text(showingProviderTest(data) ? 'Collected · Sandbox' : 'Collected',
           style: TextStyle(color: muted, fontSize: 12)),
       const SizedBox(height: 6),
       Text(coordinationMoney(actual),
@@ -53,13 +51,14 @@ class CollectionProgress extends StatelessWidget {
                 backgroundColor:
                     dark ? const Color(0xFF316260) : SendohColors.tealSoft)),
         const SizedBox(height: 8),
-        Text(
-            actual >= target
-                ? 'Target reached'
-                : '${coordinationMoney(target - actual)} to go',
-            style: TextStyle(color: muted, fontSize: 12)),
+        if (!compact)
+          Text(
+              actual >= target
+                  ? 'Target reached'
+                  : '${coordinationMoney(target - actual)} to go',
+              style: TextStyle(color: muted, fontSize: 12)),
       ],
-      if (test > 0) ...[
+      if (test > 0 && !compact) ...[
         const SizedBox(height: 14),
         Text('Test contributions: ${coordinationMoney(test)}',
             style: TextStyle(
@@ -225,4 +224,41 @@ class CoordinationAction extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Money a member has started paying that the provider has not yet confirmed.
+int memberPendingAmount(Map<String, dynamic> member) =>
+    (member['sandbox_pending_amount'] as num?)?.toInt() ?? 0;
+
+/// Organizer row text: confirmed money first, awaiting money beside it, never summed.
+String memberContributionLine(
+    Map<String, dynamic> member, String Function(Object?) money) {
+  final parts = <String>[
+    '${money(member['sandbox_paid_amount'] ?? 0)} contributed'
+  ];
+  final pending = memberPendingAmount(member);
+  if (pending > 0) {
+    parts.add('${money(pending)} awaiting confirmation');
+  }
+  if (member['expected_amount'] != null) {
+    parts.add('${money(member['expected_amount'])} expected');
+  }
+  return parts.join(' · ');
+}
+
+/// Invitation acceptance and contribution settlement are separate states.
+String collectionMemberPaymentStatus(Map<String, dynamic> member) {
+  if (member['invitation_state'] != 'ACCEPTED') {
+    return switch (member['invitation_state']) {
+      'PENDING' => 'Invited',
+      'DECLINED' => 'Declined',
+      'CANCELLED' => 'Cancelled',
+      'EXPIRED' => 'Expired',
+      _ => 'Not joined',
+    };
+  }
+  if (member['sandbox_payment_pending'] == true) {
+    return 'Pending';
+  }
+  return '${member['sandbox_payment_status'] ?? 'Unpaid'}';
 }

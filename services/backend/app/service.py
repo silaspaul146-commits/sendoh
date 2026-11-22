@@ -17,13 +17,16 @@ def participant_summary(db, p):
     paid = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.participant_id == p.id, TestPayment.status == 'SUCCEEDED')))
     state = 'Unpaid' if paid == 0 else 'Partial' if p.expected_amount and paid < p.expected_amount else 'Paid'
     sandbox_paid = sandbox_total(db, p.collection_id, p.id)
-    sandbox_pending = db.scalar(select(ProviderPayment.id).where(
+    # Awaiting provider confirmation: shown beside confirmed money, never added to it.
+    sandbox_pending_amount = int(db.scalar(select(func.coalesce(func.sum(ProviderPayment.amount), 0)).where(
         ProviderPayment.participant_id == p.id, ProviderPayment.mode == 'SANDBOX',
-        ProviderPayment.status == 'PENDING').limit(1)) is not None
+        ProviderPayment.status == 'PENDING')))
+    sandbox_pending = sandbox_pending_amount > 0
     sandbox_state = ('Unpaid' if sandbox_paid == 0 else
                      'Partial' if p.expected_amount and sandbox_paid < p.expected_amount else 'Paid')
     return dict(sandbox_paid_amount=sandbox_paid,
-                sandbox_payment_status=sandbox_state, sandbox_payment_pending=sandbox_pending, test_paid_amount=paid, test_payment_status=state, id=p.id, name=member.display_name if member else p.name,
+                sandbox_payment_status=sandbox_state, sandbox_payment_pending=sandbox_pending,
+                sandbox_pending_amount=sandbox_pending_amount, test_paid_amount=paid, test_payment_status=state, id=p.id, name=member.display_name if member else p.name,
                 expected_amount=p.expected_amount, user_id=p.user_id,
                 username=member.username if member else None,
                 avatar=member.avatar if member else None,

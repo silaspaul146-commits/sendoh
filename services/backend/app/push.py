@@ -112,6 +112,12 @@ def process_one(sessions, sender, environment):
             p = db.get(Participant, notification.participant_id)
             valid = bool(p and p.invitation_version == notification.invitation_version and
                          p.invitation_state == 'PENDING' and (p.expires_at or 0) > now)
+        if valid and notification.kind == 'CONTRIBUTION_REMINDER':
+            from .collection_reminders import outstanding
+            from .models import Collection
+            p = db.get(Participant, notification.participant_id)
+            valid = bool(p and p.user_id == notification.user_id and
+                         outstanding(db, db.get(Collection, notification.collection_id), p))
         if valid and notification.kind == 'REQUEST_RECEIVED':
             from .models import MoneyRequest
             request = db.get(MoneyRequest, notification.request_id)
@@ -122,7 +128,7 @@ def process_one(sessions, sender, environment):
         invalidate = False
         if valid:
             try:
-                if notification.order_id:
+                if notification.order_id or notification.kind == 'CONTRIBUTION_REMINDER':
                     from .notifications import serialize
                     sender.send(device.token, notification.id, body=serialize(db, notification)['title'])
                 else:

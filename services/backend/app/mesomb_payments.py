@@ -96,6 +96,21 @@ def sandbox_total(db, collection_id, participant_id=None):
     return int(db.scalar(q))
 
 
+def unverified_reason(check: str) -> str:
+    """Allowlisted, secret-free category for a failed provider check.
+
+    A refusal (e.g. HTTP 403) says nothing about whether money moved, so the
+    payment stays PENDING; the category only tells support which check failed.
+    """
+    if check.startswith('HTTP_STATUS:') and check[12:].isdigit() and len(check) == 15:
+        return 'PROVIDER_LOOKUP_HTTP_' + check[12:]
+    if check == 'TRANSPORT_OR_JSON_ERROR':
+        return 'PROVIDER_UNREACHABLE'
+    if check == 'LOOKUP_SHAPE_INVALID':
+        return 'PROVIDER_RESPONSE_INVALID'
+    return 'PROVIDER_UNVERIFIED'
+
+
 def reconcile(sessions, config, api, payment_id):
     """Lease work across processes, query outside a transaction, apply atomically."""
     now = int(time.time())
@@ -125,7 +140,7 @@ def reconcile(sessions, config, api, payment_id):
             if len(transaction['pk']) > 120 or len(str(transaction.get('status', ''))) > 40:
                 raise ReconciliationRequired('Malformed provider identifier/status.')
     except ReconciliationRequired as exc:
-        reason = 'PROVIDER_UNVERIFIED'
+        reason = unverified_reason(str(exc))
         logger.warning('MESOMB_DIAGNOSTIC attempt=%s check=%s amounts=%s',
                        payment_id, str(exc),
                        safe_amount_evidence(transaction) if isinstance(transaction, dict) else {})

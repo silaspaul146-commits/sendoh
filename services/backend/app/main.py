@@ -16,6 +16,7 @@ from .config import load_settings
 from .request_limits import RequestSizeLimit
 from .invitations import router as invitation_router
 from .notifications import router as notification_router
+from .collection_reminders import router as collection_reminders_router
 from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
 from .people import router as people_router
@@ -147,6 +148,7 @@ def create_app(database_url=None):
         return [dict(id=a.id, message=a.message, created_at=a.created_at.isoformat()) for a in db.scalars(select(Activity).where(Activity.organizer_id==user.id).order_by(Activity.created_at.desc()))]
     app.include_router(router(database, actor, bearer, settings, sender))
     app.include_router(invitation_router(database, actor, web_url))
+    app.include_router(collection_reminders_router(database, actor))
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     app.include_router(payment_router(database, actor, settings))
     app.include_router(people_router(database, actor))

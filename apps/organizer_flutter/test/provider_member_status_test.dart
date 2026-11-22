@@ -12,7 +12,7 @@ void main() {
         },
       };
   test('Verified provider contribution fulfils personal share', () {
-    expect(joinedPersonalStatus(item(1000)), 'Your part done ✓');
+    expect(joinedPersonalStatus(item(1000)), 'Your part paid');
   });
   test('Partial contribution shows outstanding share', () {
     expect(joinedPersonalStatus(item(400)), '600 FCFA remaining');

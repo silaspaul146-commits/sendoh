@@ -69,6 +69,17 @@ Widget paymentPage(String title, List<Widget> children) => Scaffold(
                       ...children
                     ])))));
 
+/// A consistent surface shared by review, status and receipt details.
+Widget paymentSurface(List<Widget> children) => Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: SendohColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: SendohColors.border)),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    );
+
 class ReceivingDetails extends StatefulWidget {
   const ReceivingDetails({super.key, required this.api});
   final SendohApi api;
@@ -501,59 +512,131 @@ class _PersonCheckoutState extends State<PersonCheckout>
     return paymentPage(title, [
       if (busy) const LinearProgressIndicator(color: SendohColors.orange),
       if (q != null) ...[
-        Text(q['recipient']['name'],
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-        Text(q['recipient']['identity']),
-        const SizedBox(height: 24),
-        Text(personMoney(a['recipient_amount']),
-            style: SendohTextStyles.displayLarge),
-        Text(delivered
-            ? 'Delivered to ${q['recipient']['name']}'
-            : terminal
-                ? 'To ${q['recipient']['name']}'
-                : '${q['recipient']['name']} receives'),
-        const SizedBox(height: 24),
-        if (ready && order == null && pending == null) ...[
-          Wrap(
-              spacing: 8,
-              children: ['MTN', 'ORANGE']
-                  .map((m) => ChoiceChip(
-                      label: Text(m == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
-                      selected: method == m,
-                      onSelected: busy
-                          ? null
-                          : (_) {
-                              setState(() => method = m);
-                              newQuote();
-                            }))
-                  .toList()),
-        ],
-        if (ready || delivered) ...[
-          paymentRow(
-              'Processing fee',
-              personMoney(
-                  (a['collection_fee'] as num) + (a['delivery_fee'] as num))),
-          paymentRow('Sendoh fee', personMoney(a['sendoh_fee'])),
-          const Divider(),
-          paymentRow(delivered ? 'Total paid' : 'Total',
-              personMoney(a['total_debit'])),
-          paymentRow('Pay with',
-              q['payer_method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
-        ],
-        if (!ready && !terminal) ...[
-          paymentRow(
-              'Payment collection', paymentStatus(order!['collection_status'])),
-          paymentRow(
-              'Recipient delivery', paymentStatus(order!['delivery_status'])),
-          Text(status == 'REVIEW'
-              ? 'The outcome needs review. Do not pay again. Return here for updates.'
-              : 'You can leave and return to check this payment.'),
-        ],
-        if (order != null) ...[
+        Row(children: [
+          const CircleAvatar(
+              radius: 25,
+              backgroundColor: SendohColors.tealSoft,
+              child: Icon(Icons.person_outline, color: SendohColors.teal)),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(q['recipient']['name'],
+                    style: SendohTextStyles.titleSmall),
+                Text(q['recipient']['identity'],
+                    style: SendohTextStyles.caption),
+              ])),
+        ]),
+        const SizedBox(height: 28),
+        Semantics(
+            liveRegion: true,
+            child: Text(personMoney(a['recipient_amount']),
+                style: SendohTextStyles.displayLarge)),
+        const SizedBox(height: 4),
+        Text(
+            delivered
+                ? 'Delivered to ${q['recipient']['name']}'
+                : terminal
+                    ? 'To ${q['recipient']['name']}'
+                    : '${q['recipient']['name']} receives',
+            style: SendohTextStyles.bodyMedium),
+        const SizedBox(height: 28),
+        if (ready) ...[
+          paymentSurface([
+            paymentRow(
+                'Fees',
+                personMoney((a['collection_fee'] as num) +
+                    (a['delivery_fee'] as num) +
+                    (a['sendoh_fee'] as num))),
+            const Divider(height: 16),
+            paymentRow('Total', personMoney(a['total_debit'])),
+          ]),
+          ExpansionTile(
+              key: const ValueKey('fee-breakdown'),
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Fee breakdown'),
+              children: [
+                paymentRow(
+                    'Processing fee',
+                    personMoney((a['collection_fee'] as num) +
+                        (a['delivery_fee'] as num))),
+                paymentRow('Sendoh fee', personMoney(a['sendoh_fee'])),
+              ]),
           const SizedBox(height: 16),
-          const Text('Reference'),
-          SelectableText('${order!['id']}')
+          const Text('Pay with', style: SendohTextStyles.titleSmall),
+          const SizedBox(height: 12),
+          if (order == null && pending == null)
+            ...['MTN', 'ORANGE'].map((m) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Semantics(
+                      selected: method == m,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                            side: BorderSide(
+                                color: method == m
+                                    ? SendohColors.teal
+                                    : SendohColors.border),
+                            backgroundColor: SendohColors.surface),
+                        onPressed: busy
+                            ? null
+                            : () {
+                                setState(() => method = m);
+                                newQuote();
+                              },
+                        child: Row(children: [
+                          Icon(
+                              method == m
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: method == m
+                                  ? SendohColors.teal
+                                  : SendohColors.secondary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: Text(
+                                  m == 'MTN' ? 'MTN MoMo' : 'Orange Money',
+                                  style: SendohTextStyles.titleSmall)),
+                        ]),
+                      )),
+                ))
+          else
+            paymentRow('Method',
+                q['payer_method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
         ],
+        if (!ready && !terminal)
+          Text(
+              status == 'REVIEW'
+                  ? 'We’re checking this payment. Do not pay again.'
+                  : 'You can leave and return to check this payment.',
+              style: SendohTextStyles.bodyMedium),
+        if (order != null && !ready)
+          ExpansionTile(
+              key: const ValueKey('payment-details'),
+              tilePadding: EdgeInsets.zero,
+              title: Text(delivered ? 'View receipt' : 'Payment details'),
+              children: [
+                paymentRow('Payment collection',
+                    paymentStatus(order!['collection_status'])),
+                paymentRow('Recipient delivery',
+                    paymentStatus(order!['delivery_status'])),
+                paymentRow(
+                    'Processing fee',
+                    personMoney((a['collection_fee'] as num) +
+                        (a['delivery_fee'] as num))),
+                paymentRow('Sendoh fee', personMoney(a['sendoh_fee'])),
+                paymentRow('Total', personMoney(a['total_debit'])),
+                paymentRow('Method',
+                    q['payer_method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
+                const Align(
+                    alignment: Alignment.centerLeft, child: Text('Reference')),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: SelectableText('${order!['id']}')),
+              ]),
       ],
       if (error != null) ...[
         const SizedBox(height: 16),
@@ -573,20 +656,21 @@ class _PersonCheckoutState extends State<PersonCheckout>
             onPressed: busy || expired || q['execution_available'] != true
                 ? null
                 : confirm,
-            child: Text('Confirm · ${personMoney(a['total_debit'])}')),
+            child: Text('Pay ${personMoney(a['total_debit'])}')),
         if (q['execution_available'] != true)
           const Text(
               'Payment is currently unavailable. No payment has been started.'),
-        TextButton(
-            onPressed: busy ? null : newQuote,
-            child: const Text('Refresh quote')),
+        if (expired)
+          TextButton(
+              onPressed: busy ? null : newQuote,
+              child: const Text('Refresh quote')),
       ] else if (status == 'READY') ...[
         FilledButton(
             onPressed:
                 busy || outcomeUnknown || order!['execution_available'] != true
                     ? null
                     : confirm,
-            child: Text('Confirm · ${personMoney(a['total_debit'])}')),
+            child: Text('Pay ${personMoney(a['total_debit'])}')),
         TextButton(
             onPressed: busy ? null : cancelPrepared,
             child: const Text('Cancel this payment')),
@@ -598,7 +682,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
         FilledButton(
             onPressed: busy ? null : newQuote,
             child: const Text('Review new quote')),
-      if (order != null || error != null)
+      if ((order != null && !terminal) || error != null)
         OutlinedButton(
             onPressed: busy ? null : refresh,
             child: const Text('Check status')),

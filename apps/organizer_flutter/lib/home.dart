@@ -208,7 +208,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _SectionTitle(
-                      title: 'You organize',
+                      title: 'Your collections',
                       action: entries.length > 1
                           ? TextButton(
                               onPressed: () => viewOwned(entries),
@@ -518,66 +518,56 @@ class HomeJoinedCircle extends StatelessWidget {
     final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
     final initials =
         words.take(2).map((w) => w.characters.first).join().toUpperCase();
-    final width = MediaQuery.textScalerOf(
-      context,
-    ).scale(88).clamp(88.0, 150.0).toDouble();
-    return Semantics(
-      button: true,
-      label:
-          'Open $name, organized by ${collection['organizer_name'] ?? 'Organizer'}',
-      child: Tooltip(
-        message: name,
-        child: SizedBox(
-          width: width,
-          child: Material(
-            type: MaterialType.transparency,
-            clipBehavior: Clip.antiAlias,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+    final width =
+        (MediaQuery.sizeOf(context).width - 40).clamp(200.0, 320.0).toDouble();
+    final target = (collection['target_amount'] as num?)?.toInt();
+    final hasTotal = collection.containsKey('collected_amount') ||
+        collection.containsKey('sandbox_collected_amount');
+    final total = displayedCollectionAmount(collection);
+    final groupStatus = collection['status'] == 'CLOSED'
+        ? 'Collection closed'
+        : collection['status'] == 'SETTLED'
+            ? 'Collection settled'
+            : collection['status'] == 'CANCELLED'
+                ? 'Collection cancelled'
+                : target != null && target > 0 && hasTotal
+                    ? 'Group: ${(total * 100 / target).clamp(0, 100).floor()}% collected'
+                    : 'Collection open';
+    return SizedBox(
+        width: width,
+        child: Material(
+          color: SendohColors.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: SendohColors.border)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
               onTap: onTap,
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: SendohColors.tealSoft,
-                      child: Text(
-                        initials.isEmpty ? 'G' : initials,
-                        textScaler: TextScaler.noScaling,
-                        style: const TextStyle(
-                          color: SendohColors.teal,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      name,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      status,
-                      textAlign: TextAlign.center,
-                      style: SendohTextStyles.caption,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                          backgroundColor: SendohColors.tealSoft,
+                          child: Text(initials.isEmpty ? 'G' : initials,
+                              style: const TextStyle(
+                                  color: SendohColors.teal,
+                                  fontWeight: FontWeight.w600))),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text(name, style: SendohTextStyles.titleSmall),
+                            const SizedBox(height: 4),
+                            Text(status, style: SendohTextStyles.bodyMedium),
+                            const SizedBox(height: 4),
+                            Text(groupStatus, style: SendohTextStyles.caption),
+                          ])),
+                    ]),
+              )),
+        ));
   }
 }
 
@@ -935,7 +925,7 @@ String joinedPersonalStatus(Map<String, dynamic> item) {
     if (confirmed != null) {
       if (expected != null && expected > 0) {
         if (confirmed >= expected) {
-          return 'Your part done ✓';
+          return 'Your part paid';
         }
         return '${coordinationMoney(expected - confirmed)} remaining';
       }
@@ -951,7 +941,7 @@ String joinedPersonalStatus(Map<String, dynamic> item) {
   if (providerPaid > 0) {
     if (expected != null && expected > 0) {
       return providerPaid >= expected
-          ? 'Your part done ✓'
+          ? 'Your part paid'
           : '${coordinationMoney(expected - providerPaid)} remaining';
     }
     return '${coordinationMoney(providerPaid)} contributed';

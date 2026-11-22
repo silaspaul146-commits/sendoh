@@ -39,7 +39,7 @@ export default function ContributionFlow({collection,token}:{collection:Collecti
  async function join(){if(!token||busy)return;setBusy(true);setError('');try{const d=await guestRequest({action:'join',token});setCollection(d.collection);setExpected(d.expected_amount);setSummary(d.contribution_summary??null);setStep('checkout');}catch(e){if(e instanceof GuestRequestError&&e.status===401){forgetIdentity();}setError(e instanceof Error?e.message:'Please retry.');}finally{setBusy(false);}}
  async function back(){setStep('collection');try{await identityReady();}catch(e){if(e instanceof GuestRequestError&&e.status===401)forgetIdentity();setError(e instanceof Error?e.message:'Refresh this page to reload totals.');}}
  return <GuestChrome><section className="screen">
- {step==='checkout'&&token?<ProviderCheckout token={token} name={name} collection={c.name} expected={personal.remaining===0?null:personal.remaining??expected} onBack={()=>void back()}/>:<>
+ {step==='checkout'&&token?<ProviderCheckout token={token} name={name} collection={c.name} expected={personal.remaining===0?null:personal.remaining??expected} start={personal.fulfilled&&!personal.pending?'history':undefined} onBack={()=>void back()}/>:<>
   <header className="screen-header"><h1>{step==='collection'?c.name:'Your contribution'}</h1>{step==='identity'&&<button className="icon-button" aria-label="Back to collection" onClick={()=>setStep('collection')}>←</button>}</header>
   <div className="screen-content">
    {step==='collection'&&<>
@@ -49,7 +49,7 @@ export default function ContributionFlow({collection,token}:{collection:Collecti
      {c.target_amount!==null&&c.target_amount>0?<><p>of {money(c.target_amount)}</p><progress aria-label="Collection progress" value={Math.min(collected,c.target_amount)} max={c.target_amount}/><p>{collected>=c.target_amount?'Target reached':`${money(c.target_amount-collected)} remaining`}</p></>:<p>Collected</p>}
      {(c.sandbox_collected_amount??0)>0&&c.collected_amount===0&&<small>Sandbox</small>}
     </div>
-    {verified&&summary&&<div className="personal-contribution" aria-live="polite"><strong>{personal.pending?'Your payment is being confirmed':personal.fulfilled?'Your part paid':personal.paid>0?`${money(personal.paid)} contributed`:'Your contribution'}</strong><p>{personal.pending?'Check its status before paying again.':personal.fulfilled?'Your contribution is recorded.':personal.remaining!==null?`${money(personal.remaining)} remaining`:'Any amount welcome'}</p></div>}
+    {verified&&summary&&<div className="personal-contribution" aria-live="polite"><strong>{personal.pending?'Your payment is being confirmed':personal.fulfilled?'Your part paid':personal.paid>0?`${money(personal.paid)} contributed`:'Your contribution'}</strong><p>{personal.pending?`${personal.pendingAmount>0?money(personal.pendingAmount)+' awaiting confirmation. ':''}Check its status before paying again.`:personal.fulfilled?'Your contribution is recorded.':personal.remaining!==null?`${money(personal.remaining)} remaining`:'Any amount welcome'}</p></div>}
     {c.description&&<details className="guest-details"><summary>About this collection</summary><p>{c.description}</p></details>}
     {c.deadline_at&&<p className="helper">Due {new Date(c.deadline_at).toLocaleDateString('en-GB',{timeZone:'Africa/Douala'})}</p>}
     {!summary&&expected!==null&&<p>{c.mode==='MINIMUM_TOTAL'?'Minimum contribution':'Expected contribution'}: {money(expected)}</p>}

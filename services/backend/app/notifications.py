@@ -10,6 +10,7 @@ from .models import (Notification, PushDevice, PushDelivery, Participant, Collec
                      PhoneIdentity, AuthSession, RefreshSession, User, MoneyRequest, PersonOrder, PersonQuote)
 
 KINDS = {
+    'CONTRIBUTION_REMINDER': 'Contribution reminder',
     'PERSON_RECEIVED': 'Payment received',
     'PERSON_DELIVERED': 'Payment delivered',
     'PERSON_FAILED': 'Payment failed',
@@ -86,7 +87,10 @@ def serialize(db, n):
     available = bool(p and c and c.status == 'ACTIVE' and
         p.invitation_version == n.invitation_version and p.invitation_state == 'PENDING' and
         (p.expires_at or 0) > int(time.time()))
-    return dict(id=n.id, kind=n.kind, title=KINDS[n.kind], collection_id=n.collection_id,
+    title = KINDS[n.kind]
+    if n.kind == 'CONTRIBUTION_REMINDER':
+        title = f'Contribution reminder for {c.name}' if c else 'Collection reminder'
+    return dict(id=n.id, kind=n.kind, title=title, collection_id=n.collection_id,
         collection_name=c.name if c else 'Collection', participant_id=n.participant_id,
         created_at=n.created_at, read_at=n.read_at,
         invitation_version=n.invitation_version,
