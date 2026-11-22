@@ -227,6 +227,8 @@ def run_due(sessions, config, api):
         reconcile(sessions, config, api, payment_id)
     from .person_execution import run_due as run_person_due
     run_person_due(sessions, config, api)
+    from .settlement import run_due as run_settlement_due
+    run_settlement_due(sessions, config, api)
 
 
 def lifespan_with_payments(base_lifespan, sessions, config):

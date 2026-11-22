@@ -7,6 +7,7 @@ import 'main.dart' show CollectionDetail;
 import 'push_service.dart';
 import 'contribution_checkout.dart';
 import 'money_requests.dart';
+import 'settlement.dart' show SettlementScreen;
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({
@@ -164,7 +165,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) =>
                 MoneyRequestDetail(api: widget.api, id: item['request_id'])));
-      } else if (item['kind'] == 'CONTRIBUTION_CONFIRMED') {
+      } else if (['SETTLEMENT_DELIVERED', 'SETTLEMENT_REVIEW']
+          .contains(item['kind'])) {
+        // Organizer: the same screen that shows Sending → Delivered.
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SettlementScreen(
+                api: widget.api,
+                collectionId: item['collection_id'],
+                collectionName: item['collection_name'] ?? 'Collection')));
+      } else if (item['kind'] == 'CONTRIBUTION_CONFIRMED' ||
+          item['kind'] == 'CASH_FLAGGED') {
         // Organizer: open the collection, where the member's row now shows it.
         final data =
             await widget.api.request('/collections/${item['collection_id']}');

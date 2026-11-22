@@ -10,6 +10,11 @@ from .models import (Notification, PushDevice, PushDelivery, Participant, Collec
                      PhoneIdentity, AuthSession, RefreshSession, User, MoneyRequest, PersonOrder, PersonQuote)
 
 KINDS = {
+    'SETTLEMENT_DELIVERED': 'Settlement delivered',
+    'SETTLEMENT_REVIEW': 'Settlement needs attention',
+    'COLLECTION_SETTLED': 'Collection settled',
+    'CASH_RECORDED': 'Cash recorded',
+    'CASH_FLAGGED': 'Cash record flagged',
     'CONTRIBUTION_CONFIRMED': 'Contribution confirmed',
     'CONTRIBUTION_RECEIPT': 'Your contribution is confirmed',
     'CONTRIBUTION_REMINDER': 'Contribution reminder',
@@ -52,6 +57,25 @@ def emit(db, recipient, participant, kind, deliver=True, event_id=None, payment_
         if not db.scalar(select(Notification.id).where(Notification.event_key == event)):
             raise
 
+def notify(db, recipient, kind, event_key, **fields):
+    """Create one deduplicated notification (and its push jobs) not tied to an invitation."""
+    if not recipient or db.scalar(select(Notification.id).where(Notification.event_key == event_key)):
+        return
+    now = int(time.time())
+    try:
+        with db.begin_nested():
+            n = Notification(user_id=recipient, kind=kind, event_key=event_key, created_at=now, **fields)
+            db.add(n)
+            db.flush()
+            for device in db.scalars(select(PushDevice).where(PushDevice.user_id == recipient,
+                    PushDevice.active == 1, PushDevice.expires_at > now)).all():
+                db.add(PushDelivery(notification_id=n.id, device_id=device.id,
+                    token_hash=device.token_hash, family_id=device.family_id, due_at=now))
+            db.flush()
+    except IntegrityError:
+        if not db.scalar(select(Notification.id).where(Notification.event_key == event_key)):
+            raise
+
 def materialize_invitations(db, user):
     phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
     target = Participant.invited_user_id == user.id
@@ -79,6 +103,8 @@ def serialize(db, n):
         return dict(id=n.id, kind=n.kind, title=title, order_id=o.id, request_id=o.request_id,
             collection_name='Payment update', created_at=n.created_at, read_at=n.read_at,
             invitation_available=False)
+    if n.settlement_id:
+        return settlement_notification(db, n)
     if n.payment_id:
         return contribution_view(db, n)
     if n.request_id:
@@ -94,11 +120,41 @@ def serialize(db, n):
     title = KINDS[n.kind]
     if n.kind == 'CONTRIBUTION_REMINDER':
         title = f'Contribution reminder for {c.name}' if c else 'Collection reminder'
+    if n.kind in ('CASH_RECORDED', 'CASH_FLAGGED'):
+        from .models import CashRecord
+        from .contribution_state import money
+        record = db.scalar(select(CashRecord).where(CashRecord.participant_id == n.participant_id))
+        name = c.name if c else 'a collection'
+        if n.kind == 'CASH_RECORDED':
+            organizer = db.get(User, c.organizer_id).display_name if c else 'The organizer'
+            title = (f'{organizer} recorded {money(record.amount)} cash from you for {name}'
+                     if record else f'Your cash record for {name} changed')
+        else:
+            member = db.get(User, p.user_id).display_name if p and p.user_id else 'A member'
+            title = f'{member} flagged their cash record for {name}'
     return dict(id=n.id, kind=n.kind, title=title, collection_id=n.collection_id,
         collection_name=c.name if c else 'Collection', participant_id=n.participant_id,
         created_at=n.created_at, read_at=n.read_at,
         invitation_version=n.invitation_version,
         invitation_available=available if n.kind == 'INVITED' else False)
+
+def settlement_notification(db, n):
+    from .models import Settlement
+    from .contribution_state import money
+    s = db.get(Settlement, n.settlement_id)
+    c = db.get(Collection, n.collection_id)
+    name = c.name if c else 'your collection'
+    wallet = 'MTN MoMo' if s and s.method == 'MTN' else 'Orange Money'
+    organizer = db.get(User, s.organizer_id).display_name if s else 'the organizer'
+    title = {
+        'SETTLEMENT_DELIVERED': f'{money(s.payout_amount)} from {name} delivered to your {wallet}' if s else 'Settlement delivered',
+        'SETTLEMENT_REVIEW': f'Payout for {name} needs attention. Nobody is charged again.',
+        'COLLECTION_SETTLED': f'{name} is settled. Settlement delivered to {organizer}.',
+    }[n.kind]
+    return dict(id=n.id, kind=n.kind, title=title, collection_id=n.collection_id,
+        collection_name=name, participant_id=n.participant_id, settlement_id=n.settlement_id,
+        environment='SANDBOX', created_at=n.created_at, read_at=n.read_at,
+        invitation_available=False)
 
 def contribution_view(db, n):
     from .models import ProviderPayment

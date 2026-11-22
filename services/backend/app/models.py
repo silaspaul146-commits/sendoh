@@ -24,7 +24,7 @@ class Collection(Base):
         CheckConstraint('target_amount IS NULL OR target_amount > 0'),
         CheckConstraint('expected_amount IS NULL OR expected_amount > 0'),
         CheckConstraint("currency = 'XAF'"),
-        CheckConstraint("status IN ('DRAFT', 'ACTIVE')"),
+        CheckConstraint("status IN ('DRAFT', 'ACTIVE', 'CLOSED', 'SETTLED')", name='ck_collection_status'),
         CheckConstraint("mode IN ('ANY_AMOUNT', 'EXPECTED_TOTAL', 'MINIMUM_TOTAL')"),
         CheckConstraint("(mode = 'ANY_AMOUNT' AND expected_amount IS NULL) OR (mode != 'ANY_AMOUNT' AND expected_amount IS NOT NULL)"),
     )
@@ -67,6 +67,7 @@ class Notification(Base):
     __tablename__ = 'notifications'
     order_id: Mapped[str | None] = mapped_column(String(36))
     payment_id: Mapped[str | None] = mapped_column(String(36))
+    settlement_id: Mapped[str | None] = mapped_column(String(36))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     collection_id: Mapped[str | None] = mapped_column(ForeignKey('collections.id'))
@@ -357,6 +358,60 @@ class PersonPaymentLeg(Base):
     next_check_at: Mapped[int] = mapped_column(BigInteger, index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class CashRecord(Base):
+    """Cash an organizer says they received in person. A declaration, never provider evidence."""
+    __tablename__ = 'cash_records'
+    __table_args__ = (
+        UniqueConstraint('participant_id', name='uq_cash_participant'),
+        CheckConstraint('amount > 0 AND amount <= 1000000000'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'), index=True)
+    participant_id: Mapped[str] = mapped_column(ForeignKey('participants.id'))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    recorded_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    updated_at: Mapped[int] = mapped_column(BigInteger)
+    flagged_at: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class Settlement(Base):
+    """Close-and-send for one collection. Its id is the provider payout reference.
+
+    The row (the payout reservation) commits before the deposit is sent.
+    Recovery only looks up; a committed payout is never sent again.
+    """
+    __tablename__ = 'settlements'
+    __table_args__ = (
+        UniqueConstraint('collection_id', name='uq_settlement_collection'),
+        UniqueConstraint('organizer_id', 'request_key', name='uq_settlement_request'),
+        CheckConstraint("state IN ('SENDING','DELIVERED','REVIEW')", name='ck_settlement_state'),
+        CheckConstraint("payout_status IN ('PENDING','SUCCEEDED','FAILED','REFUNDED')", name='ck_settlement_payout_status'),
+        CheckConstraint('payout_amount > 0 AND payout_amount <= 1000000000'),
+        CheckConstraint("method IN ('MTN','ORANGE')"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    collection_id: Mapped[str] = mapped_column(ForeignKey('collections.id'))
+    organizer_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    request_key: Mapped[str] = mapped_column(String(120))
+    destination_id: Mapped[str] = mapped_column(ForeignKey('receiving_destinations.id'))
+    phone: Mapped[str] = mapped_column(String(16))
+    method: Mapped[str] = mapped_column(String(8))
+    application_hash: Mapped[str] = mapped_column(String(64))
+    policy: Mapped[dict] = mapped_column(JSON)
+    amounts: Mapped[dict] = mapped_column(JSON)
+    payout_amount: Mapped[int] = mapped_column(BigInteger)
+    state: Mapped[str] = mapped_column(String(12), default='SENDING')
+    payout_status: Mapped[str] = mapped_column(String(12), default='PENDING')
+    provider_id: Mapped[str | None] = mapped_column(String(120))
+    review_reason: Mapped[str | None] = mapped_column(String(80))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_check_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    lease_until: Mapped[int] = mapped_column(BigInteger, default=0)
+    lease_owner: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    updated_at: Mapped[int] = mapped_column(BigInteger)
 
 
 class ProviderReferenceClaim(Base):

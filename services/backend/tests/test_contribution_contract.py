@@ -18,7 +18,7 @@ def test_position_moves_through_confirming_to_contributed(client):
     org, guest, totals = member(client, c)
     assert org == guest
     assert org['state'] == 'NOT_STARTED' and org['membership'] == 'ACCEPTED'
-    assert totals['confirmed_amount'] == 0 and totals['cash_amount'] is None
+    assert totals['confirmed_amount'] == 0 and totals['cash_amount'] == 0
 
     pid = create(client, c).json()['id']
     org, guest, totals = member(client, c)

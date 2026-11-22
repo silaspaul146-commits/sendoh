@@ -19,6 +19,7 @@ import 'notifications.dart';
 import 'contribution_checkout.dart';
 import 'push_service.dart';
 import 'money_requests.dart';
+import 'settlement.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
@@ -904,6 +905,25 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
   }
 
+  Future<void> openSettlement() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => SettlementScreen(
+            api: widget.api,
+            collectionId: data['id'],
+            collectionName: data['name'])));
+    if (mounted) {
+      await refresh();
+    }
+  }
+
+  Future<void> editCash() async {
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => CashRecordsScreen(api: widget.api, data: data)));
+    if (mounted && saved == true) {
+      await refresh();
+    }
+  }
+
   Future<void> remindMembers() async {
     if (busy) {
       return;
@@ -1196,14 +1216,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
                 children: [
-                  SurfaceCard(
-                      color: SendohColors.teal,
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CollectionProgress(
-                                data: data, dark: true, compact: true),
-                          ])),
+                  SettlementSummary(
+                      data: data,
+                      onReview: busy ? null : openSettlement,
+                      onEditCash: busy ? null : editCash),
                   const SizedBox(height: 16),
                   Text('$paidCount paid · $outstandingCount outstanding',
                       style: SendohTextStyles.bodyMedium),

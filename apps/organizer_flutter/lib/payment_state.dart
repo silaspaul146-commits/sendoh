@@ -17,6 +17,7 @@ class MemberPosition {
     required this.pending,
     required this.expected,
     required this.remaining,
+    this.cash = 0,
     this.environment = 'SANDBOX',
   });
 
@@ -25,8 +26,14 @@ class MemberPosition {
   final String state;
   final String membership;
   final int confirmed, pending;
+
+  /// Cash the organizer recorded for this member: a declaration, shown separately.
+  final int cash;
   final int? expected, remaining;
   final String environment;
+
+  /// Confirmed Mobile Money plus recorded cash.
+  int get paid => confirmed + cash;
 
   bool get joined => membership == 'ACCEPTED';
   bool get confirming => state == 'CONFIRMING';
@@ -43,6 +50,7 @@ class MemberPosition {
         pending: _int(p['pending_amount']),
         expected: _intOrNull(p['expected_amount']),
         remaining: _intOrNull(p['remaining_amount']),
+        cash: _int(p['cash_amount']),
         environment: p['environment'] as String? ?? 'SANDBOX',
       );
 
@@ -156,25 +164,32 @@ class CollectionTotals {
       required this.pending,
       required this.target,
       required this.known,
+      this.cash = 0,
       this.environment = 'SANDBOX'});
 
+  /// Mobile Money confirmed by the provider, and money still awaiting it.
   final int confirmed, pending;
+
+  /// Cash recorded by the organizer, reported separately.
+  final int cash;
   final int? target;
 
   /// False when the payload carries no total at all (e.g. a minimal preview).
   final bool known;
   final String environment;
 
+  /// What the group raised: confirmed Mobile Money plus recorded cash.
+  int get raised => confirmed + cash;
+
   bool get sandbox => environment == 'SANDBOX';
-  bool get targetReached =>
-      target != null && target! > 0 && confirmed >= target!;
+  bool get targetReached => target != null && target! > 0 && raised >= target!;
   int? get remaining => target != null && target! > 0
-      ? (target! - confirmed).clamp(0, target!)
+      ? (target! - raised).clamp(0, target!)
       : null;
 
-  /// Progress uses confirmed money only.
+  /// Progress never includes money still awaiting confirmation.
   double get progress => target != null && target! > 0
-      ? (confirmed / target!).clamp(0.0, 1.0).toDouble()
+      ? (raised / target!).clamp(0.0, 1.0).toDouble()
       : 0;
 
   factory CollectionTotals.fromCollection(Map<String, dynamic> c) {
@@ -185,6 +200,7 @@ class CollectionTotals {
           pending: _int(t['pending_amount']),
           target: _intOrNull(t['target_amount']),
           known: true,
+          cash: _int(t['cash_amount']),
           environment: t['environment'] as String? ?? 'SANDBOX');
     }
     // Older backend: live total if any, otherwise provider sandbox. Never the simulator.

@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'design.dart';
+import 'settlement.dart' show MemberShareCard;
 
 String invitationLabel(dynamic value) => switch (value) {
       'PENDING' => 'Invited',
@@ -491,6 +492,10 @@ class _InvitationDetailState extends State<InvitationDetail> {
             color: SendohColors.teal,
             child: CollectionProgress(data: c, dark: true)),
         const SizedBox(height: 16),
+        if (item['invitation_state'] == 'ACCEPTED') ...[
+          MemberShareCard(api: widget.api, item: item),
+          const SizedBox(height: 16),
+        ],
         SurfaceCard(
             child: Column(children: [
           SummaryRow(
@@ -518,12 +523,11 @@ class _InvitationDetailState extends State<InvitationDetail> {
         if (item['invitation_state'] == 'ACCEPTED') ...[
           if (c['status'] == 'ACTIVE')
             FilledButton(
-                onPressed: () => payments(),
-                child: const Text('Make a test contribution')),
+                onPressed: () => payments(), child: const Text('Contribute')),
           const SizedBox(height: 12),
           OutlinedButton(
               onPressed: () => payments(history: true),
-              child: const Text('My test payments and receipts')),
+              child: const Text('My contributions and receipts')),
         ],
         if (pending) ...[
           FilledButton(

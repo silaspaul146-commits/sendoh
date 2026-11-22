@@ -277,7 +277,8 @@ def router(database, actor, web_url):
         phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
         if not phone:
             raise HTTPException(403, 'Verify your phone first.')
-        c = db.scalar(select(Collection).where(Collection.public_token == token, Collection.status == 'ACTIVE'))
+        c = db.scalar(select(Collection).where(Collection.public_token == token,
+            Collection.status.in_(('ACTIVE', 'CLOSED', 'SETTLED'))))
         if not c:
             raise HTTPException(404, 'Collection not found.')
         p = db.scalar(select(Participant).where(Participant.collection_id == c.id,

@@ -8,7 +8,8 @@ export type CollectionData={name:string;description:string;organizer_name:string
 export default function ContributionFlow({collection,token}:{collection:CollectionData;token?:string}) {
  const [c,setCollection]=useState(collection);
  const contextVersion=useRef(0);
- const totals=collectionTotals(c),collected=totals.confirmed;
+ const totals=collectionTotals(c),collected=totals.raised;
+ const closed=c.status==='CLOSED'||c.status==='SETTLED';
  const [step,setStep]=useState<'collection'|'identity'|'checkout'>('collection');
  const [name,setName]=useState(''),[phone,setPhone]=useState(''),[verified,setVerified]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -47,10 +48,12 @@ export default function ContributionFlow({collection,token}:{collection:Collecti
     <div className="collection-progress coordination-progress" aria-label="Group collection progress">
      <strong className="collection-amount">{money(collected)}</strong>
      {c.target_amount!==null&&c.target_amount>0?<><p>of {money(c.target_amount)}</p><progress aria-label="Collection progress" value={Math.min(collected,c.target_amount)} max={c.target_amount}/><p>{collected>=c.target_amount?'Target reached':`${money(c.target_amount-collected)} remaining`}</p></>:<p>Collected</p>}
+     {totals.cash>0&&<p className="helper">{money(totals.confirmed)} Mobile Money · {money(totals.cash)} cash recorded by {c.organizer_name}</p>}
      {totals.pending>0&&<p className="helper">{money(totals.pending)} awaiting confirmation</p>}
+     {closed&&<p><strong>{c.status==='SETTLED'?`Settled · delivered to ${c.organizer_name}`:'Closed · no new contributions'}</strong></p>}
      {totals.sandbox&&collected>0&&<small>Sandbox</small>}
     </div>
-    {verified&&summary&&<div className="personal-contribution" aria-live="polite"><strong>{personal.pending?'Your payment is being confirmed':personal.fulfilled?'Your part paid':personal.paid>0?`${money(personal.paid)} contributed`:'Your contribution'}</strong><p>{personal.pending?`${personal.pendingAmount>0?money(personal.pendingAmount)+' awaiting confirmation. ':''}Check its status before paying again.`:personal.fulfilled?'Your contribution is recorded.':personal.remaining!==null?`${money(personal.remaining)} remaining`:'Any amount welcome'}</p></div>}
+    {verified&&summary&&<div className="personal-contribution" aria-live="polite"><strong>{personal.pending?'Your payment is being confirmed':personal.fulfilled?`Your ${money(expected??0)} share is paid`:personal.paid>0?`${money(personal.paid)} contributed`:'Your contribution'}</strong><p>{personal.pending?`${personal.pendingAmount>0?money(personal.pendingAmount)+' awaiting confirmation. ':''}Check its status before paying again.`:personal.fulfilled?(personal.cash>0?`${money(personal.paid)} Mobile Money · ${money(personal.cash)} cash recorded by ${c.organizer_name}`:'Your contribution is recorded.'):personal.remaining!==null?`${money(personal.remaining)} remaining`:'Any amount welcome'}</p></div>}
     {c.description&&<details className="guest-details"><summary>About this collection</summary><p>{c.description}</p></details>}
     {c.deadline_at&&<p className="helper">Due {new Date(c.deadline_at).toLocaleDateString('en-GB',{timeZone:'Africa/Douala'})}</p>}
     {!summary&&expected!==null&&<p>{c.mode==='MINIMUM_TOTAL'?'Minimum contribution':'Expected contribution'}: {money(expected)}</p>}
