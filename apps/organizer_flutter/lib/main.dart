@@ -916,6 +916,38 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
   }
 
+  Future<void> startNextRound() async {
+    final next = ((data['round'] as num?)?.toInt() ?? 1) + 1;
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+              title: Text('Start round $next?'),
+              content: const Text(
+                  'Members start this round at 0 FCFA. Earlier rounds keep their settled records.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialog, false),
+                    child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.pop(dialog, true),
+                    child: Text('Open round $next')),
+              ],
+            ));
+    if (ok != true || !mounted) {
+      return;
+    }
+    try {
+      // from_round makes a repeated tap a safe replay, not a skipped round.
+      await widget.api.request('/collections/${data['id']}/rounds',
+          body: {'from_round': next - 1});
+      await refresh();
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    }
+  }
+
   Future<void> editCash() async {
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => CashRecordsScreen(api: widget.api, data: data)));
@@ -1219,7 +1251,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                   SettlementSummary(
                       data: data,
                       onReview: busy ? null : openSettlement,
-                      onEditCash: busy ? null : editCash),
+                      onEditCash: busy ? null : editCash,
+                      onNextRound: busy ? null : startNextRound),
                   const SizedBox(height: 16),
                   Text('$paidCount paid · $outstandingCount outstanding',
                       style: SendohTextStyles.bodyMedium),

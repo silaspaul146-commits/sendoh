@@ -105,11 +105,37 @@ class _RequestSendState extends State<RequestSend> {
   Map<String, dynamic>? envelope, result;
   String? error;
   bool busy = true;
+
+  /// The requester must say where they receive money, or the payer hits a dead end.
+  bool? receivingReady;
   String get storageKey => 'sendoh-request-pending-${widget.userId}';
+
+  Future<void> checkReceiving() async {
+    try {
+      final r = await widget.api.request('/me/receiving-destination');
+      final d = r['destination'];
+      if (mounted) {
+        setState(
+            () => receivingReady = d is Map && d['identity_current'] == true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => receivingReady = false);
+      }
+    }
+  }
+
+  Future<void> setUpReceiving() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ReceivingDetails(api: widget.api)));
+    await checkReceiving();
+  }
+
   @override
   void initState() {
     super.initState();
     restore();
+    checkReceiving();
   }
 
   Future<void> restore() async {
@@ -200,8 +226,25 @@ class _RequestSendState extends State<RequestSend> {
           const Text(
               'Sending a request does not charge anyone. If an earlier submission was interrupted, this continues that same request.'),
           const SizedBox(height: 24),
+          if (receivingReady == false) ...[
+            SurfaceCard(
+                color: SendohColors.amberSoft,
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Choose where you receive money first',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      const Text(
+                          'Then the person you ask can pay you straight away.'),
+                      TextButton(
+                          onPressed: setUpReceiving,
+                          child: const Text('Set receiving details')),
+                    ])),
+            const SizedBox(height: 16),
+          ],
           FilledButton(
-              onPressed: busy ? null : send,
+              onPressed: busy || receivingReady != true ? null : send,
               child: const Text('Send or check request')),
         ],
         if (!busy && envelope == null)

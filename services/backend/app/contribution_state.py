@@ -8,6 +8,7 @@ derive payment state from any other field. Rules:
   confirmation is `pending_amount`; it never counts toward progress or remaining.
 - An open contribution (no expected amount) has no invented personal target.
 - Legacy simulator records are excluded entirely.
+- Recurring collections run in rounds: every figure is for the current round.
 - `environment` says which money this is. Until live payments exist it is SANDBOX.
 - Cash recorded by the organizer counts toward a share and the amount raised, but is
   always reported as `cash_amount`, never merged into provider-confirmed money.
@@ -18,6 +19,13 @@ from .models import ProviderPayment
 ENVIRONMENT = 'SANDBOX'
 
 
+def current_round(model):
+    """Rows of `model` that belong to their collection's current round."""
+    from .models import Collection
+    return model.round == select(Collection.round).where(
+        Collection.id == model.collection_id).scalar_subquery()
+
+
 def money(amount: int) -> str:
     return f'{amount:,} FCFA'
 
@@ -26,7 +34,8 @@ def _sums(db, collection_id, participant_id=None):
     def total(status):
         q = select(func.coalesce(func.sum(ProviderPayment.amount), 0)).where(
             ProviderPayment.collection_id == collection_id,
-            ProviderPayment.mode == ENVIRONMENT, ProviderPayment.status == status)
+            ProviderPayment.mode == ENVIRONMENT, ProviderPayment.status == status,
+            current_round(ProviderPayment))
         if participant_id is not None:
             q = q.where(ProviderPayment.participant_id == participant_id)
         return int(db.scalar(q))
@@ -35,7 +44,8 @@ def _sums(db, collection_id, participant_id=None):
 
 def _cash(db, collection_id, participant_id=None):
     from .models import CashRecord
-    q = select(func.coalesce(func.sum(CashRecord.amount), 0)).where(CashRecord.collection_id == collection_id)
+    q = select(func.coalesce(func.sum(CashRecord.amount), 0)).where(
+        CashRecord.collection_id == collection_id, current_round(CashRecord))
     if participant_id is not None:
         q = q.where(CashRecord.participant_id == participant_id)
     return int(db.scalar(q))

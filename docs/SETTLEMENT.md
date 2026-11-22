@@ -30,18 +30,63 @@ Settlement answers three questions with server-computed figures:
 
 ## Configuration (off by default)
 
-Settlement is unavailable rather than free until both of these are set on Render:
+Settlement is unavailable rather than free until both settings are present on Render.
+
+### Settlement fee policy (adopted 23 Nov 2026)
 
 ```
 SENDOH_SANDBOX_SETTLEMENT_PAYOUTS=1
-SENDOH_SANDBOX_SETTLEMENT_FEE_POLICY={"version":"...","sendoh_bps":...,"sendoh_min":75,"sendoh_cap":2000,"payout_bps":0,"payout_fixed":0}
+SENDOH_SANDBOX_SETTLEMENT_FEE_POLICY={"version":"settle-2026-11-v1","sendoh_bps":100,"sendoh_min":75,"sendoh_cap":2000,"payout_bps":0,"payout_fixed":0}
 ```
 
-`sendoh_bps` is the Sendoh settlement rate in basis points (100 = 1%). **It is a business decision and is not yet approved.** The 1% used in the mockups and tests is illustrative only. A non-zero payout cost is refused until MeSomb's payout fee contract is verified. In sandbox, the organizer's receiving number must be one of `MESOMB_TEST_PHONES`.
+The model:
+- Sendoh fee = 1% of confirmed Mobile Money, rounded up to a whole FCFA.
+- The fee is never below 75 FCFA. The minimum applies below 7,500 raised.
+- The fee is never above 2,000 FCFA. The cap applies above 200,000 raised.
+- Cash is not charged.
+- MeSomb's collection fee is whatever MeSomb reported on each payment; Sendoh does not set it.
+
+Organizer receives = Mobile Money − MeSomb fees − Sendoh fee.
+
+| Mobile Money raised | MeSomb fees (about 2%, as observed) | Sendoh fee | Organizer receives | Total cost |
+|---:|---:|---:|---:|---:|
+| 5,000 | 100 | 75 (minimum) | 4,825 | 3.5% |
+| 50,000 | 1,000 | 500 | 48,500 | 3.0% |
+| 300,000 | 6,000 | 2,000 (cap) | 292,000 | 2.7% |
+
+The MeSomb fees come from one sandbox payment: 20 FCFA on 1,000 FCFA. They are not a published MeSomb tariff, so verify them before going live.
+
+The payout cost stays 0. A non-zero payout cost is refused until MeSomb's payout fee contract is verified. In sandbox, the organizer's receiving number must be one of `MESOMB_TEST_PHONES`.
+
+### Request and Pay fee policy (same Sendoh rule)
+
+```
+SENDOH_SANDBOX_PERSON_PAYMENTS=1
+SENDOH_SANDBOX_PERSON_FEE_POLICY={"version":"person-2026-11-v1","collect_bps":200,"collect_fixed":0,"payout_bps":0,"payout_fixed":0,"sendoh_bps":100,"sendoh_min":75,"sendoh_cap":2000}
+```
+
+The recipient always gets the exact amount. The payer covers the fees:
+
+| Recipient gets | Sendoh fee | MeSomb fee (2% model) | Payer pays |
+|---:|---:|---:|---:|
+| 1,000 | 75 | 22 | 1,097 |
+| 10,000 | 100 | 207 | 10,307 |
+| 100,000 | 1,000 | 2,062 | 103,062 |
+
+The 75 FCFA minimum makes small transfers costly: about 10% on 1,000 FCFA. Revisit the minimum for person-to-person payments after the pilot. In sandbox, both people must be among `MESOMB_TEST_PHONES`.
+
+## Recurring collections (rounds)
+
+- Turn on "Repeats in rounds" when creating a collection, for a njangi or tontine.
+- Contributions, cash and settlement belong to the current round. Every total and member position is for that round.
+- After a round is settled, the collection page offers "Start next round" (recurring collections only). Members start again at 0 FCFA and are notified.
+- Earlier rounds stay settled. They are listed in `history` in the settlement overview.
+- `POST /api/v1/collections/{id}/rounds` with `{from_round}`. Sending it twice opens the round once.
+- Migration `c9f6e4ab0015` adds `recurring` and `round`. Existing data is round 1.
 
 ## Not yet
 
-- **Recurring collections and "Start next round".** This needs contributions tracked per round. It will show on the settled collection page only for recurring collections.
+- **Rotating beneficiaries.** For now, the organizer always receives each round's payout.
 - **Real money.** These are MeSomb sandbox payouts only.
 
 Migration `b8e5d3fa0014` adds the CLOSED/SETTLED statuses, `cash_records`, `settlements` and `notifications.settlement_id`. Its downgrade refuses to discard settlement or cash evidence.

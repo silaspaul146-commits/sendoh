@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
-from sqlalchemy import Numeric, String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text, Index, text
+from sqlalchemy import Boolean, false, Numeric, String, Integer, BigInteger, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Text, Index, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -39,6 +39,9 @@ class Collection(Base):
     mode: Mapped[str] = mapped_column(String(24))
     expected_amount: Mapped[int | None] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(16), default='DRAFT')
+    # Recurring collections (njangi, tontine) run in rounds; totals are per round.
+    recurring: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    round: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 class Participant(Base):
@@ -233,6 +236,7 @@ class ProviderPayment(Base):
     confirmed_provider_fee: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
     confirmed_net: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
     accounting_verified_at: Mapped[int | None] = mapped_column(BigInteger)
+    round: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
 
     review_reason: Mapped[str | None] = mapped_column(String(80))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
@@ -364,7 +368,7 @@ class CashRecord(Base):
     """Cash an organizer says they received in person. A declaration, never provider evidence."""
     __tablename__ = 'cash_records'
     __table_args__ = (
-        UniqueConstraint('participant_id', name='uq_cash_participant'),
+        UniqueConstraint('participant_id', 'round', name='uq_cash_participant_round'),
         CheckConstraint('amount > 0 AND amount <= 1000000000'),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
@@ -374,6 +378,7 @@ class CashRecord(Base):
     recorded_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
     updated_at: Mapped[int] = mapped_column(BigInteger)
     flagged_at: Mapped[int | None] = mapped_column(BigInteger)
+    round: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
 
 
 class Settlement(Base):
@@ -384,7 +389,7 @@ class Settlement(Base):
     """
     __tablename__ = 'settlements'
     __table_args__ = (
-        UniqueConstraint('collection_id', name='uq_settlement_collection'),
+        UniqueConstraint('collection_id', 'round', name='uq_settlement_round'),
         UniqueConstraint('organizer_id', 'request_key', name='uq_settlement_request'),
         CheckConstraint("state IN ('SENDING','DELIVERED','REVIEW')", name='ck_settlement_state'),
         CheckConstraint("payout_status IN ('PENDING','SUCCEEDED','FAILED','REFUNDED')", name='ck_settlement_payout_status'),
@@ -402,6 +407,7 @@ class Settlement(Base):
     policy: Mapped[dict] = mapped_column(JSON)
     amounts: Mapped[dict] = mapped_column(JSON)
     payout_amount: Mapped[int] = mapped_column(BigInteger)
+    round: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
     state: Mapped[str] = mapped_column(String(12), default='SENDING')
     payout_status: Mapped[str] = mapped_column(String(12), default='PENDING')
     provider_id: Mapped[str | None] = mapped_column(String(120))

@@ -89,8 +89,10 @@ def view(p):
 
 
 def sandbox_total(db, collection_id, participant_id=None):
+    from .contribution_state import current_round
     q = select(func.coalesce(func.sum(Payment.amount), 0)).where(
-        Payment.collection_id == collection_id, Payment.status == 'SUCCEEDED', Payment.mode == 'SANDBOX')
+        Payment.collection_id == collection_id, Payment.status == 'SUCCEEDED', Payment.mode == 'SANDBOX',
+        current_round(Payment))
     if participant_id:
         q = q.where(Payment.participant_id == participant_id)
     return int(db.scalar(q))
@@ -332,7 +334,7 @@ def router(database, actor, sessions, config):
         if c.mode == 'MINIMUM_TOTAL' and sandbox_total(db, c.id, member.id) + data.amount < (member.expected_amount or c.expected_amount or 0):
             raise HTTPException(422, 'Contribution does not meet the outstanding minimum.')
         now = int(time.time())
-        p = Payment(collection_id=c.id, participant_id=member.id, payer_id=user.id,
+        p = Payment(collection_id=c.id, round=c.round, participant_id=member.id, payer_id=user.id,
                     beneficiary_id=c.organizer_id, request_key=idempotency_key, fingerprint=digest,
                     application_hash=config.application_hash, amount=data.amount, method=data.method,
                     payer_phone=data.payer_phone, created_at=now, updated_at=now, next_check_at=now+30)

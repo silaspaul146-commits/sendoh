@@ -22,7 +22,7 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
   String mode = 'ANY_AMOUNT';
   DateTime? deadline;
   int step = 0;
-  bool busy = false, submitted = false;
+  bool busy = false, submitted = false, recurring = false;
   String? error;
   String key =
       List.generate(24, (_) => Random.secure().nextInt(16).toRadixString(16))
@@ -91,7 +91,8 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
         'expected_amount':
             mode == 'ANY_AMOUNT' ? null : int.parse(expected.text.trim()),
         'participants': people.map((n) => {'name': n}).toList(),
-        'publish': true
+        'publish': true,
+        'recurring': recurring
       });
       if (mounted) Navigator.of(context).pop(Map<String, dynamic>.from(data));
     } catch (e) {
@@ -254,6 +255,21 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                             hintText: '3,000',
                                             suffixText: 'FCFA'))
                                   ],
+                                ],
+                                if (step == 0) ...[
+                                  const SizedBox(height: 8),
+                                  SwitchListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      value: recurring,
+                                      onChanged: busy
+                                          ? null
+                                          : (v) =>
+                                              setState(() => recurring = v),
+                                      title: const Text('Repeats in rounds',
+                                          style: TextStyle(fontSize: 14)),
+                                      subtitle: const Text(
+                                          'For njangi or tontine: settle each round, then start the next with the same members.',
+                                          style: TextStyle(fontSize: 12))),
                                 ],
                                 if (step == 1) ...[
                                   const Text('Who should contribute?',

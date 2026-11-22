@@ -606,7 +606,7 @@ class HomeActionBar extends StatelessWidget {
             icon: Icons.north_east,
             label: 'Pay',
             onTap: () => showPlannedFlow(context, true),
-            planned: true,
+            planned: gateway == null,
           ),
           _Action(
             icon: Icons.qr_code_scanner,
