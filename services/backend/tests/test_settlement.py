@@ -192,3 +192,60 @@ def test_contributors_can_still_see_a_closed_collection_but_not_pay(ready):
     context = client.get('/api/v1/me/guest-collections/' + token, headers=headers('bob')).json()
     assert context['participant']['contribution_summary']['position']['confirmed_amount'] == 1000
     assert create(client, c, key='provider-key-after-close').status_code == 404
+
+
+def make_recurring(client, c):
+    with client.app.state.sessions() as db:
+        db.get(Collection, c['id']).recurring = True
+        db.commit()
+
+
+def next_round(client, c, from_round):
+    return client.post(f"/api/v1/collections/{c['id']}/rounds", headers=headers(),
+                       json={'from_round': from_round})
+
+
+def test_recurring_collection_starts_a_fresh_round_after_settling(ready):
+    client, c = ready
+    make_recurring(client, c)
+    assert next_round(client, c, 1).status_code == 409  # not settled yet
+    close(client, c, 905)
+    sweep(client)
+    o = overview(client, c)
+    assert o['collection_status'] == 'SETTLED' and o['can_start_next_round'] is True
+    r = next_round(client, c, 1)
+    assert r.status_code == 200, r.text
+    o = r.json()
+    assert o['round'] == 2 and o['collection_status'] == 'ACTIVE'
+    # Round 2 starts from zero; round 1 stays settled in history.
+    assert o['raised']['mobile_money'] == 0 and o['settlement'] is None
+    assert [h['round'] for h in o['history']] == [1]
+    assert o['history'][0]['state'] == 'DELIVERED'
+    assert next_round(client, c, 1).json()['round'] == 2  # replay is safe
+    joined = client.get('/api/v1/me/joined-collections', headers=headers('bob')).json()[0]
+    position = joined['contribution_summary']['position']
+    assert position['confirmed_amount'] == 0 and position['state'] == 'NOT_STARTED'
+    assert serialize_title(client, notes(client, 'bob', 'ROUND_STARTED')[0]) == f"Round 2 of {c['name']} is open"
+    # A round-2 contribution settles separately with its own payout.
+    pid = create(client, c, key='provider-key-round-2').json()['id']
+    due(client, pid)
+    o = overview(client, c)
+    assert o['raised']['mobile_money'] == 1000 and o['quote']['payout_amount'] == 905
+    assert close(client, c, 905, key='settle-key-round-2').status_code == 200
+    sweep(client)
+    assert overview(client, c)['settlement']['round'] == 2
+    assert len(deposits(client)) == 2
+
+
+def test_one_off_collection_has_no_next_round(ready):
+    client, c = ready
+    close(client, c, 905)
+    sweep(client)
+    assert overview(client, c)['can_start_next_round'] is False
+    assert next_round(client, c, 1).status_code == 409
+
+
+def test_recurring_flag_is_set_at_creation(client):
+    from test_invitations import collection
+    c = collection(client, recurring=True)
+    assert c['recurring'] is True and c['round'] == 1

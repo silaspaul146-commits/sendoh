@@ -25,13 +25,13 @@ from decimal import Decimal, ROUND_FLOOR
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select, update, func
 from sqlalchemy.exc import IntegrityError
 
 from .models import (Activity, CashRecord, Collection, Participant, ProviderPayment,
                      Settlement, User)
-from .contribution_state import money
+from .contribution_state import money, current_round
 from .notifications import notify
 from .provider_claims import claim
 from .providers.mesomb import ReconciliationRequired
@@ -94,15 +94,21 @@ def masked(phone):
 
 def cash_by_participant(db, collection_id):
     return {r.participant_id: r for r in db.scalars(select(CashRecord).where(
-        CashRecord.collection_id == collection_id))}
+        CashRecord.collection_id == collection_id, current_round(CashRecord)))}
+
+
+def round_settlement(db, c):
+    return db.scalar(select(Settlement).where(Settlement.collection_id == c.id,
+                                              Settlement.round == c.round))
 
 
 def raised(db, c):
     paid = list(db.scalars(select(ProviderPayment).where(
         ProviderPayment.collection_id == c.id, ProviderPayment.mode == 'SANDBOX',
-        ProviderPayment.status == 'SUCCEEDED')))
+        ProviderPayment.status == 'SUCCEEDED', current_round(ProviderPayment))))
     pending = int(db.scalar(select(func.count()).select_from(ProviderPayment).where(
-        ProviderPayment.collection_id == c.id, ProviderPayment.status == 'PENDING')))
+        ProviderPayment.collection_id == c.id, ProviderPayment.status == 'PENDING',
+        current_round(ProviderPayment))))
     mobile = sum(p.amount for p in paid)
     cash = sum(r.amount for r in cash_by_participant(db, c.id).values())
     unverified = sum(1 for p in paid if p.accounting_verified_at is None or p.confirmed_net is None)
@@ -158,7 +164,7 @@ def quote(db, c, organizer_id, config, policy):
 def settlement_view(s):
     if s is None:
         return None
-    return dict(id=s.id, reference=s.id, state=s.state, payout_amount=s.payout_amount,
+    return dict(id=s.id, reference=s.id, round=s.round, state=s.state, payout_amount=s.payout_amount,
                 method=s.method, destination=masked(s.phone), amounts=s.amounts,
                 delivered=s.state == 'DELIVERED', review_reason=s.review_reason,
                 environment='SANDBOX', created_at=s.created_at, updated_at=s.updated_at)
@@ -283,6 +289,12 @@ class CashInput(BaseModel):
     entries: list[CashEntry] = Field(max_length=500)
 
 
+class NextRound(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    from_round: int = Field(ge=1, strict=True)
+    deadline_at: AwareDatetime | None = None
+
+
 class CloseAndSend(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     consent: str = Field(pattern='^CLOSE_AND_SEND$')
@@ -300,9 +312,13 @@ def router(database, actor, sessions, config):
         return c
 
     def overview(db, c, user):
-        s = db.scalar(select(Settlement).where(Settlement.collection_id == c.id))
+        s = round_settlement(db, c)
         figures, blockers, amounts, dest, policy = quote(db, c, user.id, config, configured_policy())
-        return dict(collection_status=c.status, raised=figures,
+        earlier = db.scalars(select(Settlement).where(Settlement.collection_id == c.id,
+            Settlement.round < c.round).order_by(Settlement.round.desc()))
+        return dict(collection_status=c.status, round=c.round, recurring=bool(c.recurring),
+                    can_start_next_round=bool(c.recurring) and c.status == 'SETTLED',
+                    history=[settlement_view(x) for x in earlier], raised=figures,
                     blockers=[] if s else [dict(code=b, message=BLOCKER_TEXT[b]) for b in blockers],
                     quote=None if s else amounts,
                     destination=dict(method=dest.method, masked=masked(dest.phone)) if dest else None,
@@ -335,7 +351,7 @@ def router(database, actor, sessions, config):
             if record:
                 record.amount, record.updated_at, record.flagged_at = entry.amount, now, None
             else:
-                record = CashRecord(collection_id=c.id, participant_id=p.id, amount=entry.amount,
+                record = CashRecord(collection_id=c.id, round=c.round, participant_id=p.id, amount=entry.amount,
                                     recorded_by=user.id, updated_at=now)
                 db.add(record)
                 db.flush()
@@ -350,7 +366,8 @@ def router(database, actor, sessions, config):
     def flag_cash(collection_id: str, user=Depends(actor), db=Depends(database)):
         p = db.scalar(select(Participant).where(Participant.collection_id == collection_id,
                                                 Participant.user_id == user.id))
-        record = db.scalar(select(CashRecord).where(CashRecord.participant_id == p.id)) if p else None
+        record = db.scalar(select(CashRecord).where(CashRecord.participant_id == p.id,
+                                                    current_round(CashRecord))) if p else None
         if record is None:
             raise HTTPException(404, 'No cash is recorded for you in this collection.')
         if record.flagged_at is None:
@@ -372,7 +389,7 @@ def router(database, actor, sessions, config):
                 raise HTTPException(409, 'Request key already used with different details.')
             return overview(db, db.get(Collection, collection_id), user)
         c = organized(db, collection_id, user, lock=True)
-        if db.scalar(select(Settlement.id).where(Settlement.collection_id == c.id)):
+        if round_settlement(db, c):
             raise HTTPException(409, 'This collection is already being sent. Check its status.')
         _, blockers, amounts, dest, policy = quote(db, c, user.id, config, configured_policy())
         if blockers:
@@ -380,7 +397,7 @@ def router(database, actor, sessions, config):
         if amounts['payout_amount'] != data.payout_amount:
             raise HTTPException(409, 'The amounts changed. Review the settlement again.')
         now = int(time.time())
-        s = Settlement(collection_id=c.id, organizer_id=user.id, request_key=idempotency_key,
+        s = Settlement(collection_id=c.id, round=c.round, organizer_id=user.id, request_key=idempotency_key,
                        destination_id=dest.id, phone=dest.phone, method=dest.method,
                        application_hash=config.application_hash, policy=policy.model_dump(),
                        amounts=amounts, payout_amount=amounts['payout_amount'], state='SENDING',
@@ -401,12 +418,38 @@ def router(database, actor, sessions, config):
     @routes.post('/{collection_id}/settlement/refresh')
     def refresh(collection_id: str, request: Request, user=Depends(actor), db=Depends(database)):
         c = organized(db, collection_id, user)
-        s = db.scalar(select(Settlement).where(Settlement.collection_id == c.id))
+        s = round_settlement(db, c)
         if s is None:
             raise HTTPException(404, 'Nothing has been sent for this collection.')
         if config is not None:
             reconcile(sessions, config, request.app.state.mesomb_client, s.id)  # lookup only
         db.expire_all()
         return overview(db, db.get(Collection, collection_id), user)
+
+    @routes.post('/{collection_id}/rounds')
+    def start_next_round(collection_id: str, data: NextRound, user=Depends(actor), db=Depends(database)):
+        c = organized(db, collection_id, user, lock=True)
+        if not c.recurring:
+            raise HTTPException(409, 'Only recurring collections run in rounds.')
+        # Replay of the same request: the round it asked for is already open.
+        if c.round == data.from_round + 1 and c.status == 'ACTIVE':
+            return overview(db, c, user)
+        if c.round != data.from_round:
+            raise HTTPException(409, 'This collection has moved on. Refresh and try again.')
+        if c.status != 'SETTLED':
+            raise HTTPException(409, 'Settle this round before starting the next one.')
+        c.round += 1
+        c.status = 'ACTIVE'
+        if data.deadline_at is not None:
+            c.deadline_at = data.deadline_at
+        db.add(Activity(organizer_id=user.id, collection_id=c.id,
+                        message=f'Round {c.round} of {c.name} opened'))
+        for p in db.scalars(select(Participant).where(Participant.collection_id == c.id,
+                Participant.invitation_state == 'ACCEPTED')):
+            if p.user_id and p.user_id != user.id:
+                notify(db, p.user_id, 'ROUND_STARTED', f'round:{c.id}:{c.round}:{p.user_id}',
+                       collection_id=c.id, participant_id=p.id)
+        db.commit()
+        return overview(db, c, user)
 
     return routes

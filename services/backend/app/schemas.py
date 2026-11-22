@@ -18,6 +18,7 @@ class CollectionInput(BaseModel):
     expected_amount: Money | None = None
     participants: list[ParticipantInput] = Field(default_factory=list, max_length=200)
     publish: bool = True
+    recurring: bool = False  # Runs in rounds (njangi, tontine); each round settles separately.
 
     @model_validator(mode='after')
     def contribution_policy(self):

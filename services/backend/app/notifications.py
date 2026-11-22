@@ -14,6 +14,7 @@ KINDS = {
     'SETTLEMENT_REVIEW': 'Settlement needs attention',
     'COLLECTION_SETTLED': 'Collection settled',
     'CASH_RECORDED': 'Cash recorded',
+    'ROUND_STARTED': 'A new round is open',
     'CASH_FLAGGED': 'Cash record flagged',
     'CONTRIBUTION_CONFIRMED': 'Contribution confirmed',
     'CONTRIBUTION_RECEIPT': 'Your contribution is confirmed',
@@ -120,6 +121,9 @@ def serialize(db, n):
     title = KINDS[n.kind]
     if n.kind == 'CONTRIBUTION_REMINDER':
         title = f'Contribution reminder for {c.name}' if c else 'Collection reminder'
+    if n.kind == 'ROUND_STARTED' and c:
+        # The round this notification announced, not whichever round is current now.
+        title = f"Round {n.event_key.split(':')[2]} of {c.name} is open"
     if n.kind in ('CASH_RECORDED', 'CASH_FLAGGED'):
         from .models import CashRecord
         from .contribution_state import money

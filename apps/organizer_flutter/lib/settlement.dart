@@ -24,16 +24,26 @@ class SettlementSummary extends StatelessWidget {
       {super.key,
       required this.data,
       required this.onReview,
-      required this.onEditCash});
+      required this.onEditCash,
+      this.onNextRound});
   final Map<String, dynamic> data;
   final VoidCallback? onReview, onEditCash;
+
+  /// Shown only for a settled recurring collection.
+  final VoidCallback? onNextRound;
 
   @override
   Widget build(BuildContext context) {
     final totals = CollectionTotals.fromCollection(data);
     final status = data['status'];
     final open = status == 'ACTIVE';
+    final recurring = data['recurring'] == true;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (recurring)
+        Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('Round ${data['round'] ?? 1}',
+                style: SendohTextStyles.caption)),
       SurfaceCard(
           color: SendohColors.teal,
           child:
@@ -79,9 +89,16 @@ class SettlementSummary extends StatelessWidget {
             child: TextButton(
                 onPressed: onEditCash, child: const Text('Edit cash records'))),
       const SizedBox(height: 4),
-      FilledButton(
-          onPressed: onReview,
-          child: Text(open ? 'Review settlement' : 'View settlement')),
+      if (recurring && status == 'SETTLED') ...[
+        FilledButton(
+            onPressed: onNextRound, child: const Text('Start next round')),
+        const SizedBox(height: 8),
+        OutlinedButton(
+            onPressed: onReview, child: const Text('View settlement')),
+      ] else
+        FilledButton(
+            onPressed: onReview,
+            child: Text(open ? 'Review settlement' : 'View settlement')),
     ]);
   }
 }

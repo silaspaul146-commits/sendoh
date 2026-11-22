@@ -5,7 +5,7 @@ from .models import Collection, Participant, Activity, Idempotency, User, TestPa
 
 class Conflict(Exception): pass
 
-from .contribution_state import member_position, collection_totals
+from .contribution_state import member_position, collection_totals, current_round
 
 def participant_state(p):
     if p.invitation_state == 'PENDING' and (p.expires_at or 0) <= int(time.time()):
@@ -22,7 +22,7 @@ def participant_summary(db, p):
     # Awaiting provider confirmation: shown beside confirmed money, never added to it.
     sandbox_pending_amount = int(db.scalar(select(func.coalesce(func.sum(ProviderPayment.amount), 0)).where(
         ProviderPayment.participant_id == p.id, ProviderPayment.mode == 'SANDBOX',
-        ProviderPayment.status == 'PENDING')))
+        ProviderPayment.status == 'PENDING', current_round(ProviderPayment))))
     sandbox_pending = sandbox_pending_amount > 0
     sandbox_state = ('Unpaid' if sandbox_paid == 0 else
                      'Partial' if p.expected_amount and sandbox_paid < p.expected_amount else 'Paid')
@@ -46,6 +46,8 @@ def serialize(db, collection, web_url, public=False):
                   status=collection.status, collected_amount=0)
     result['sandbox_collected_amount'] = sandbox_total(db, collection.id)
     result['totals'] = collection_totals(db, collection)
+    result['recurring'] = bool(collection.recurring)
+    result['round'] = collection.round
     result['test_collected_amount'] = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.collection_id == collection.id, TestPayment.status == 'SUCCEEDED')))
     if public:
         result['organizer_name'] = db.get(User, collection.organizer_id).display_name

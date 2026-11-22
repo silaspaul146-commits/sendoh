@@ -124,4 +124,50 @@ void main() {
     expect(find.text('Daniel has been told'), findsOneWidget);
     expect(api.posts, ['/collections/c1/cash/flag']);
   });
+
+  Map<String, dynamic> collection(String status, {bool recurring = false}) => {
+        'status': status,
+        'recurring': recurring,
+        'round': 2,
+        'target_amount': 50000,
+        'totals': {
+          'environment': 'SANDBOX',
+          'confirmed_amount': 48000,
+          'pending_amount': 0,
+          'cash_amount': 6000,
+          'target_amount': 50000,
+        },
+      };
+
+  Future<void> summary(WidgetTester tester, Map<String, dynamic> data) =>
+      tester.pumpWidget(MaterialApp(
+          theme: sendohTheme(),
+          home: Scaffold(
+              body: SingleChildScrollView(
+                  child: SettlementSummary(
+                      data: data,
+                      onReview: () {},
+                      onEditCash: () {},
+                      onNextRound: () {})))));
+
+  testWidgets('Collection page shows raised, split, and Target reached',
+      (tester) async {
+    await summary(tester, collection('ACTIVE'));
+    expect(find.text('54,000 FCFA raised'), findsOneWidget);
+    expect(find.text('48,000 FCFA'), findsOneWidget);
+    expect(find.text('6,000 FCFA'), findsOneWidget);
+    expect(find.text('Target reached'), findsOneWidget);
+    expect(find.text('Review settlement'), findsOneWidget);
+    expect(find.text('Start next round'), findsNothing);
+  });
+
+  testWidgets('Start next round only on a settled recurring collection',
+      (tester) async {
+    await summary(tester, collection('SETTLED', recurring: true));
+    expect(find.text('Round 2'), findsOneWidget);
+    expect(find.text('Start next round'), findsOneWidget);
+    expect(find.text('Edit cash records'), findsNothing);
+    await summary(tester, collection('SETTLED'));
+    expect(find.text('Start next round'), findsNothing);
+  });
 }
