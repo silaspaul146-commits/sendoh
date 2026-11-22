@@ -428,9 +428,9 @@ class HomeCollectionCard extends StatelessWidget {
                     ),
                     Text(
                       target != null && target > 0
-                          ? '/ ${coordinationMoney(target)}${showingProviderTest(data) ? ' · Test' : ''}'
+                          ? '/ ${coordinationMoney(target)}${showingProviderTest(data) ? ' · Sandbox' : ''}'
                           : showingProviderTest(data)
-                              ? 'collected · Test environment'
+                              ? 'collected · Sandbox'
                               : 'collected · No target',
                       style: SendohTextStyles.caption.copyWith(color: ink),
                     ),
@@ -521,8 +521,7 @@ class HomeJoinedCircle extends StatelessWidget {
     final width =
         (MediaQuery.sizeOf(context).width - 40).clamp(200.0, 320.0).toDouble();
     final target = (collection['target_amount'] as num?)?.toInt();
-    final hasTotal = collection.containsKey('collected_amount') ||
-        collection.containsKey('sandbox_collected_amount');
+    final hasTotal = CollectionTotals.fromCollection(collection).known;
     final total = displayedCollectionAmount(collection);
     final groupStatus = collection['status'] == 'CLOSED'
         ? 'Collection closed'
@@ -914,45 +913,7 @@ String joinedPersonalStatus(Map<String, dynamic> item) {
   if (c['status'] == 'CANCELLED') {
     return 'Cancelled';
   }
-  final summary = item['contribution_summary'] as Map?;
-  final expected = (item['expected_amount'] as num?)?.toInt();
-  // Only a server-confirmed live ledger may establish paid / remaining states.
-  if (summary?['live_available'] == true) {
-    final confirmed = (summary?['confirmed_amount'] as num?)?.toInt();
-    if (summary?['payment_pending'] == true) {
-      return 'Payment pending';
-    }
-    if (confirmed != null) {
-      if (expected != null && expected > 0) {
-        if (confirmed >= expected) {
-          return 'Your part paid';
-        }
-        return '${coordinationMoney(expected - confirmed)} remaining';
-      }
-      return confirmed > 0
-          ? '${coordinationMoney(confirmed)} contributed'
-          : 'Any amount welcome';
-    }
-  }
-  final providerPaid = (summary?['sandbox_paid_amount'] as num?)?.toInt() ?? 0;
-  if (summary?['sandbox_payment_pending'] == true) {
-    return 'Payment pending';
-  }
-  if (providerPaid > 0) {
-    if (expected != null && expected > 0) {
-      return providerPaid >= expected
-          ? 'Your part paid'
-          : '${coordinationMoney(expected - providerPaid)} remaining';
-    }
-    return '${coordinationMoney(providerPaid)} contributed';
-  }
-  final testPaid = (summary?['test_paid_amount'] as num?)?.toInt() ?? 0;
-  if (testPaid > 0) {
-    return '${coordinationMoney(testPaid)} · test';
-  }
-  return expected != null && expected > 0
-      ? '${coordinationMoney(expected)} expected'
-      : 'Any amount welcome';
+  return MemberPosition.fromJoined(item).personalLine(coordinationMoney);
 }
 
 class RequestSummary extends StatelessWidget {

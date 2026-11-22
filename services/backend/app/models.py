@@ -66,6 +66,7 @@ class Participant(Base):
 class Notification(Base):
     __tablename__ = 'notifications'
     order_id: Mapped[str | None] = mapped_column(String(36))
+    payment_id: Mapped[str | None] = mapped_column(String(36))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     collection_id: Mapped[str | None] = mapped_column(ForeignKey('collections.id'))

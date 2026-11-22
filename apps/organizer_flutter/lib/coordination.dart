@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'design.dart';
+import 'payment_state.dart';
+
+export 'payment_state.dart';
 
 String coordinationMoney(dynamic value) => value == null
     ? 'No target'
     : '${value.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
 
-// Keep provider sandbox, legacy simulations and live money distinct.
-bool showingProviderTest(Map<String, dynamic> data) =>
-    (data['collected_amount'] as num? ?? 0) == 0 &&
-    (data['sandbox_collected_amount'] as num? ?? 0) > 0;
+// Totals come from the payment-state contract; legacy simulator money is never shown.
+bool showingProviderTest(Map<String, dynamic> data) {
+  final totals = CollectionTotals.fromCollection(data);
+  return totals.sandbox && totals.confirmed > 0;
+}
 
 int displayedCollectionAmount(Map<String, dynamic> data) =>
-    ((showingProviderTest(data)
-                ? data['sandbox_collected_amount']
-                : data['collected_amount']) as num? ??
-            0)
-        .toInt();
+    CollectionTotals.fromCollection(data).confirmed;
 
 /// The same progress language for organizers and invited members.
 class CollectionProgress extends StatelessWidget {
@@ -25,8 +25,8 @@ class CollectionProgress extends StatelessWidget {
   final bool dark, compact;
   @override
   Widget build(BuildContext context) {
-    final actual = displayedCollectionAmount(data);
-    final test = (data['test_collected_amount'] as num? ?? 0).toInt();
+    final totals = CollectionTotals.fromCollection(data);
+    final actual = totals.confirmed;
     final target = (data['target_amount'] as num?)?.toInt();
     final color = dark ? Colors.white : SendohColors.teal;
     final muted = dark ? const Color(0xFFD1E4E0) : SendohColors.secondary;
@@ -58,15 +58,11 @@ class CollectionProgress extends StatelessWidget {
                   : '${coordinationMoney(target - actual)} to go',
               style: TextStyle(color: muted, fontSize: 12)),
       ],
-      if (test > 0 && !compact) ...[
-        const SizedBox(height: 14),
-        Text('Test contributions: ${coordinationMoney(test)}',
-            style: TextStyle(
-                color: dark ? SendohColors.orange : SendohColors.amber,
-                fontWeight: FontWeight.w600,
-                fontSize: 12)),
-        Text('Separate from real funds',
-            style: TextStyle(color: muted, fontSize: 11)),
+      // Awaiting money is named, but the orange line stays at confirmed money.
+      if (totals.pending > 0 && !compact) ...[
+        const SizedBox(height: 10),
+        Text('${coordinationMoney(totals.pending)} awaiting confirmation',
+            style: TextStyle(color: muted, fontSize: 12)),
       ],
     ]);
   }
@@ -228,37 +224,13 @@ class CoordinationAction extends StatelessWidget {
 
 /// Money a member has started paying that the provider has not yet confirmed.
 int memberPendingAmount(Map<String, dynamic> member) =>
-    (member['sandbox_pending_amount'] as num?)?.toInt() ?? 0;
+    MemberPosition.fromMember(member).pending;
 
 /// Organizer row text: confirmed money first, awaiting money beside it, never summed.
 String memberContributionLine(
-    Map<String, dynamic> member, String Function(Object?) money) {
-  final parts = <String>[
-    '${money(member['sandbox_paid_amount'] ?? 0)} contributed'
-  ];
-  final pending = memberPendingAmount(member);
-  if (pending > 0) {
-    parts.add('${money(pending)} awaiting confirmation');
-  }
-  if (member['expected_amount'] != null) {
-    parts.add('${money(member['expected_amount'])} expected');
-  }
-  return parts.join(' · ');
-}
+        Map<String, dynamic> member, String Function(Object?) money) =>
+    MemberPosition.fromMember(member).rosterLine(money);
 
 /// Invitation acceptance and contribution settlement are separate states.
-String collectionMemberPaymentStatus(Map<String, dynamic> member) {
-  if (member['invitation_state'] != 'ACCEPTED') {
-    return switch (member['invitation_state']) {
-      'PENDING' => 'Invited',
-      'DECLINED' => 'Declined',
-      'CANCELLED' => 'Cancelled',
-      'EXPIRED' => 'Expired',
-      _ => 'Not joined',
-    };
-  }
-  if (member['sandbox_payment_pending'] == true) {
-    return 'Pending';
-  }
-  return '${member['sandbox_payment_status'] ?? 'Unpaid'}';
-}
+String collectionMemberPaymentStatus(Map<String, dynamic> member) =>
+    MemberPosition.fromMember(member).badge;

@@ -10,6 +10,8 @@ from .models import (Notification, PushDevice, PushDelivery, Participant, Collec
                      PhoneIdentity, AuthSession, RefreshSession, User, MoneyRequest, PersonOrder, PersonQuote)
 
 KINDS = {
+    'CONTRIBUTION_CONFIRMED': 'Contribution confirmed',
+    'CONTRIBUTION_RECEIPT': 'Your contribution is confirmed',
     'CONTRIBUTION_REMINDER': 'Contribution reminder',
     'PERSON_RECEIVED': 'Payment received',
     'PERSON_DELIVERED': 'Payment delivered',
@@ -25,7 +27,7 @@ KINDS = {
     'CANCELLED': 'A collection invitation was cancelled',
 }
 
-def emit(db, recipient, participant, kind, deliver=True, event_id=None):
+def emit(db, recipient, participant, kind, deliver=True, event_id=None, payment_id=None):
     if not recipient:
         return
     event = f'{participant.id}:{participant.invitation_version}:{kind}:{recipient}' if event_id is None else f'{kind}:{event_id}:{recipient}'
@@ -37,7 +39,7 @@ def emit(db, recipient, participant, kind, deliver=True, event_id=None):
         with db.begin_nested():
             n = Notification(user_id=recipient, collection_id=participant.collection_id,
                 participant_id=participant.id, invitation_version=participant.invitation_version,
-                kind=kind, event_key=event, created_at=now)
+                kind=kind, event_key=event, created_at=now, payment_id=payment_id)
             db.add(n)
             db.flush()
             devices = db.scalars(select(PushDevice).where(PushDevice.user_id == recipient,
@@ -77,6 +79,8 @@ def serialize(db, n):
         return dict(id=n.id, kind=n.kind, title=title, order_id=o.id, request_id=o.request_id,
             collection_name='Payment update', created_at=n.created_at, read_at=n.read_at,
             invitation_available=False)
+    if n.payment_id:
+        return contribution_view(db, n)
     if n.request_id:
         r = db.get(MoneyRequest, n.request_id)
         return dict(id=n.id, kind=n.kind, title=KINDS[n.kind], request_id=n.request_id,
@@ -95,6 +99,24 @@ def serialize(db, n):
         created_at=n.created_at, read_at=n.read_at,
         invitation_version=n.invitation_version,
         invitation_available=available if n.kind == 'INVITED' else False)
+
+def contribution_view(db, n):
+    from .models import ProviderPayment
+    from .contribution_state import money
+    pay = db.get(ProviderPayment, n.payment_id)
+    c = db.get(Collection, n.collection_id)
+    name = c.name if c else 'a collection'
+    payer = db.get(User, pay.payer_id).display_name if pay else 'A member'
+    amount = money(pay.amount) if pay else 'A contribution'
+    if n.kind == 'CONTRIBUTION_CONFIRMED':
+        title = f'{payer} contributed {amount} to {name}'
+    else:
+        title = f'Your {amount} contribution to {name} is confirmed'
+    # Sandbox money is labelled at the record, never passed off as real funds.
+    return dict(id=n.id, kind=n.kind, title=title, collection_id=n.collection_id,
+        collection_name=name, participant_id=n.participant_id, payment_id=n.payment_id,
+        environment='SANDBOX', created_at=n.created_at, read_at=n.read_at,
+        invitation_available=False)
 
 class RegisterDevice(BaseModel):
     model_config = ConfigDict(extra='forbid')

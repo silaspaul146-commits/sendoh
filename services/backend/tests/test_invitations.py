@@ -56,7 +56,9 @@ def test_accept_binds_identity_without_granting_organizer_access(client):
     assert len(joined) == 1 and joined[0]['id'] == p['id']
     assert joined[0]['contribution_summary'] == {
         'live_available': False, 'confirmed_amount': None, 'test_paid_amount': 0,
-        'sandbox_paid_amount': 0, 'sandbox_payment_pending': False, 'sandbox_pending_amount': 0}
+        'sandbox_paid_amount': 0, 'sandbox_payment_pending': False, 'sandbox_pending_amount': 0,
+        'position': joined[0]['contribution_summary']['position']}
+    assert joined[0]['contribution_summary']['position']['state'] == 'NOT_STARTED'
     assert client.get('/api/v1/collections/' + c['id'], headers=headers('bob')).status_code == 404
     assert client.get('/api/v1/collections', headers=headers('bob')).json() == []
     detail = client.get('/api/v1/collections/' + c['id'], headers=headers()).json()

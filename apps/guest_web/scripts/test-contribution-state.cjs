@@ -8,14 +8,20 @@ const source=path.resolve(__dirname,'../app/c/[token]/contribution-state.ts');
 const compiled=ts.transpileModule(fs.readFileSync(source,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
 const loaded=new Module(source,module);loaded._compile(compiled,source);
 const {personalContribution:state,nextPollDelay,FIRST_POLL_DELAY}=loaded.exports;
-test('confirmed partial contribution reduces remaining amount',()=>{
- assert.deepEqual(state({live_available:true,confirmed_amount:400},1000),{paid:400,pending:false,pendingAmount:0,remaining:600,fulfilled:false});
+test('contract position is authoritative',()=>{
+ const position={state:'CONFIRMING',membership:'ACCEPTED',environment:'SANDBOX',confirmed_amount:2000,pending_amount:1000,expected_amount:5000,remaining_amount:3000};
+ assert.deepEqual(state({position,sandbox_paid_amount:9999},5000),{paid:2000,pending:true,pendingAmount:1000,remaining:3000,fulfilled:false});
+ assert.equal(state({position:{...position,state:'FULFILLED',pending_amount:0,confirmed_amount:5000,remaining_amount:0}},5000).fulfilled,true);
+});
+test('collection totals come from the contract, never the simulator',()=>{
+ const {collectionTotals}=loaded.exports;
+ assert.deepEqual(collectionTotals({totals:{environment:'SANDBOX',confirmed_amount:30000,pending_amount:1000,target_amount:50000,remaining_amount:20000,target_reached:false,cash_amount:null}}),{confirmed:30000,pending:1000,sandbox:true});
+ assert.equal(collectionTotals({collected_amount:0,sandbox_collected_amount:1000,test_collected_amount:5000}).confirmed,1000);
 });
 test('pending is never interpreted as confirmed money',()=>{
  assert.deepEqual(state({sandbox_payment_pending:true,sandbox_paid_amount:0,sandbox_pending_amount:1000},1000),{paid:0,pending:true,pendingAmount:1000,remaining:1000,fulfilled:false});
 });
-test('sandbox and live totals are not added together',()=>{
- assert.equal(state({live_available:true,confirmed_amount:200,sandbox_paid_amount:900},1000).remaining,800);
+test('older backend uses provider sandbox money only',()=>{
  assert.equal(state({live_available:false,sandbox_paid_amount:1000},1000).fulfilled,true);
 });
 test('legacy test money never establishes a paid share',()=>{

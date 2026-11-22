@@ -24,9 +24,10 @@ def inbox(client, user='bob', **params):
 
 class Sender:
     def __init__(self, failure=None):
-        self.sent, self.failure = [], failure
-    def send(self, token, notification_id):
+        self.sent, self.failure, self.bodies = [], failure, []
+    def send(self, token, notification_id, body=None):
         self.sent.append((token, notification_id))
+        self.bodies.append(body)
         if self.failure:
             raise self.failure
 
@@ -80,6 +81,8 @@ def test_cancel_and_reinvite_create_distinct_generations(client):
     while dispatch(client, sender):
         pass
     assert old not in [n for _, n in sender.sent]
+    # Alerts say what happened rather than a generic "You have an update".
+    assert sender.bodies and all(b and 'new update' not in b for b in sender.bodies)
 
 def test_retry_persists_and_unregistered_token_is_disabled(client):
     register(client)

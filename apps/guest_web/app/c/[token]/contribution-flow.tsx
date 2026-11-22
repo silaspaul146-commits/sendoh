@@ -3,12 +3,12 @@ import {useEffect,useRef,useState} from 'react';
 import GuestIdentity,{guestRequest,GuestRequestError} from '../../guest-identity';
 import ProviderCheckout from '../../test-checkout';
 import {GuestChrome,money} from '../../components';
-import {personalContribution,type ContributionSummary} from './contribution-state';
-export type CollectionData={name:string;description:string;organizer_name:string;currency:string;target_amount:number|null;collected_amount:number;test_collected_amount?:number;sandbox_collected_amount?:number;expected_amount:number|null;mode:string;deadline_at:string|null;status:string};
+import {personalContribution,collectionTotals,type ContributionSummary,type Totals} from './contribution-state';
+export type CollectionData={name:string;description:string;organizer_name:string;currency:string;target_amount:number|null;collected_amount:number;sandbox_collected_amount?:number;totals?:Totals;expected_amount:number|null;mode:string;deadline_at:string|null;status:string};
 export default function ContributionFlow({collection,token}:{collection:CollectionData;token?:string}) {
  const [c,setCollection]=useState(collection);
  const contextVersion=useRef(0);
- const collected=c.collected_amount>0?c.collected_amount:(c.sandbox_collected_amount??0);
+ const totals=collectionTotals(c),collected=totals.confirmed;
  const [step,setStep]=useState<'collection'|'identity'|'checkout'>('collection');
  const [name,setName]=useState(''),[phone,setPhone]=useState(''),[verified,setVerified]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -47,7 +47,8 @@ export default function ContributionFlow({collection,token}:{collection:Collecti
     <div className="collection-progress coordination-progress" aria-label="Group collection progress">
      <strong className="collection-amount">{money(collected)}</strong>
      {c.target_amount!==null&&c.target_amount>0?<><p>of {money(c.target_amount)}</p><progress aria-label="Collection progress" value={Math.min(collected,c.target_amount)} max={c.target_amount}/><p>{collected>=c.target_amount?'Target reached':`${money(c.target_amount-collected)} remaining`}</p></>:<p>Collected</p>}
-     {(c.sandbox_collected_amount??0)>0&&c.collected_amount===0&&<small>Sandbox</small>}
+     {totals.pending>0&&<p className="helper">{money(totals.pending)} awaiting confirmation</p>}
+     {totals.sandbox&&collected>0&&<small>Sandbox</small>}
     </div>
     {verified&&summary&&<div className="personal-contribution" aria-live="polite"><strong>{personal.pending?'Your payment is being confirmed':personal.fulfilled?'Your part paid':personal.paid>0?`${money(personal.paid)} contributed`:'Your contribution'}</strong><p>{personal.pending?`${personal.pendingAmount>0?money(personal.pendingAmount)+' awaiting confirmation. ':''}Check its status before paying again.`:personal.fulfilled?'Your contribution is recorded.':personal.remaining!==null?`${money(personal.remaining)} remaining`:'Any amount welcome'}</p></div>}
     {c.description&&<details className="guest-details"><summary>About this collection</summary><p>{c.description}</p></details>}

@@ -12,8 +12,8 @@ String paymentKey() => List.generate(24,
     .join();
 
 /// Provider-backed contributions using the existing checkout layout.
-class PaymentDemo extends StatefulWidget {
-  const PaymentDemo(
+class ContributionCheckout extends StatefulWidget {
+  const ContributionCheckout(
       {super.key,
       required this.api,
       required this.collectionId,
@@ -26,10 +26,10 @@ class PaymentDemo extends StatefulWidget {
   final int? expected;
   final Map<String, dynamic>? existing;
   @override
-  State<PaymentDemo> createState() => _PaymentDemoState();
+  State<ContributionCheckout> createState() => _ContributionCheckoutState();
 }
 
-class _PaymentDemoState extends State<PaymentDemo> {
+class _ContributionCheckoutState extends State<ContributionCheckout> {
   late final amount =
       TextEditingController(text: widget.expected?.toString() ?? '');
   final note = TextEditingController();
@@ -66,15 +66,40 @@ class _PaymentDemoState extends State<PaymentDemo> {
     super.dispose();
   }
 
-  bool get legacy => payment != null && payment!['provider'] != 'MESOMB';
+  Duration pollDelay = const Duration(seconds: 5);
 
+  /// Quiet background checks with backoff: no busy bar, no disabled buttons.
+  /// "Refresh payment status" remains the explicit, visible check.
   void schedule() {
     poll?.cancel();
-    if (mounted && payment?['status'] == 'PENDING' && !legacy) {
-      poll = Timer(const Duration(seconds: 5), () async {
-        await reload();
+    if (mounted && payment?['status'] == 'PENDING') {
+      poll = Timer(pollDelay, () async {
+        await quietCheck();
+        final next = pollDelay.inSeconds * 2;
+        pollDelay = Duration(seconds: next > 60 ? 60 : next);
         schedule();
       });
+    }
+  }
+
+  Future<void> quietCheck() async {
+    if (busy || payment == null || !mounted) {
+      return;
+    }
+    try {
+      final result = await widget.api.request(
+          '/provider-payments/${payment!['id']}/refresh',
+          body: <String, dynamic>{});
+      if (mounted && !busy) {
+        setState(() {
+          payment = Map<String, dynamic>.from(result);
+          if (payment!['status'] != 'PENDING') {
+            step = 4;
+          }
+        });
+      }
+    } catch (_) {
+      // The next check, or the explicit refresh, retries.
     }
   }
 
@@ -99,11 +124,10 @@ class _PaymentDemoState extends State<PaymentDemo> {
             step = payment!['status'] == 'PENDING' ? 3 : 4;
           }
         }
-        final history = await widget.api.request('/me/provider-payments');
-        final pending = (history['items'] as List).where((p) =>
-            p['collection_id'] == widget.collectionId &&
-            p['payer_id'] == me['id'] &&
-            p['status'] == 'PENDING');
+        final history = await widget.api.request(
+            '/me/provider-payments?payer_only=true&collection_id=${Uri.encodeQueryComponent(widget.collectionId)}');
+        final pending =
+            (history['items'] as List).where((p) => p['status'] == 'PENDING');
         if (pending.isNotEmpty && payment == null) {
           payment = Map<String, dynamic>.from(pending.first);
           step = 3;
@@ -181,10 +205,8 @@ class _PaymentDemoState extends State<PaymentDemo> {
 
   Future<void> reload({bool receipt = false}) => run(() async {
         final result = await widget.api.request(
-            legacy
-                ? '/test-payments/${payment!['id']}'
-                : '/provider-payments/${payment!['id']}/refresh',
-            body: legacy ? null : <String, dynamic>{});
+            '/provider-payments/${payment!['id']}/refresh',
+            body: <String, dynamic>{});
         if (mounted) {
           setState(() {
             payment = Map<String, dynamic>.from(result);
@@ -243,7 +265,7 @@ class _PaymentDemoState extends State<PaymentDemo> {
               backgroundColor: SendohColors.tealSoft),
           const SizedBox(height: 16),
         ],
-        const Text('Test environment',
+        const Text('Sandbox · no real money moves',
             style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
         const SizedBox(height: 20),
         Text(payment?['collection_name'] ?? widget.collection,
@@ -366,7 +388,7 @@ class _PaymentDemoState extends State<PaymentDemo> {
               child: Text(success ? 'View record' : 'Start a new attempt')),
         ],
         if (step == 5) ...[
-          const Text('Test environment · Contribution record',
+          const Text('Sandbox contribution record',
               style: TextStyle(fontWeight: FontWeight.bold)),
           SummaryRow('Reference', payment!['reference']),
           SummaryRow('Amount', coordinationMoney(payment!['amount'])),
@@ -403,8 +425,8 @@ class _PaymentDemoState extends State<PaymentDemo> {
   }
 }
 
-class TestPaymentHistory extends StatefulWidget {
-  const TestPaymentHistory(
+class ContributionHistory extends StatefulWidget {
+  const ContributionHistory(
       {super.key,
       required this.api,
       required this.collectionId,
@@ -413,13 +435,13 @@ class TestPaymentHistory extends StatefulWidget {
   final String collectionId;
   final bool organizer;
   @override
-  State<TestPaymentHistory> createState() => _TestPaymentHistoryState();
+  State<ContributionHistory> createState() => _ContributionHistoryState();
 }
 
-class _TestPaymentHistoryState extends State<TestPaymentHistory> {
+class _ContributionHistoryState extends State<ContributionHistory> {
   List<dynamic> rows = [];
   String? error, cursor;
-  bool busy = false, legacy = false;
+  bool busy = false;
   @override
   void initState() {
     super.initState();
@@ -435,15 +457,18 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
       error = null;
     });
     try {
-      final path = widget.organizer
-          ? '/collections/${widget.collectionId}/test-payments?'
-          : '/me/test-payments?collection_id=${widget.collectionId}&';
-      final data = await widget.api.request(legacy
-          ? '$path${more && cursor != null ? 'before=${Uri.encodeQueryComponent(cursor!)}' : ''}'
-          : '/me/provider-payments');
-      final items = (data['items'] as List)
-          .where((p) => legacy || p['collection_id'] == widget.collectionId)
-          .toList();
+      // Server-filtered to this collection. Organizers see contributions to it;
+      // members see only their own.
+      final query = StringBuffer(
+          '/me/provider-payments?collection_id=${Uri.encodeQueryComponent(widget.collectionId)}');
+      if (!widget.organizer) {
+        query.write('&payer_only=true');
+      }
+      if (more && cursor != null) {
+        query.write('&before=${Uri.encodeQueryComponent(cursor!)}');
+      }
+      final data = await widget.api.request(query.toString());
+      final items = data['items'] as List;
       if (mounted) {
         setState(() {
           rows = more ? [...rows, ...items] : List<dynamic>.from(items);
@@ -452,7 +477,7 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => error = '$e');
+        setState(() => error = 'Couldn’t load contributions. Try again.');
       }
     } finally {
       if (mounted) {
@@ -466,16 +491,21 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
       await showDialog<void>(
           context: context,
           builder: (context) => AlertDialog(
-                  title: const Text('Contribution record'),
+                  title: Text(contributionTitle(p)),
                   content: SingleChildScrollView(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(
-                        '${p['payer_name'] ?? 'Contribution'} • ${coordinationMoney(p['amount'])}'),
-                    Text('${p['status']} • ${p['method']}'),
-                    SelectableText(p['reference']),
-                    Text(p['note'] ?? ''),
-                    const Text('Test environment · Not proof of live payment.'),
-                  ])),
+                      child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        SummaryRow(
+                            'Status', contributionStatusLabel(p['status'])),
+                        SummaryRow('Method', methodLabel(p['method'])),
+                        SummaryRow('Reference', p['reference']),
+                        const SizedBox(height: 8),
+                        const Text('Sandbox record · no real money moved.',
+                            style: TextStyle(
+                                fontSize: 12, color: SendohColors.secondary)),
+                      ])),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -483,7 +513,7 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
                   ]));
     } else {
       await Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => PaymentDemo(
+          builder: (_) => ContributionCheckout(
               api: widget.api,
               collectionId: widget.collectionId,
               collection: p['collection_name'] ?? 'Collection',
@@ -497,8 +527,9 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Contribution history'), actions: [
+        appBar: AppBar(title: const Text('Contributions'), actions: [
           IconButton(
+              tooltip: 'Refresh',
               onPressed: busy ? null : () => load(),
               icon: const Icon(Icons.refresh))
         ]),
@@ -508,20 +539,10 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(22),
                 children: [
-                  const Text('Test environment'),
-                  SwitchListTile(
-                      title: const Text('Previous simulator records'),
-                      value: legacy,
-                      onChanged: busy
-                          ? null
-                          : (value) {
-                              setState(() {
-                                legacy = value;
-                                rows = [];
-                                cursor = null;
-                              });
-                              load();
-                            }),
+                  const Text('Sandbox · no real money moves',
+                      style: TextStyle(
+                          fontSize: 12, color: SendohColors.secondary)),
+                  const SizedBox(height: 8),
                   if (busy) const LinearProgressIndicator(),
                   if (error != null) ...[
                     Text(error!),
@@ -534,16 +555,31 @@ class _TestPaymentHistoryState extends State<TestPaymentHistory> {
                   ...rows.map((raw) {
                     final p = Map<String, dynamic>.from(raw);
                     return ListTile(
-                        title: Text(
-                            '${p['payer_name'] ?? 'Contribution'} • ${coordinationMoney(p['amount'])}'),
-                        subtitle: Text('${p['status']} • ${p['method']}'),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(contributionTitle(p)),
+                        subtitle: Text(
+                            '${contributionStatusLabel(p['status'])} · ${methodLabel(p['method'])}'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => open(p));
                   }),
                   if (cursor != null)
                     OutlinedButton(
                         onPressed: busy ? null : () => load(more: true),
-                        child: const Text('Load older payments')),
+                        child: const Text('Load older contributions')),
                 ])),
       );
 }
+
+String contributionTitle(Map<String, dynamic> p) =>
+    '${p['payer_name'] ?? 'Contribution'} · ${coordinationMoney(p['amount'])}';
+
+String contributionStatusLabel(Object? status) => switch (status) {
+      'PENDING' => 'Awaiting confirmation',
+      'SUCCEEDED' => 'Confirmed',
+      'FAILED' => 'Unsuccessful',
+      'REFUNDED' => 'Refunded',
+      _ => 'Unknown',
+    };
+
+String methodLabel(Object? method) =>
+    method == 'MTN' ? 'MTN Mobile Money' : 'Orange Money';

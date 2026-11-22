@@ -16,7 +16,7 @@ import 'create_collection.dart';
 import 'design.dart';
 import 'invitations.dart';
 import 'notifications.dart';
-import 'payment_demo.dart';
+import 'contribution_checkout.dart';
 import 'push_service.dart';
 import 'money_requests.dart';
 
@@ -891,13 +891,13 @@ class _CollectionDetailState extends State<CollectionDetail> {
   Future<void> openPayments({bool contribute = false}) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => contribute
-            ? PaymentDemo(
+            ? ContributionCheckout(
                 api: widget.api,
                 collectionId: data['id'],
                 collection: data['name'],
                 name: 'your verified profile',
                 expected: data['expected_amount'] as int?)
-            : TestPaymentHistory(
+            : ContributionHistory(
                 api: widget.api, collectionId: data['id'], organizer: true)));
     if (mounted) {
       await refresh();
@@ -1272,9 +1272,6 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             ? 'Any amount'
                             : money(data['expected_amount'])),
                     SummaryRow('Payment environment', 'Sandbox'),
-                    if ((data['test_collected_amount'] as num? ?? 0) > 0)
-                      SummaryRow('Legacy test contributions',
-                          money(data['test_collected_amount'])),
                     const SizedBox(height: 20),
                     if (data['status'] == 'ACTIVE')
                       FilledButton(

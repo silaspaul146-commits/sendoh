@@ -73,23 +73,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('Joined membership and test payments never imply live completion', () {
+  test('Joined membership and test payments never imply completion', () {
     final row = {'collection': collection('Family'), 'expected_amount': 5000};
     expect(joinedPersonalStatus(row), '5,000 FCFA expected');
-    row['contribution_summary'] = {
-      'live_available': false,
-      'test_paid_amount': 5000,
-    };
-    expect(joinedPersonalStatus(row), '5,000 FCFA · test');
-    row['contribution_summary'] = {
-      'live_available': true,
-      'confirmed_amount': 5000,
-    };
+    // Legacy simulator money is ignored entirely.
+    row['contribution_summary'] = {'test_paid_amount': 5000};
+    expect(joinedPersonalStatus(row), '5,000 FCFA expected');
+    Map<String, dynamic> position(
+            String state, int confirmed, int? remaining) =>
+        {
+          'position': {
+            'state': state,
+            'membership': 'ACCEPTED',
+            'confirmed_amount': confirmed,
+            'pending_amount': 0,
+            'expected_amount': 5000,
+            'remaining_amount': remaining,
+          }
+        };
+    row['contribution_summary'] = position('FULFILLED', 5000, 0);
     expect(joinedPersonalStatus(row), 'Your part paid');
-    row['contribution_summary'] = {
-      'live_available': true,
-      'confirmed_amount': 2000,
-    };
+    row['contribution_summary'] = position('PARTIAL', 2000, 3000);
     expect(joinedPersonalStatus(row), '3,000 FCFA remaining');
   });
 
@@ -319,8 +323,14 @@ void main() {
           },
           'expected_amount': 1000,
           'contribution_summary': {
-            'live_available': true,
-            'confirmed_amount': 1000
+            'position': {
+              'state': 'FULFILLED',
+              'membership': 'ACCEPTED',
+              'confirmed_amount': 1000,
+              'pending_amount': 0,
+              'expected_amount': 1000,
+              'remaining_amount': 0
+            }
           },
         }, onTap: () {}))));
     expect(find.text('Your part paid'), findsOneWidget);

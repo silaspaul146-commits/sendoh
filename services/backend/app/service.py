@@ -5,6 +5,8 @@ from .models import Collection, Participant, Activity, Idempotency, User, TestPa
 
 class Conflict(Exception): pass
 
+from .contribution_state import member_position, collection_totals
+
 def participant_state(p):
     if p.invitation_state == 'PENDING' and (p.expires_at or 0) <= int(time.time()):
         return 'EXPIRED'
@@ -32,7 +34,8 @@ def participant_summary(db, p):
                 avatar=member.avatar if member else None,
                 invitation_state=participant_state(p),
                 invited_phone_hint=('••••••' + p.invited_phone[-3:]) if p.invited_phone else None,
-                identity_verified=member is not None)
+                identity_verified=member is not None,
+                position=member_position(db, p, participant_state(p)))
 
 def serialize(db, collection, web_url, public=False):
     from .mesomb_payments import sandbox_total
@@ -42,6 +45,7 @@ def serialize(db, collection, web_url, public=False):
                   mode=collection.mode, expected_amount=collection.expected_amount,
                   status=collection.status, collected_amount=0)
     result['sandbox_collected_amount'] = sandbox_total(db, collection.id)
+    result['totals'] = collection_totals(db, collection)
     result['test_collected_amount'] = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.collection_id == collection.id, TestPayment.status == 'SUCCEEDED')))
     if public:
         result['organizer_name'] = db.get(User, collection.organizer_id).display_name

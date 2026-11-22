@@ -74,8 +74,11 @@ void main() {
         }),
         'Pending');
     expect(
-        collectionMemberPaymentStatus(
-            {'invitation_state': 'ACCEPTED', 'sandbox_payment_status': 'Paid'}),
+        collectionMemberPaymentStatus({
+          'invitation_state': 'ACCEPTED',
+          'sandbox_paid_amount': 1000,
+          'expected_amount': 1000
+        }),
         'Paid');
   });
   testWidgets(

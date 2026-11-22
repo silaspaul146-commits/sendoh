@@ -1,5 +1,5 @@
 import 'coordination.dart';
-import 'payment_demo.dart';
+import 'contribution_checkout.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -407,9 +407,9 @@ class _InvitationDetailState extends State<InvitationDetail> {
     final c = Map<String, dynamic>.from(current['collection']);
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => history
-            ? TestPaymentHistory(
+            ? ContributionHistory(
                 api: widget.api, collectionId: current['collection_id'])
-            : PaymentDemo(
+            : ContributionCheckout(
                 api: widget.api,
                 collectionId: current['collection_id'],
                 collection: c['name'],

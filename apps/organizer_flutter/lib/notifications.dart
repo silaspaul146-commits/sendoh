@@ -5,7 +5,7 @@ import 'design.dart';
 import 'invitations.dart';
 import 'main.dart' show CollectionDetail;
 import 'push_service.dart';
-import 'payment_demo.dart';
+import 'contribution_checkout.dart';
 import 'money_requests.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -164,6 +164,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) =>
                 MoneyRequestDetail(api: widget.api, id: item['request_id'])));
+      } else if (item['kind'] == 'CONTRIBUTION_CONFIRMED') {
+        // Organizer: open the collection, where the member's row now shows it.
+        final data =
+            await widget.api.request('/collections/${item['collection_id']}');
+        if (!mounted) {
+          return;
+        }
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => CollectionDetail(
+                api: widget.api, data: Map<String, dynamic>.from(data))));
+      } else if (item['kind'] == 'CONTRIBUTION_RECEIPT') {
+        // Payer: open the exact confirmed contribution and its record.
+        final payment = await widget.api
+            .request('/provider-payments/${item['payment_id']}');
+        if (!mounted) {
+          return;
+        }
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => ContributionCheckout(
+                api: widget.api,
+                collectionId: item['collection_id'],
+                collection: item['collection_name'] ?? 'Collection',
+                name: 'your verified profile',
+                existing: Map<String, dynamic>.from(payment))));
       } else if (item['kind'] == 'TEST_PAYMENT') {
         bool organizer = false;
         try {
@@ -178,7 +202,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           return;
         }
         await Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => TestPaymentHistory(
+            builder: (_) => ContributionHistory(
                 api: widget.api,
                 collectionId: item['collection_id'],
                 organizer: organizer)));
