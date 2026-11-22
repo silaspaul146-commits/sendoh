@@ -2,11 +2,12 @@
 import {useEffect,useRef,useState} from 'react';
 import {guestRequest} from './guest-identity';
 import {money,PaymentLogo,Row,Icon} from './components';
+import {FIRST_POLL_DELAY,nextPollDelay,SLOW_CONFIRMATION_SECONDS} from './c/[token]/contribution-state';
 
 type Payment={id:string;reference:string;amount:number;method:'MTN'|'ORANGE';status:'PENDING'|'SUCCEEDED'|'FAILED'|'REFUNDED';mode:string;created_at:number;updated_at:number};
 type Stage='amount'|'review'|'pay'|'result'|'receipt'|'history';
 type Draft={action:'payment-create';token:string;amount:number;method:'MTN'|'ORANGE';payer_phone:string;request_key:string;id?:string};
-export default function ProviderCheckout({token,name,collection,expected,onBack}:{token:string;name:string;collection:string;expected:number|null;onBack:()=>void}) {
+export default function ProviderCheckout({token,name,collection,expected,start,onBack}:{token:string;name:string;collection:string;expected:number|null;start?:'history';onBack:()=>void}) {
  const [stage,setStage]=useState<Stage>('amount');
  const [amount,setAmount]=useState(expected?.toString()??''),[phone,setPhone]=useState('');
  const [method,setMethod]=useState<'MTN'|'ORANGE'>('MTN');
@@ -49,6 +50,10 @@ export default function ProviderCheckout({token,name,collection,expected,onBack}
    const history=await guestRequest({action:'payment-history',token});
    const pending=(history.items as Payment[]).find(p=>p.status==='PENDING');
    if(pending && !draft.current?.id)present(pending);
+   // A returning contributor whose part is paid sees their record, not a blank amount form.
+   else if(!saved && start==='history' && alive.current){
+    setRows(history.items);setCursor(history.next_cursor??null);setStage('history');
+   }
    if(alive.current)setReady(true);
   });
  }
@@ -60,12 +65,27 @@ export default function ProviderCheckout({token,name,collection,expected,onBack}
  },[token]);
  useEffect(()=>{
   if(!payment || payment.status!=='PENDING' || stage!=='pay')return;
-  const id=payment.id;
-  const poll=setInterval(()=>{
-   if(document.visibilityState!=='visible' || lock.current)return;
-   void run(async()=>present(await guestRequest({action:'payment-refresh',id})));
-  },5000);
-  return()=>clearInterval(poll);
+  // Quiet background checks: no busy state, no disabled buttons, no error flashes.
+  // "Check status" remains the explicit, visible check.
+  const id=payment.id;let delay=FIRST_POLL_DELAY,stopped=false;
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const schedule=()=>{if(!stopped)timer=setTimeout(()=>void tick(),delay);};
+  async function tick(){
+   if(stopped)return;
+   if(document.visibilityState==='visible'&&!lock.current){
+    try{const p=await guestRequest({action:'payment-refresh',id});if(!stopped)present(p);}
+    catch{/* The next check, or Check status, retries. */}
+   }
+   delay=nextPollDelay(delay);schedule();
+  }
+  // Coming back from the Mobile Money prompt checks straight away.
+  const onVisible=()=>{
+   if(document.visibilityState!=='visible'||stopped)return;
+   clearTimeout(timer);delay=FIRST_POLL_DELAY;void tick();
+  };
+  document.addEventListener('visibilitychange',onVisible);
+  schedule();
+  return()=>{stopped=true;clearTimeout(timer);document.removeEventListener('visibilitychange',onVisible);};
  },[payment?.id,payment?.status,stage]);
  function review(){
   if(!/^\d+$/.test(amount)||!Number.isSafeInteger(Number(amount))||Number(amount)<=0||Number(amount)>1000000000){
@@ -132,7 +152,9 @@ export default function ProviderCheckout({token,name,collection,expected,onBack}
    </>}
    {stage==='pay'&&payment&&<>
     <div className="center"><Icon name="info" size={40}/><h2>Confirming your contribution</h2><p>{money(payment.amount)}</p></div>
-    <p>Approve on your Mobile Money phone if prompted.</p>
+    {Date.now()/1000-payment.created_at>SLOW_CONFIRMATION_SECONDS
+     ?<p role="status">This is taking longer than usual. Please don’t pay again: we keep checking, and this link will show the result.</p>
+     :<p>Approve on your Mobile Money phone if prompted.</p>}
     <p className="helper">You can return to this link to check your contribution.</p>
     <button className="button" disabled={busy} onClick={()=>void run(async()=>present(await guestRequest({action:'payment-refresh',id:payment.id})))}>Check status</button>
    </>}
@@ -154,6 +176,7 @@ export default function ProviderCheckout({token,name,collection,expected,onBack}
     {cursor&&<button className="text-button" disabled={busy} onClick={()=>void history(true)}>Load older contributions</button>}
     {locked&&!payment&&<button className="button" disabled={busy} onClick={()=>setStage('review')}>Recover saved contribution</button>}
     {payment&&payment.status!=='PENDING'&&<button className="text-button" disabled={busy} onClick={restart}>Make another contribution</button>}
+    {!payment&&!locked&&!rows.some(p=>p.status==='PENDING')&&<button className="text-button" disabled={busy||!ready} onClick={()=>setStage('amount')}>Make another contribution</button>}
    </>}
    <div className="screen-actions">
     {stage!=='history'&&<button className="text-button" disabled={busy||!ready} onClick={()=>void history()}>Your contributions and receipts</button>}

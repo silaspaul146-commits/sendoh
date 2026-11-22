@@ -16,9 +16,10 @@ import 'create_collection.dart';
 import 'design.dart';
 import 'invitations.dart';
 import 'notifications.dart';
-import 'payment_demo.dart';
+import 'contribution_checkout.dart';
 import 'push_service.dart';
 import 'money_requests.dart';
+import 'settlement.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
@@ -891,16 +892,97 @@ class _CollectionDetailState extends State<CollectionDetail> {
   Future<void> openPayments({bool contribute = false}) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => contribute
-            ? PaymentDemo(
+            ? ContributionCheckout(
                 api: widget.api,
                 collectionId: data['id'],
                 collection: data['name'],
                 name: 'your verified profile',
                 expected: data['expected_amount'] as int?)
-            : TestPaymentHistory(
+            : ContributionHistory(
                 api: widget.api, collectionId: data['id'], organizer: true)));
     if (mounted) {
       await refresh();
+    }
+  }
+
+  Future<void> openSettlement() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => SettlementScreen(
+            api: widget.api,
+            collectionId: data['id'],
+            collectionName: data['name'])));
+    if (mounted) {
+      await refresh();
+    }
+  }
+
+  Future<void> editCash() async {
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => CashRecordsScreen(api: widget.api, data: data)));
+    if (mounted && saved == true) {
+      await refresh();
+    }
+  }
+
+  Future<void> remindMembers() async {
+    if (busy) {
+      return;
+    }
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final preview =
+          await widget.api.request('/collections/${data['id']}/reminders');
+      if (!mounted) {
+        return;
+      }
+      final count = (preview['eligible_count'] as num).toInt();
+      if (count == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'No reminders needed. Members already reminded can be reminded again after 24 hours.')));
+        return;
+      }
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialog) => AlertDialog(
+                title:
+                    Text('Remind $count ${count == 1 ? 'person' : 'people'}?'),
+                content: const Text(
+                    'Adds a Sendoh update for joined members with an outstanding contribution.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, false),
+                      child: const Text('Cancel')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, true),
+                      child: const Text('Send reminders')),
+                ],
+              ));
+      if (!mounted || confirmed != true) {
+        return;
+      }
+      final result = await widget.api
+          .request('/collections/${data['id']}/reminders', body: {});
+      if (!mounted) {
+        return;
+      }
+      final sent = (result['reminded_count'] as num).toInt();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(sent == 0
+              ? 'Everyone is up to date.'
+              : 'Reminder added to $sent ${sent == 1 ? 'inbox' : 'inboxes'}.')));
+    } catch (_) {
+      if (mounted) {
+        setState(() => error =
+            'Couldn’t confirm reminders. Try again; recent reminders won’t be repeated.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -1022,6 +1104,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 : money(p['expected_amount'])),
                         SummaryRow('Contributed',
                             money(p['sandbox_paid_amount'] ?? 0)),
+                        if (memberPendingAmount(p) > 0)
+                          SummaryRow('Awaiting confirmation',
+                              money(memberPendingAmount(p))),
                         if (p['expected_amount'] != null)
                           SummaryRow(
                               'Remaining',
@@ -1043,13 +1128,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         ],
                         if (p['username'] != null)
                           SummaryRow('Verified profile', '@${p['username']}'),
-                        const Center(
-                            child: StatusBadge('Unpaid', pending: true)),
+                        Center(
+                            child: StatusBadge(collectionMemberPaymentStatus(p),
+                                pending: collectionMemberPaymentStatus(p) !=
+                                    'Paid')),
                         const SizedBox(height: 20),
-                        const Text('No contributions recorded yet.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 13, color: SendohColors.secondary)),
                         if (data['status'] == 'ACTIVE' &&
                             !['PENDING', 'ACCEPTED', 'DECLINED']
                                 .contains(p['invitation_state'])) ...[
@@ -1103,8 +1186,18 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final visiblePeople = people
         .where((p) =>
             filter == 'All' ||
-            (p['sandbox_payment_status'] ?? 'Unpaid') == filter)
+            collectionMemberPaymentStatus(Map<String, dynamic>.from(p)) ==
+                filter)
         .toList();
+    final paidCount = people
+        .where((p) =>
+            collectionMemberPaymentStatus(Map<String, dynamic>.from(p)) ==
+            'Paid')
+        .length;
+    final outstandingCount = people
+        .where((p) => ['Unpaid', 'Partial'].contains(
+            collectionMemberPaymentStatus(Map<String, dynamic>.from(p))))
+        .length;
     return Scaffold(
         appBar: AppBar(title: Text(data['name']), actions: [
           if (data['status'] == 'ACTIVE')
@@ -1123,25 +1216,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
                 children: [
-                  SurfaceCard(
-                      color: SendohColors.teal,
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              const Expanded(
-                                  child: Text('Your group’s progress',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600))),
-                              StatusBadge(data['status'] as String)
-                            ]),
-                            const SizedBox(height: 20),
-                            CollectionProgress(data: data, dark: true),
-                            const SizedBox(height: 20),
-                            PeoplePreview(people: people, dark: true),
-                          ])),
+                  SettlementSummary(
+                      data: data,
+                      onReview: busy ? null : openSettlement,
+                      onEditCash: busy ? null : editCash),
                   const SizedBox(height: 16),
+                  Text('$paidCount paid · $outstandingCount outstanding',
+                      style: SendohTextStyles.bodyMedium),
+                  const SizedBox(height: 12),
                   Row(children: [
                     CoordinationAction(
                         icon: Icons.share_outlined,
@@ -1162,26 +1244,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         onTap: busy ? null : () => openPayments()),
                   ]),
                   const SizedBox(height: 16),
-                  const Text(
-                      'One link for the whole group. Everyone joins as themselves.',
-                      style: TextStyle(
-                          fontSize: 12,
-                          height: 1.5,
-                          color: SendohColors.secondary)),
-                  const SizedBox(height: 16),
-                  if (data['status'] == 'ACTIVE')
-                    FilledButton.icon(
-                        onPressed:
-                            busy ? null : () => openPayments(contribute: true),
-                        icon: const Icon(Icons.add_card_outlined),
-                        label: const Text('Make a test contribution')),
-                  const SizedBox(height: 8),
-                  const Text('Test mode · No real money moves.',
-                      style:
-                          TextStyle(fontSize: 12, color: SendohColors.amber)),
-                  const SizedBox(height: 20),
                   Row(
-                      children: ['About', 'People']
+                      children: ['Overview', 'People']
                           .asMap()
                           .entries
                           .map((e) => Expanded(
@@ -1223,17 +1287,25 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         data['expected_amount'] == null
                             ? 'Any amount'
                             : money(data['expected_amount'])),
-                    const Divider(),
-                    const EmptyState(
-                        title: 'A shared view for your group',
-                        message:
-                            'Use People to see who has joined and Receipts to follow test contributions. No real funds are collected yet.',
-                        icon: Icons.receipt_long_outlined)
+                    SummaryRow('Payment environment', 'Sandbox'),
+                    const SizedBox(height: 20),
+                    if (data['status'] == 'ACTIVE')
+                      FilledButton(
+                          onPressed: busy
+                              ? null
+                              : () => openPayments(contribute: true),
+                          child: const Text('Contribute')),
                   ] else ...[
                     SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                            children: ['All', 'Unpaid', 'Partial', 'Paid']
+                            children: [
+                          'All',
+                          'Unpaid',
+                          'Partial',
+                          'Pending',
+                          'Paid'
+                        ]
                                 .map((v) => Padding(
                                     padding: const EdgeInsets.only(right: 8),
                                     child: ChoiceChip(
@@ -1259,14 +1331,28 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             title: Text(p['name'],
                                 style: const TextStyle(
                                     fontSize: 14, fontWeight: FontWeight.w500)),
-                            subtitle: Text(
-                                '${invitationLabel(p['invitation_state'])}\nContributed: ${money(p['sandbox_paid_amount'] ?? 0)} / ${p['expected_amount'] == null ? 'Any amount' : money(p['expected_amount'])}',
+                            subtitle: Text(memberContributionLine(p, money),
                                 style: const TextStyle(fontSize: 12)),
                             trailing: StatusBadge(
-                                '${p['sandbox_payment_status'] ?? 'Unpaid'}',
-                                pending: (p['sandbox_paid_amount'] ?? 0) == 0),
+                                collectionMemberPaymentStatus(p),
+                                pending:
+                                    collectionMemberPaymentStatus(p) != 'Paid'),
                             onTap: () => participant(p));
                       })
+                  ],
+                  if (tab == 1 && data['status'] == 'ACTIVE') ...[
+                    const SizedBox(height: 20),
+                    if (outstandingCount > 0)
+                      FilledButton(
+                          onPressed: busy ? null : remindMembers,
+                          child: const Text('Remind outstanding members')),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                        onPressed: data['share_url'] == null
+                            ? null
+                            : () =>
+                                copyCollectionLink(context, data['share_url']),
+                        child: const Text('Copy collection link')),
                   ],
                   if (error != null)
                     Text(error!,

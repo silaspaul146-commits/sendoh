@@ -4,14 +4,14 @@ import 'package:sendoh_organizer/home.dart';
 import 'package:sendoh_organizer/design.dart';
 
 Map<String, dynamic> collection(String name) => {
-  'name': name,
-  'status': 'ACTIVE',
-  'collected_amount': 2500,
-  'target_amount': 10000,
-  'test_collected_amount': 500,
-  'participants': <dynamic>[],
-  'organizer_name': 'Sam',
-};
+      'name': name,
+      'status': 'ACTIVE',
+      'collected_amount': 2500,
+      'target_amount': 10000,
+      'test_collected_amount': 500,
+      'participants': <dynamic>[],
+      'organizer_name': 'Sam',
+    };
 
 void main() {
   testWidgets('Deck follows drag, settles and opens active collection', (
@@ -73,23 +73,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('Joined membership and test payments never imply live completion', () {
+  test('Joined membership and test payments never imply completion', () {
     final row = {'collection': collection('Family'), 'expected_amount': 5000};
     expect(joinedPersonalStatus(row), '5,000 FCFA expected');
-    row['contribution_summary'] = {
-      'live_available': false,
-      'test_paid_amount': 5000,
-    };
-    expect(joinedPersonalStatus(row), '5,000 FCFA · test');
-    row['contribution_summary'] = {
-      'live_available': true,
-      'confirmed_amount': 5000,
-    };
-    expect(joinedPersonalStatus(row), 'Your part done ✓');
-    row['contribution_summary'] = {
-      'live_available': true,
-      'confirmed_amount': 2000,
-    };
+    // Legacy simulator money is ignored entirely.
+    row['contribution_summary'] = {'test_paid_amount': 5000};
+    expect(joinedPersonalStatus(row), '5,000 FCFA expected');
+    Map<String, dynamic> position(
+            String state, int confirmed, int? remaining) =>
+        {
+          'position': {
+            'state': state,
+            'membership': 'ACCEPTED',
+            'confirmed_amount': confirmed,
+            'pending_amount': 0,
+            'expected_amount': 5000,
+            'remaining_amount': remaining,
+          }
+        };
+    row['contribution_summary'] = position('FULFILLED', 5000, 0);
+    expect(joinedPersonalStatus(row), 'Your part paid');
+    row['contribution_summary'] = position('PARTIAL', 2000, 3000);
     expect(joinedPersonalStatus(row), '3,000 FCFA remaining');
   });
 
@@ -305,7 +309,36 @@ void main() {
     expect(find.text('Use Near2Pay'), findsNothing);
   });
 
-  testWidgets('Joined circle opens a group and stays compact', (tester) async {
+  testWidgets('Personal payment and group progress remain separate',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        theme: sendohTheme(),
+        home: Scaffold(
+            body: HomeJoinedCircle(item: {
+          'collection': {
+            'name': 'Family',
+            'status': 'ACTIVE',
+            'target_amount': 10000,
+            'collected_amount': 5000
+          },
+          'expected_amount': 1000,
+          'contribution_summary': {
+            'position': {
+              'state': 'FULFILLED',
+              'membership': 'ACCEPTED',
+              'confirmed_amount': 1000,
+              'pending_amount': 0,
+              'expected_amount': 1000,
+              'remaining_amount': 0
+            }
+          },
+        }, onTap: () {}))));
+    expect(find.text('Your part paid'), findsOneWidget);
+    expect(find.text('Group: 50% collected'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Joined card opens a group and keeps personal status visible',
+      (tester) async {
     bool opened = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -321,7 +354,7 @@ void main() {
         ),
       ),
     );
-    expect(tester.getSize(find.byType(HomeJoinedCircle)).width, 88);
+    expect(tester.getSize(find.byType(HomeJoinedCircle)).width, 320);
     await tester.tap(find.text('Family trip'));
     expect(opened, isTrue);
     expect(tester.takeException(), isNull);

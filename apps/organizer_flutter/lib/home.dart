@@ -208,7 +208,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _SectionTitle(
-                      title: 'You organize',
+                      title: 'Your collections',
                       action: entries.length > 1
                           ? TextButton(
                               onPressed: () => viewOwned(entries),
@@ -428,9 +428,9 @@ class HomeCollectionCard extends StatelessWidget {
                     ),
                     Text(
                       target != null && target > 0
-                          ? '/ ${coordinationMoney(target)}${showingProviderTest(data) ? ' · Test' : ''}'
+                          ? '/ ${coordinationMoney(target)}${showingProviderTest(data) ? ' · Sandbox' : ''}'
                           : showingProviderTest(data)
-                              ? 'collected · Test environment'
+                              ? 'collected · Sandbox'
                               : 'collected · No target',
                       style: SendohTextStyles.caption.copyWith(color: ink),
                     ),
@@ -518,66 +518,55 @@ class HomeJoinedCircle extends StatelessWidget {
     final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
     final initials =
         words.take(2).map((w) => w.characters.first).join().toUpperCase();
-    final width = MediaQuery.textScalerOf(
-      context,
-    ).scale(88).clamp(88.0, 150.0).toDouble();
-    return Semantics(
-      button: true,
-      label:
-          'Open $name, organized by ${collection['organizer_name'] ?? 'Organizer'}',
-      child: Tooltip(
-        message: name,
-        child: SizedBox(
-          width: width,
-          child: Material(
-            type: MaterialType.transparency,
-            clipBehavior: Clip.antiAlias,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+    final width =
+        (MediaQuery.sizeOf(context).width - 40).clamp(200.0, 320.0).toDouble();
+    final target = (collection['target_amount'] as num?)?.toInt();
+    final hasTotal = CollectionTotals.fromCollection(collection).known;
+    final total = displayedCollectionAmount(collection);
+    final groupStatus = collection['status'] == 'CLOSED'
+        ? 'Collection closed'
+        : collection['status'] == 'SETTLED'
+            ? 'Collection settled'
+            : collection['status'] == 'CANCELLED'
+                ? 'Collection cancelled'
+                : target != null && target > 0 && hasTotal
+                    ? 'Group: ${(total * 100 / target).clamp(0, 100).floor()}% collected'
+                    : 'Collection open';
+    return SizedBox(
+        width: width,
+        child: Material(
+          color: SendohColors.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: SendohColors.border)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
               onTap: onTap,
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: SendohColors.tealSoft,
-                      child: Text(
-                        initials.isEmpty ? 'G' : initials,
-                        textScaler: TextScaler.noScaling,
-                        style: const TextStyle(
-                          color: SendohColors.teal,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      name,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      status,
-                      textAlign: TextAlign.center,
-                      style: SendohTextStyles.caption,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                          backgroundColor: SendohColors.tealSoft,
+                          child: Text(initials.isEmpty ? 'G' : initials,
+                              style: const TextStyle(
+                                  color: SendohColors.teal,
+                                  fontWeight: FontWeight.w600))),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text(name, style: SendohTextStyles.titleSmall),
+                            const SizedBox(height: 4),
+                            Text(status, style: SendohTextStyles.bodyMedium),
+                            const SizedBox(height: 4),
+                            Text(groupStatus, style: SendohTextStyles.caption),
+                          ])),
+                    ]),
+              )),
+        ));
   }
 }
 
@@ -924,45 +913,7 @@ String joinedPersonalStatus(Map<String, dynamic> item) {
   if (c['status'] == 'CANCELLED') {
     return 'Cancelled';
   }
-  final summary = item['contribution_summary'] as Map?;
-  final expected = (item['expected_amount'] as num?)?.toInt();
-  // Only a server-confirmed live ledger may establish paid / remaining states.
-  if (summary?['live_available'] == true) {
-    final confirmed = (summary?['confirmed_amount'] as num?)?.toInt();
-    if (summary?['payment_pending'] == true) {
-      return 'Payment pending';
-    }
-    if (confirmed != null) {
-      if (expected != null && expected > 0) {
-        if (confirmed >= expected) {
-          return 'Your part done ✓';
-        }
-        return '${coordinationMoney(expected - confirmed)} remaining';
-      }
-      return confirmed > 0
-          ? '${coordinationMoney(confirmed)} contributed'
-          : 'Any amount welcome';
-    }
-  }
-  final providerPaid = (summary?['sandbox_paid_amount'] as num?)?.toInt() ?? 0;
-  if (summary?['sandbox_payment_pending'] == true) {
-    return 'Payment pending';
-  }
-  if (providerPaid > 0) {
-    if (expected != null && expected > 0) {
-      return providerPaid >= expected
-          ? 'Your part done ✓'
-          : '${coordinationMoney(expected - providerPaid)} remaining';
-    }
-    return '${coordinationMoney(providerPaid)} contributed';
-  }
-  final testPaid = (summary?['test_paid_amount'] as num?)?.toInt() ?? 0;
-  if (testPaid > 0) {
-    return '${coordinationMoney(testPaid)} · test';
-  }
-  return expected != null && expected > 0
-      ? '${coordinationMoney(expected)} expected'
-      : 'Any amount welcome';
+  return MemberPosition.fromJoined(item).personalLine(coordinationMoney);
 }
 
 class RequestSummary extends StatelessWidget {

@@ -96,6 +96,42 @@ def sandbox_total(db, collection_id, participant_id=None):
     return int(db.scalar(q))
 
 
+def announce(db, p, outcome):
+    """Activity and notifications for a provider-verified outcome, in its transaction."""
+    from .contribution_state import money
+    from .notifications import emit
+    payer = db.get(User, p.payer_id).display_name
+    collection = db.get(Collection, p.collection_id)
+    amount, name = money(p.amount), collection.name
+    message = {'SUCCEEDED': f'{payer} contributed {amount} to {name}',
+               'FAILED': f"{payer}'s {amount} payment to {name} was unsuccessful",
+               'REFUNDED': f"{payer}'s {amount} contribution to {name} was refunded"}[outcome]
+    db.add(Activity(organizer_id=p.beneficiary_id, collection_id=p.collection_id,
+                    message=(message + ' · Sandbox')[:200]))
+    if outcome != 'SUCCEEDED':
+        return
+    # "Contributed" is only said once MeSomb confirms. Event keys deduplicate retries.
+    participant = db.get(Participant, p.participant_id)
+    if p.beneficiary_id != p.payer_id:
+        emit(db, p.beneficiary_id, participant, 'CONTRIBUTION_CONFIRMED', event_id=p.id, payment_id=p.id)
+    emit(db, p.payer_id, participant, 'CONTRIBUTION_RECEIPT', event_id=p.id, payment_id=p.id)
+
+
+def unverified_reason(check: str) -> str:
+    """Allowlisted, secret-free category for a failed provider check.
+
+    A refusal (e.g. HTTP 403) says nothing about whether money moved, so the
+    payment stays PENDING; the category only tells support which check failed.
+    """
+    if check.startswith('HTTP_STATUS:') and check[12:].isdigit() and len(check) == 15:
+        return 'PROVIDER_LOOKUP_HTTP_' + check[12:]
+    if check == 'TRANSPORT_OR_JSON_ERROR':
+        return 'PROVIDER_UNREACHABLE'
+    if check == 'LOOKUP_SHAPE_INVALID':
+        return 'PROVIDER_RESPONSE_INVALID'
+    return 'PROVIDER_UNVERIFIED'
+
+
 def reconcile(sessions, config, api, payment_id):
     """Lease work across processes, query outside a transaction, apply atomically."""
     now = int(time.time())
@@ -125,7 +161,7 @@ def reconcile(sessions, config, api, payment_id):
             if len(transaction['pk']) > 120 or len(str(transaction.get('status', ''))) > 40:
                 raise ReconciliationRequired('Malformed provider identifier/status.')
     except ReconciliationRequired as exc:
-        reason = 'PROVIDER_UNVERIFIED'
+        reason = unverified_reason(str(exc))
         logger.warning('MESOMB_DIAGNOSTIC attempt=%s check=%s amounts=%s',
                        payment_id, str(exc),
                        safe_amount_evidence(transaction) if isinstance(transaction, dict) else {})
@@ -166,9 +202,7 @@ def reconcile(sessions, config, api, payment_id):
                 if desired != p.status:
                     p.status = desired
                     db.add(ProviderPaymentEvent(payment_id=p.id, status=desired, created_at=p.updated_at))
-                    # Existing activity contract; push presentation remains a later client change.
-                    db.add(Activity(organizer_id=p.beneficiary_id, collection_id=p.collection_id,
-                        message=f'MeSomb sandbox contribution {p.id}: {desired.lower()} ({p.amount} FCFA; no real money).'))
+                    announce(db, p, desired)
         delay = min(3600, 15 * 2 ** min(p.attempts, 8)) if p.status == 'PENDING' else 86400
         p.next_check_at = p.updated_at + delay
         p.lease_until = 0
@@ -193,6 +227,8 @@ def run_due(sessions, config, api):
         reconcile(sessions, config, api, payment_id)
     from .person_execution import run_due as run_person_due
     run_person_due(sessions, config, api)
+    from .settlement import run_due as run_settlement_due
+    run_settlement_due(sessions, config, api)
 
 
 def lifespan_with_payments(base_lifespan, sessions, config):
@@ -325,8 +361,9 @@ def router(database, actor, sessions, config):
         return view(owned(db, payment_id, user))
 
     @routes.get('/me/provider-payments')
-    def history(collection_token: str | None = None, before: str | None = None,
-                payer_only: bool = False, user=Depends(actor), db=Depends(database)):
+    def history(collection_token: str | None = None, collection_id: str | None = None,
+                before: str | None = None, payer_only: bool = False,
+                user=Depends(actor), db=Depends(database)):
         access = (Payment.payer_id == user.id if payer_only else
                   or_(Payment.payer_id == user.id, Payment.beneficiary_id == user.id))
         query = select(Payment).where(access)
@@ -335,6 +372,9 @@ def router(database, actor, sessions, config):
                 Collection.public_token == collection_token))
             if collection_id is None:
                 raise HTTPException(404, 'Collection not found.')
+            query = query.where(Payment.collection_id == collection_id)
+        elif collection_id is not None:
+            # Access is already limited to payer or beneficiary (the organizer).
             query = query.where(Payment.collection_id == collection_id)
         if before is not None:
             cursor = db.scalar(query.where(Payment.id == before))
@@ -345,7 +385,9 @@ def router(database, actor, sessions, config):
         rows = list(db.scalars(query.order_by(
             Payment.created_at.desc(), Payment.id.desc()).limit(101)))
         page = rows[:100]
-        return dict(items=[view(p) for p in page], limit=100,
+        names = dict(db.execute(select(User.id, User.display_name).where(
+            User.id.in_({p.payer_id for p in page}))).all()) if page else {}
+        return dict(items=[{**view(p), 'payer_name': names.get(p.payer_id)} for p in page], limit=100,
                     next_cursor=page[-1].id if len(rows) > 100 else None)
 
     @routes.post('/provider-payments/{payment_id}/refresh')

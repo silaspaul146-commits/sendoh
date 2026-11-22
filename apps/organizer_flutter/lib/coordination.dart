@@ -1,39 +1,37 @@
 import 'package:flutter/material.dart';
 import 'design.dart';
+import 'payment_state.dart';
+
+export 'payment_state.dart';
 
 String coordinationMoney(dynamic value) => value == null
     ? 'No target'
     : '${value.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
 
-// Keep provider sandbox, legacy simulations and live money distinct.
-bool showingProviderTest(Map<String, dynamic> data) =>
-    (data['collected_amount'] as num? ?? 0) == 0 &&
-    (data['sandbox_collected_amount'] as num? ?? 0) > 0;
+// Totals come from the payment-state contract; legacy simulator money is never shown.
+bool showingProviderTest(Map<String, dynamic> data) {
+  final totals = CollectionTotals.fromCollection(data);
+  return totals.sandbox && totals.confirmed > 0;
+}
 
 int displayedCollectionAmount(Map<String, dynamic> data) =>
-    ((showingProviderTest(data)
-                ? data['sandbox_collected_amount']
-                : data['collected_amount']) as num? ??
-            0)
-        .toInt();
+    CollectionTotals.fromCollection(data).confirmed;
 
 /// The same progress language for organizers and invited members.
 class CollectionProgress extends StatelessWidget {
-  const CollectionProgress({super.key, required this.data, this.dark = false});
+  const CollectionProgress(
+      {super.key, required this.data, this.dark = false, this.compact = false});
   final Map<String, dynamic> data;
-  final bool dark;
+  final bool dark, compact;
   @override
   Widget build(BuildContext context) {
-    final actual = displayedCollectionAmount(data);
-    final test = (data['test_collected_amount'] as num? ?? 0).toInt();
+    final totals = CollectionTotals.fromCollection(data);
+    final actual = totals.confirmed;
     final target = (data['target_amount'] as num?)?.toInt();
     final color = dark ? Colors.white : SendohColors.teal;
     final muted = dark ? const Color(0xFFD1E4E0) : SendohColors.secondary;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(
-          showingProviderTest(data)
-              ? 'Collected · Test environment'
-              : 'Collected',
+      Text(showingProviderTest(data) ? 'Collected · Sandbox' : 'Collected',
           style: TextStyle(color: muted, fontSize: 12)),
       const SizedBox(height: 6),
       Text(coordinationMoney(actual),
@@ -53,21 +51,18 @@ class CollectionProgress extends StatelessWidget {
                 backgroundColor:
                     dark ? const Color(0xFF316260) : SendohColors.tealSoft)),
         const SizedBox(height: 8),
-        Text(
-            actual >= target
-                ? 'Target reached'
-                : '${coordinationMoney(target - actual)} to go',
-            style: TextStyle(color: muted, fontSize: 12)),
+        if (!compact)
+          Text(
+              actual >= target
+                  ? 'Target reached'
+                  : '${coordinationMoney(target - actual)} to go',
+              style: TextStyle(color: muted, fontSize: 12)),
       ],
-      if (test > 0) ...[
-        const SizedBox(height: 14),
-        Text('Test contributions: ${coordinationMoney(test)}',
-            style: TextStyle(
-                color: dark ? SendohColors.orange : SendohColors.amber,
-                fontWeight: FontWeight.w600,
-                fontSize: 12)),
-        Text('Separate from real funds',
-            style: TextStyle(color: muted, fontSize: 11)),
+      // Awaiting money is named, but the orange line stays at confirmed money.
+      if (totals.pending > 0 && !compact) ...[
+        const SizedBox(height: 10),
+        Text('${coordinationMoney(totals.pending)} awaiting confirmation',
+            style: TextStyle(color: muted, fontSize: 12)),
       ],
     ]);
   }
@@ -226,3 +221,16 @@ class CoordinationAction extends StatelessWidget {
     );
   }
 }
+
+/// Money a member has started paying that the provider has not yet confirmed.
+int memberPendingAmount(Map<String, dynamic> member) =>
+    MemberPosition.fromMember(member).pending;
+
+/// Organizer row text: confirmed money first, awaiting money beside it, never summed.
+String memberContributionLine(
+        Map<String, dynamic> member, String Function(Object?) money) =>
+    MemberPosition.fromMember(member).rosterLine(money);
+
+/// Invitation acceptance and contribution settlement are separate states.
+String collectionMemberPaymentStatus(Map<String, dynamic> member) =>
+    MemberPosition.fromMember(member).badge;

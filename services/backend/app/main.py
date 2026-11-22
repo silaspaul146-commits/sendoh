@@ -16,6 +16,8 @@ from .config import load_settings
 from .request_limits import RequestSizeLimit
 from .invitations import router as invitation_router
 from .notifications import router as notification_router
+from .collection_reminders import router as collection_reminders_router
+from .settlement import router as settlement_router
 from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
 from .people import router as people_router
@@ -138,7 +140,8 @@ def create_app(database_url=None):
 
     @app.get('/api/v1/public/collections/{token}')
     def public(token: str, db=Depends(database)):
-        c=db.scalar(select(Collection).where(Collection.public_token==token,Collection.status=='ACTIVE'))
+        # Closed and settled stay readable so contributors can see their contribution counted.
+        c=db.scalar(select(Collection).where(Collection.public_token==token,Collection.status.in_(('ACTIVE','CLOSED','SETTLED'))))
         if not c: raise HTTPException(404, 'Collection not found')
         return serialize(db,c,web_url,public=True)
 
@@ -147,6 +150,7 @@ def create_app(database_url=None):
         return [dict(id=a.id, message=a.message, created_at=a.created_at.isoformat()) for a in db.scalars(select(Activity).where(Activity.organizer_id==user.id).order_by(Activity.created_at.desc()))]
     app.include_router(router(database, actor, bearer, settings, sender))
     app.include_router(invitation_router(database, actor, web_url))
+    app.include_router(collection_reminders_router(database, actor))
     app.include_router(notification_router(database, actor, bearer, settings, sender is not None))
     app.include_router(payment_router(database, actor, settings))
     app.include_router(people_router(database, actor))
@@ -154,6 +158,7 @@ def create_app(database_url=None):
     app.include_router(person_orders_router(database, actor, mesomb_config))
     app.include_router(person_execution_router(database, actor, sessions, mesomb_config))
     app.include_router(mesomb_router(database, actor, sessions, mesomb_config))
+    app.include_router(settlement_router(database, actor, sessions, mesomb_config))
     app.include_router(payout_probe_router(sessions, mesomb_config, settings.environment))
     return app
 

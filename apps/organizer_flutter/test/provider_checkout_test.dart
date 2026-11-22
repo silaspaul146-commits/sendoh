@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sendoh_organizer/api.dart';
-import 'package:sendoh_organizer/payment_demo.dart';
+import 'package:sendoh_organizer/contribution_checkout.dart';
 
 class CheckoutApi extends SendohApi {
   CheckoutApi() : super('https://example.invalid', 'session');
@@ -26,7 +26,8 @@ class CheckoutApi extends SendohApi {
     if (path == '/me') {
       return {'id': 'user-1'};
     }
-    if (path == '/me/provider-payments') {
+    if (path.startsWith('/me/provider-payments')) {
+      expect(path, contains('collection_id=collection-1'));
       return {'items': []};
     }
     if (path == '/provider-payments') {
@@ -50,7 +51,7 @@ void main() {
 
   Future<void> open(WidgetTester tester, CheckoutApi api) async {
     await tester.pumpWidget(MaterialApp(
-        home: PaymentDemo(
+        home: ContributionCheckout(
             api: api,
             collectionId: 'collection-1',
             collection: 'Birthday',

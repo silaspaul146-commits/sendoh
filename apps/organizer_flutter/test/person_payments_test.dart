@@ -79,13 +79,47 @@ void main() {
   }
 
   Future<void> confirm(WidgetTester tester) async {
-    final button = find.text('Confirm · 5,179 FCFA');
+    final button = find.text('Pay 5,179 FCFA');
     await tester.scrollUntilVisible(button, 200,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(button);
     await tester.pumpAndSettle();
   }
 
+  testWidgets('Review keeps total visible and discloses fee breakdown',
+      (tester) async {
+    await open(tester, PersonApi());
+    expect(find.text('Fees'), findsOneWidget);
+    expect(find.text('179 FCFA'), findsOneWidget);
+    expect(find.text('Total'), findsOneWidget);
+    expect(find.text('5,179 FCFA'), findsOneWidget);
+    expect(find.text('Processing fee'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Fee breakdown'), 100,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Fee breakdown'));
+    await tester.pumpAndSettle();
+    expect(find.text('Processing fee'), findsOneWidget);
+    expect(find.text('104 FCFA'), findsOneWidget);
+    expect(find.text('75 FCFA'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('Delivery details never offer a receipt before confirmation',
+      (tester) async {
+    final api = PersonApi()..status = 'DELIVERING';
+    await tester.pumpWidget(
+        MaterialApp(home: PersonCheckout(api: api, orderId: 'order-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('View receipt'), findsNothing);
+    expect(find.text('order-1'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Payment details'), 100,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Payment details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recipient delivery'), findsOneWidget);
+    expect(find.text('order-1'), findsOneWidget);
+    expect(api.executions, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('Collected money is not displayed as delivered', (tester) async {
     final api = PersonApi();
     await open(tester, api);
@@ -104,7 +138,7 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Confirm · 5,179 FCFA'))
+                find.widgetWithText(FilledButton, 'Pay 5,179 FCFA'))
             .onPressed,
         isNull);
     await tester.pumpWidget(const SizedBox());
@@ -166,9 +200,9 @@ void main() {
             api: PersonApi(),
             target: const {'recipient_id': 'alice', 'amount': 5000})));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Confirm · 5,179 FCFA'), 200,
+    await tester.scrollUntilVisible(find.text('Pay 5,179 FCFA'), 200,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Confirm · 5,179 FCFA').hitTestable(), findsOneWidget);
+    expect(find.text('Pay 5,179 FCFA').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

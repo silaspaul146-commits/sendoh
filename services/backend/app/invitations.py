@@ -70,7 +70,9 @@ def invitation_view(db, p, c, web_url):
     return dict(contribution_summary=dict(live_available=False, confirmed_amount=None,
                     test_paid_amount=personal['test_paid_amount'],
                     sandbox_paid_amount=personal['sandbox_paid_amount'],
-                    sandbox_payment_pending=personal['sandbox_payment_pending']),
+                    sandbox_payment_pending=personal['sandbox_payment_pending'],
+                    sandbox_pending_amount=personal['sandbox_pending_amount'],
+                    position=personal['position']),
                 id=p.id, invitation_version=p.invitation_version, collection_id=c.id, collection=info,
                 participant_name=p.name, expected_amount=p.expected_amount,
                 invitation_state=participant_state(p), expires_at=p.expires_at,
@@ -275,7 +277,8 @@ def router(database, actor, web_url):
         phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
         if not phone:
             raise HTTPException(403, 'Verify your phone first.')
-        c = db.scalar(select(Collection).where(Collection.public_token == token, Collection.status == 'ACTIVE'))
+        c = db.scalar(select(Collection).where(Collection.public_token == token,
+            Collection.status.in_(('ACTIVE', 'CLOSED', 'SETTLED'))))
         if not c:
             raise HTTPException(404, 'Collection not found.')
         p = db.scalar(select(Participant).where(Participant.collection_id == c.id,
