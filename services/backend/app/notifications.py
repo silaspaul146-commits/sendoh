@@ -11,6 +11,7 @@ from .models import (Notification, PushDevice, PushDelivery, Participant, Collec
 
 KINDS = {
     'SETTLEMENT_DELIVERED': 'Settlement delivered',
+    'SETTLEMENT_RECEIVED': 'You received a payout',
     'SETTLEMENT_REVIEW': 'Settlement needs attention',
     'COLLECTION_SETTLED': 'Collection settled',
     'CASH_RECORDED': 'Cash recorded',
@@ -149,11 +150,21 @@ def settlement_notification(db, n):
     c = db.get(Collection, n.collection_id)
     name = c.name if c else 'your collection'
     wallet = 'MTN MoMo' if s and s.method == 'MTN' else 'Orange Money'
-    organizer = db.get(User, s.organizer_id).display_name if s else 'the organizer'
+    receiver_id = (s.beneficiary_id or s.organizer_id) if s else None
+    receiver = db.get(User, receiver_id).display_name if receiver_id else 'the organizer'
+    to_organizer = s is not None and receiver_id == s.organizer_id
+    if s is None:
+        delivered = 'Settlement delivered'
+    elif to_organizer:
+        delivered = f'{money(s.payout_amount)} from {name} delivered to your {wallet}'
+    else:
+        delivered = f"{money(s.payout_amount)} from {name} delivered to {receiver}'s {wallet}"
     title = {
-        'SETTLEMENT_DELIVERED': f'{money(s.payout_amount)} from {name} delivered to your {wallet}' if s else 'Settlement delivered',
+        'SETTLEMENT_DELIVERED': delivered,
+        'SETTLEMENT_RECEIVED': (f'You received {money(s.payout_amount)} from {name} on your {wallet}'
+                                if s else 'You received a payout'),
         'SETTLEMENT_REVIEW': f'Payout for {name} needs attention. Nobody is charged again.',
-        'COLLECTION_SETTLED': f'{name} is settled. Settlement delivered to {organizer}.',
+        'COLLECTION_SETTLED': f'{name} is settled. Settlement delivered to {receiver}.',
     }[n.kind]
     return dict(id=n.id, kind=n.kind, title=title, collection_id=n.collection_id,
         collection_name=name, participant_id=n.participant_id, settlement_id=n.settlement_id,

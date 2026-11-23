@@ -51,6 +51,8 @@ BLOCKER_TEXT = {
     'PAYOUT_FEE_CONTRACT_NOT_VERIFIED': 'Payout fees are not yet supported.',
     'FEES_EXCEED_PROCEEDS': 'Fees are larger than the confirmed Mobile Money.',
     'NOT_OPEN': 'This collection is already closed.',
+    'BENEFICIARY_RECEIVING_DETAILS_NEEDED': 'The person receiving this round must add where they receive money in Sendoh.',
+    'BENEFICIARY_UNAVAILABLE': 'The person chosen to receive is no longer a member. Choose who receives.',
 }
 
 
@@ -119,6 +121,22 @@ def raised(db, c):
                 pending_count=pending, _unverified=unverified, _net=net)
 
 
+def beneficiary(db, c):
+    """(participant or None, user id) receiving this round. No participant: the organizer."""
+    if not c.beneficiary_participant_id:
+        return None, c.organizer_id
+    p = db.get(Participant, c.beneficiary_participant_id)
+    if p is None or p.collection_id != c.id or p.invitation_state != 'ACCEPTED' or not p.user_id:
+        return p, None
+    return p, p.user_id
+
+
+def beneficiary_view(db, c, user):
+    p, uid = beneficiary(db, c)
+    name = db.get(User, uid).display_name if uid else (p.name if p else None)
+    return dict(participant_id=p.id if p else None, name=name, is_you=uid == user.id)
+
+
 def quote(db, c, organizer_id, config, policy):
     r = raised(db, c)
     blockers = []
@@ -130,10 +148,15 @@ def quote(db, c, organizer_id, config, policy):
         blockers.append('FEES_NOT_CONFIRMED')
     if r['mobile_money'] == 0:
         blockers.append('NOTHING_TO_SEND')
-    dest = current_destination(db, organizer_id)
-    if dest is None or not destination_current(db, dest):
+    _, recipient = beneficiary(db, c)
+    dest = current_destination(db, recipient) if recipient else None
+    if recipient is None:
+        blockers.append('BENEFICIARY_UNAVAILABLE')
+    elif dest is None or not destination_current(db, dest):
         dest = None
-        blockers.append('RECEIVING_DETAILS_NEEDED')
+        # Only the recipient can consent to where they receive money.
+        blockers.append('RECEIVING_DETAILS_NEEDED' if recipient == organizer_id
+                        else 'BENEFICIARY_RECEIVING_DETAILS_NEEDED')
     if policy is None or not enabled(config):
         blockers.append('SETTLEMENT_NOT_AVAILABLE')
     elif dest is not None and dest.phone not in config.test_phones:
@@ -158,13 +181,14 @@ def quote(db, c, organizer_id, config, policy):
                            fees_total=gross - payout, payout_amount=payout,
                            cash=r['cash'], currency='XAF')
     public = {k: v for k, v in r.items() if not k.startswith('_')}
-    return public, blockers, amounts, dest, policy
+    return public, blockers, amounts, dest, policy, recipient
 
 
 def settlement_view(s):
     if s is None:
         return None
-    return dict(id=s.id, reference=s.id, round=s.round, state=s.state, payout_amount=s.payout_amount,
+    return dict(id=s.id, reference=s.id, round=s.round, beneficiary_id=s.beneficiary_id or s.organizer_id,
+                state=s.state, payout_amount=s.payout_amount,
                 method=s.method, destination=masked(s.phone), amounts=s.amounts,
                 delivered=s.state == 'DELIVERED', review_reason=s.review_reason,
                 environment='SANDBOX', created_at=s.created_at, updated_at=s.updated_at)
@@ -173,15 +197,21 @@ def settlement_view(s):
 def notify_settlement(db, s, c):
     """Organizer and members hear about a settlement outcome exactly once."""
     if s.state == 'DELIVERED':
+        receiver = s.beneficiary_id or s.organizer_id
         notify(db, s.organizer_id, 'SETTLEMENT_DELIVERED', f'settlement:{s.id}:DELIVERED',
                collection_id=c.id, settlement_id=s.id)
         for p in db.scalars(select(Participant).where(Participant.collection_id == c.id,
                 Participant.invitation_state == 'ACCEPTED')):
             if p.user_id and p.user_id != s.organizer_id:
-                notify(db, p.user_id, 'COLLECTION_SETTLED', f'settlement:{s.id}:SETTLED:{p.user_id}',
+                kind = 'SETTLEMENT_RECEIVED' if p.user_id == receiver else 'COLLECTION_SETTLED'
+                key = (f'settlement:{s.id}:SETTLED:{p.user_id}' if kind == 'COLLECTION_SETTLED'
+                       else f'settlement:{s.id}:RECEIVED:{p.user_id}')
+                notify(db, p.user_id, kind, key,
                        collection_id=c.id, participant_id=p.id, settlement_id=s.id)
+        wallet = 'MTN MoMo' if s.method == 'MTN' else 'Orange Money'
+        who = 'your' if receiver == s.organizer_id else f"{db.get(User, receiver).display_name}'s"
         db.add(Activity(organizer_id=s.organizer_id, collection_id=c.id,
-            message=f'{money(s.payout_amount)} delivered to your {"MTN MoMo" if s.method == "MTN" else "Orange Money"} · Sandbox'))
+            message=f'{money(s.payout_amount)} delivered to {who} {wallet} · Sandbox'))
     elif s.state == 'REVIEW':
         notify(db, s.organizer_id, 'SETTLEMENT_REVIEW', f'settlement:{s.id}:REVIEW:{s.review_reason}',
                collection_id=c.id, settlement_id=s.id)
@@ -289,9 +319,16 @@ class CashInput(BaseModel):
     entries: list[CashEntry] = Field(max_length=500)
 
 
+class Beneficiary(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    participant_id: str | None = Field(default=None, max_length=36)  # None: the organizer
+
+
 class NextRound(BaseModel):
     model_config = ConfigDict(extra='forbid')
     from_round: int = Field(ge=1, strict=True)
+    # Who receives the new round: '' means the organizer; omitted keeps the current choice.
+    beneficiary_participant_id: str | None = Field(default=None, max_length=36)
     deadline_at: AwareDatetime | None = None
 
 
@@ -313,11 +350,12 @@ def router(database, actor, sessions, config):
 
     def overview(db, c, user):
         s = round_settlement(db, c)
-        figures, blockers, amounts, dest, policy = quote(db, c, user.id, config, configured_policy())
+        figures, blockers, amounts, dest, policy, _ = quote(db, c, user.id, config, configured_policy())
         earlier = db.scalars(select(Settlement).where(Settlement.collection_id == c.id,
             Settlement.round < c.round).order_by(Settlement.round.desc()))
         return dict(collection_status=c.status, round=c.round, recurring=bool(c.recurring),
                     can_start_next_round=bool(c.recurring) and c.status == 'SETTLED',
+                    beneficiary=beneficiary_view(db, c, user),
                     history=[settlement_view(x) for x in earlier], raised=figures,
                     blockers=[] if s else [dict(code=b, message=BLOCKER_TEXT[b]) for b in blockers],
                     quote=None if s else amounts,
@@ -391,13 +429,14 @@ def router(database, actor, sessions, config):
         c = organized(db, collection_id, user, lock=True)
         if round_settlement(db, c):
             raise HTTPException(409, 'This collection is already being sent. Check its status.')
-        _, blockers, amounts, dest, policy = quote(db, c, user.id, config, configured_policy())
+        _, blockers, amounts, dest, policy, recipient = quote(db, c, user.id, config, configured_policy())
         if blockers:
             raise HTTPException(409, BLOCKER_TEXT[blockers[0]])
         if amounts['payout_amount'] != data.payout_amount:
             raise HTTPException(409, 'The amounts changed. Review the settlement again.')
         now = int(time.time())
-        s = Settlement(collection_id=c.id, round=c.round, organizer_id=user.id, request_key=idempotency_key,
+        s = Settlement(collection_id=c.id, round=c.round, organizer_id=user.id, beneficiary_id=recipient,
+                       request_key=idempotency_key,
                        destination_id=dest.id, phone=dest.phone, method=dest.method,
                        application_hash=config.application_hash, policy=policy.model_dump(),
                        amounts=amounts, payout_amount=amounts['payout_amount'], state='SENDING',
@@ -426,6 +465,25 @@ def router(database, actor, sessions, config):
         db.expire_all()
         return overview(db, db.get(Collection, collection_id), user)
 
+    def choose(db, c, participant_id):
+        if participant_id is not None:
+            p = db.get(Participant, participant_id)
+            if (p is None or p.collection_id != c.id or p.invitation_state != 'ACCEPTED'
+                    or not p.user_id):
+                raise HTTPException(422, 'Choose a member who has joined with a Sendoh account.')
+            if p.user_id == c.organizer_id:
+                participant_id = None
+        c.beneficiary_participant_id = participant_id
+
+    @routes.post('/{collection_id}/beneficiary')
+    def set_beneficiary(collection_id: str, data: Beneficiary, user=Depends(actor), db=Depends(database)):
+        c = organized(db, collection_id, user, lock=True)
+        if c.status != 'ACTIVE':
+            raise HTTPException(409, 'Choose who receives before the round is closed.')
+        choose(db, c, data.participant_id)
+        db.commit()
+        return overview(db, c, user)
+
     @routes.post('/{collection_id}/rounds')
     def start_next_round(collection_id: str, data: NextRound, user=Depends(actor), db=Depends(database)):
         c = organized(db, collection_id, user, lock=True)
@@ -438,6 +496,8 @@ def router(database, actor, sessions, config):
             raise HTTPException(409, 'This collection has moved on. Refresh and try again.')
         if c.status != 'SETTLED':
             raise HTTPException(409, 'Settle this round before starting the next one.')
+        if data.beneficiary_participant_id is not None:
+            choose(db, c, data.beneficiary_participant_id or None)
         c.round += 1
         c.status = 'ACTIVE'
         if data.deadline_at is not None:

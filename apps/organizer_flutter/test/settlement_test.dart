@@ -10,6 +10,11 @@ class SettlementApi extends SendohApi {
   final posts = <String>[];
   final keys = <String?>[];
   Map<String, dynamic>? settlement;
+  Map<String, dynamic> beneficiary = {
+    'participant_id': null,
+    'name': 'Daniel',
+    'is_you': true
+  };
 
   Map<String, dynamic> overview() => {
         'collection_status': settlement == null ? 'ACTIVE' : 'CLOSED',
@@ -34,6 +39,7 @@ class SettlementApi extends SendohApi {
               }
             : null,
         'destination': {'method': 'MTN', 'masked': '••• 123'},
+        'beneficiary': beneficiary,
         'settlement': settlement,
       };
 
@@ -169,5 +175,25 @@ void main() {
     expect(find.text('Edit cash records'), findsNothing);
     await summary(tester, collection('SETTLED'));
     expect(find.text('Start next round'), findsNothing);
+  });
+
+  testWidgets('A round paid to a member says who receives it', (tester) async {
+    final api = SettlementApi()
+      ..beneficiary = {
+        'participant_id': 'p2',
+        'name': 'Aïcha',
+        'is_you': false
+      };
+    await tester.pumpWidget(MaterialApp(
+        theme: sendohTheme(),
+        home: SettlementScreen(
+            api: api, collectionId: 'c1', collectionName: 'Njangi')));
+    await tester.pumpAndSettle();
+    expect(find.text('Aïcha receives'), findsOneWidget);
+    expect(find.text('Change who receives'), findsOneWidget);
+    await tester.tap(find.text('Close and send'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Sending to Aïcha'), findsOneWidget);
   });
 }

@@ -330,6 +330,55 @@ class _SettlementScreenState extends State<SettlementScreen> {
     }
   }
 
+  Map<String, dynamic> get receiver =>
+      Map<String, dynamic>.from((overview?['beneficiary'] as Map?) ??
+          const {'is_you': true, 'name': null});
+
+  /// Who receives this round: the organizer or a joined member.
+  Future<void> chooseBeneficiary() async {
+    try {
+      final data =
+          await widget.api.request('/collections/${widget.collectionId}');
+      if (!mounted) {
+        return;
+      }
+      final members = (data['participants'] as List)
+          .map((p) => Map<String, dynamic>.from(p))
+          .where((p) =>
+              p['invitation_state'] == 'ACCEPTED' && p['user_id'] != null)
+          .toList();
+      final picked = await showModalBottomSheet<String>(
+          context: context,
+          builder: (sheet) => SafeArea(
+                  child: ListView(shrinkWrap: true, children: [
+                const ListTile(
+                    title: Text('Who receives this round?',
+                        style: SendohTextStyles.titleSmall)),
+                ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: const Text('You'),
+                    onTap: () => Navigator.pop(sheet, '')),
+                ...members.map((m) => ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(m['name'] as String),
+                    onTap: () => Navigator.pop(sheet, m['id'] as String))),
+              ])));
+      if (picked == null) {
+        return;
+      }
+      final result = await widget.api.request(
+          '/collections/${widget.collectionId}/beneficiary',
+          body: {'participant_id': picked.isEmpty ? null : picked});
+      if (mounted) {
+        setState(() => overview = Map<String, dynamic>.from(result));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    }
+  }
+
   Future<void> addReceivingDetails() async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => ReceivingDetails(api: widget.api)));
@@ -374,7 +423,11 @@ class _SettlementScreenState extends State<SettlementScreen> {
         blockers.any((b) => b['code'] == 'RECEIVING_DETAILS_NEEDED');
     return [
       if (quote != null) ...[
-        const Text('You receive', style: SendohTextStyles.bodyMedium),
+        Text(
+            receiver['is_you'] == true
+                ? 'You receive'
+                : '${receiver['name']} receives',
+            style: SendohTextStyles.bodyMedium),
         const SizedBox(height: 4),
         Text(coordinationMoney(quote['payout_amount']),
             style: const TextStyle(
@@ -384,7 +437,12 @@ class _SettlementScreenState extends State<SettlementScreen> {
         if (destination != null)
           Text('${walletName(destination['method'])} ${destination['masked']}',
               style: SendohTextStyles.bodyMedium),
-        const SizedBox(height: 12),
+        Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+                onPressed: busy ? null : chooseBeneficiary,
+                child: const Text('Change who receives'))),
+        const SizedBox(height: 4),
         const Divider(),
         SummaryRow(
             'Mobile Money collected', coordinationMoney(quote['mobile_money'])),
@@ -416,6 +474,14 @@ class _SettlementScreenState extends State<SettlementScreen> {
             child: Text(
                 'You already hold ${coordinationMoney(raised['cash'])} in cash.',
                 style: SendohTextStyles.bodyMedium)),
+      if (quote == null)
+        Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+                onPressed: busy ? null : chooseBeneficiary,
+                child: Text(receiver['is_you'] == true
+                    ? 'You receive this round · Change'
+                    : '${receiver['name']} receives this round · Change'))),
       if (blockers.isNotEmpty)
         Padding(
             padding: const EdgeInsets.only(top: 16),
@@ -447,7 +513,9 @@ class _SettlementScreenState extends State<SettlementScreen> {
       'DELIVERED' => (
           Icons.check_circle_outline,
           SendohColors.green,
-          'Delivered to ${walletName(s['method'])}',
+          receiver['is_you'] == true
+              ? 'Delivered to ${walletName(s['method'])}'
+              : 'Delivered to ${receiver['name']}',
           '${widget.collectionName} is settled.'
         ),
       'REVIEW' => (
@@ -455,13 +523,15 @@ class _SettlementScreenState extends State<SettlementScreen> {
           SendohColors.red,
           'Payout needs attention',
           s['review_reason'] == 'PAYOUT_FAILED_FUNDS_RETAINED'
-              ? 'MeSomb couldn’t deliver to your number. The money is held safely and nobody is charged again.'
+              ? 'MeSomb couldn’t deliver to this number. The money is held safely and nobody is charged again.'
               : 'We’re checking this payout with MeSomb. Nothing will be sent twice.'
         ),
       _ => (
           Icons.schedule,
           SendohColors.teal,
-          'Sending to ${walletName(s['method'])}',
+          receiver['is_you'] == true
+              ? 'Sending to ${walletName(s['method'])}'
+              : 'Sending to ${receiver['name']}',
           '${widget.collectionName} is closed. We’ll notify you when it arrives.'
         ),
     };

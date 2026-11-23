@@ -84,9 +84,16 @@ The 75 FCFA minimum makes small transfers costly: about 10% on 1,000 FCFA. Revis
 - `POST /api/v1/collections/{id}/rounds` with `{from_round}`. Sending it twice opens the round once.
 - Migration `c9f6e4ab0015` adds `recurring` and `round`. Existing data is round 1.
 
+## Who receives (rotating beneficiaries)
+
+- Each round is paid to the organizer by default, or to one joined member chosen on the review screen ("Change who receives") or when starting the next round.
+- The payout goes to the beneficiary's own receiving number. Only the beneficiary can set it; until then the review shows a blocker.
+- The beneficiary is notified "You received …". The organizer sees "… delivered to Aïcha's MTN MoMo". Other members see who it was delivered to.
+- `POST /api/v1/collections/{id}/beneficiary` with `{participant_id}` (null means the organizer). `POST .../rounds` accepts `beneficiary_participant_id`.
+- Migration `d2a7f5bc0016` adds the beneficiary columns.
+
 ## Not yet
 
-- **Rotating beneficiaries.** For now, the organizer always receives each round's payout.
 - **Real money.** These are MeSomb sandbox payouts only.
 
 Migration `b8e5d3fa0014` adds the CLOSED/SETTLED statuses, `cash_records`, `settlements` and `notifications.settlement_id`. Its downgrade refuses to discard settlement or cash evidence.

@@ -42,6 +42,8 @@ class Collection(Base):
     # Recurring collections (njangi, tontine) run in rounds; totals are per round.
     recurring: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     round: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
+    # Who receives this round's payout (a joined member). None: the organizer.
+    beneficiary_participant_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 class Participant(Base):
@@ -408,6 +410,8 @@ class Settlement(Base):
     amounts: Mapped[dict] = mapped_column(JSON)
     payout_amount: Mapped[int] = mapped_column(BigInteger)
     round: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
+    # The person paid; phone/method above are theirs. None (older rows): the organizer.
+    beneficiary_id: Mapped[str | None] = mapped_column(ForeignKey('users.id', name='fk_settlement_beneficiary'))
     state: Mapped[str] = mapped_column(String(12), default='SENDING')
     payout_status: Mapped[str] = mapped_column(String(12), default='PENDING')
     provider_id: Mapped[str | None] = mapped_column(String(120))
@@ -418,6 +422,26 @@ class Settlement(Base):
     lease_owner: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[int] = mapped_column(BigInteger)
     updated_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class NearCode(Base):
+    """A short-lived Near2Pay code. Identifies a person; never authorizes a payment."""
+    __tablename__ = 'near_codes'
+    __table_args__ = (CheckConstraint('amount IS NULL OR (amount > 0 AND amount <= 1000000000)'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    short_hash: Mapped[str] = mapped_column(String(64), index=True)
+    amount: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[int] = mapped_column(BigInteger, index=True)
+
+
+class NearAttempt(Base):
+    __tablename__ = 'near_attempts'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    window_start: Mapped[int] = mapped_column(BigInteger)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class ProviderReferenceClaim(Base):
