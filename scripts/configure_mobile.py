@@ -38,7 +38,7 @@ def configure(root=ROOT):
     manifest = root / 'android/app/src/main/AndroidManifest.xml'
     if manifest.exists():
         value = manifest.read_text()
-        for permission in ('INTERNET', 'USE_BIOMETRIC', 'POST_NOTIFICATIONS'):
+        for permission in ('INTERNET', 'USE_BIOMETRIC', 'POST_NOTIFICATIONS', 'CAMERA'):
             name = 'android.permission.' + permission
             if name not in value:
                 value = re.sub(r'(<manifest\b[^>]*>)',

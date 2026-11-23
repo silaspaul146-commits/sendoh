@@ -435,6 +435,8 @@ class NearCode(Base):
     amount: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[int] = mapped_column(BigInteger)
     expires_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    # Set: "Contribute to <collection>". Empty: "Pay <person>". Never switched silently.
+    collection_id: Mapped[str | None] = mapped_column(ForeignKey('collections.id', name='fk_near_code_collection'))
 
 
 class NearAttempt(Base):

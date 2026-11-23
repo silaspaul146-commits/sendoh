@@ -52,6 +52,30 @@ def test_own_code_is_refused(client):
     assert resolve(client, code['short_code'], user='alice').status_code == 409
 
 
+def test_collection_code_says_contribute_and_names_the_organizer(client):
+    from test_invitations import collection
+    from test_mesomb_lifecycle import setup
+    c, token = setup(client)  # alice organizes, bob has joined
+    shown = client.post('/api/v1/near/codes', headers=headers('alice'),
+                        json={'collection_id': c['id'], 'amount': 1000})
+    assert shown.status_code == 201, shown.text
+    assert shown.json()['purpose'] == 'COLLECTION'
+    r = resolve(client, shown.json()['short_code'], user='bob').json()
+    assert r['purpose'] == 'COLLECTION' and 'person' not in r
+    assert r['collection']['name'] == c['name'] and r['collection']['token'] == token
+    assert r['organizer']['name'] == 'alice' and r['membership'] == 'ACCEPTED' and r['amount'] == 1000
+    assert resolve(client, shown.json()['short_code'], user='eve').json()['membership'] == 'NOT_JOINED'
+    # Someone else's collection cannot be presented.
+    other = collection(client)
+    assert client.post('/api/v1/near/codes', headers=headers('bob'),
+                       json={'collection_id': other['id']}).status_code == 404
+
+
+def test_personal_code_is_labelled_as_a_person(client):
+    r = resolve(client, show(client).json()['short_code']).json()
+    assert r['purpose'] == 'PERSON' and r['person']['name'] == 'alice'
+
+
 def test_guessing_short_codes_is_throttled(client):
     for _ in range(MAX_FAILURES):
         assert resolve(client, 'ZZZ-ZZZ').status_code == 404

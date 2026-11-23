@@ -203,11 +203,15 @@ class PersonCheckout extends StatefulWidget {
       required this.api,
       this.target,
       this.orderId,
-      this.method = 'MTN'});
+      this.method = 'MTN',
+      this.nearby = false});
   final SendohApi api;
   final Map<String, dynamic>? target;
   final String? orderId;
   final String method;
+
+  /// Opened from Near2Pay: title names the person and offers "Wrong person?".
+  final bool nearby;
   @override
   State<PersonCheckout> createState() => _PersonCheckoutState();
 }
@@ -507,7 +511,9 @@ class _PersonCheckoutState extends State<PersonCheckout>
                     : status == 'EXPIRED'
                         ? 'Quote expired'
                         : ready
-                            ? 'Review payment'
+                            ? (widget.nearby && q != null
+                                ? 'Pay ${q['recipient']['name']}'
+                                : 'Review payment')
                             : 'Payment in progress';
     return paymentPage(title, [
       if (busy) const LinearProgressIndicator(color: SendohColors.orange),
@@ -686,9 +692,14 @@ class _PersonCheckoutState extends State<PersonCheckout>
         OutlinedButton(
             onPressed: busy ? null : refresh,
             child: const Text('Check status')),
-      TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(delivered ? 'Done' : 'Back')),
+      if (widget.nearby && ready && order == null)
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Wrong person? Scan again'))
+      else
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(delivered ? 'Done' : 'Back')),
     ]);
   }
 }

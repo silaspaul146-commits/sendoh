@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 
-from .models import NearCode, NearAttempt, User
+from .models import Collection, NearCode, NearAttempt, Participant, User
 
 LIFETIME = 120
 ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'  # no 0/O, 1/I/L
@@ -41,6 +41,8 @@ def normalize(code: str) -> tuple[str, str]:
 class ShowCode(BaseModel):
     model_config = ConfigDict(extra='forbid')
     amount: int | None = Field(default=None, strict=True, gt=0, le=1_000_000_000)
+    # An organizer can show a code for their open collection instead of themselves.
+    collection_id: str | None = Field(default=None, max_length=36)
 
 
 class Lookup(BaseModel):
@@ -68,6 +70,14 @@ def router(database, actor):
         if not user.username or not user.display_name:
             raise HTTPException(409, 'Complete your profile first.')
         now = int(time.time())
+        collection = None
+        if data.collection_id is not None:
+            collection = db.scalar(select(Collection).where(Collection.id == data.collection_id,
+                                                            Collection.organizer_id == user.id))
+            if collection is None:
+                raise HTTPException(404, 'Collection not found.')
+            if collection.status != 'ACTIVE':
+                raise HTTPException(409, 'Only open collections can take contributions.')
         db.scalar(select(User).where(User.id == user.id).with_for_update())
         # One live code per person: a new code retires the previous one.
         db.execute(update(NearCode).where(NearCode.user_id == user.id,
@@ -79,10 +89,13 @@ def router(database, actor):
                                                        NearCode.expires_at > now)):
                 break
         db.add(NearCode(user_id=user.id, token_hash=digest(token), short_hash=digest(short),
-                        amount=data.amount, created_at=now, expires_at=now + LIFETIME))
+                        amount=data.amount, created_at=now, expires_at=now + LIFETIME,
+                        collection_id=collection.id if collection else None))
         db.commit()
         return dict(qr=QR_PREFIX + token, short_code=f'{short[:3]}-{short[3:]}',
-                    amount=data.amount, expires_at=now + LIFETIME, lifetime=LIFETIME)
+                    purpose='COLLECTION' if collection else 'PERSON',
+                    collection_id=collection.id if collection else None,
+                    amount=data.amount, expires_at=now + LIFETIME, lifetime=LIFETIME, created_at=now)
 
     @routes.post('/resolve')
     def resolve(data: Lookup, user=Depends(actor), db=Depends(database)):
@@ -104,8 +117,20 @@ def router(database, actor):
         throttle(db, user, failed=False)
         db.commit()
         target = db.get(User, code.user_id)
+        person = dict(id=target.id, name=target.display_name, identity='@' + target.username)
+        if code.collection_id:
+            c = db.get(Collection, code.collection_id)
+            if c is None or c.status != 'ACTIVE':
+                raise HTTPException(409, 'This collection is no longer taking contributions.')
+            member = db.scalar(select(Participant).where(Participant.collection_id == c.id,
+                                                         Participant.user_id == user.id))
+            # Contributing credits the payer's own share; joining is a separate, explicit step.
+            return dict(purpose='COLLECTION', organizer=person, amount=code.amount,
+                        expires_at=code.expires_at,
+                        collection=dict(id=c.id, name=c.name, token=c.public_token,
+                                        expected_amount=c.expected_amount),
+                        membership=member.invitation_state if member else 'NOT_JOINED')
         # Identity and amount only; the payer still confirms and authorizes in checkout.
-        return dict(person=dict(id=target.id, name=target.display_name, identity='@' + target.username),
-                    amount=code.amount, expires_at=code.expires_at)
+        return dict(purpose='PERSON', person=person, amount=code.amount, expires_at=code.expires_at)
 
     return routes
