@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Near2Pay scans Sendoh QR codes; code entry works without it. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="sendoh_organizer"
         android:name="${applicationName}"

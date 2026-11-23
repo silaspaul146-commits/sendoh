@@ -45,7 +45,7 @@ def order_view(db, o, config=None):
     from .person_execution import execution_view
     execution = execution_view(db, o.id)
     quote = quote_view(db, db.get(PersonQuote, o.quote_id), config)
-    result = dict(id=o.id, quote=quote,
+    result = dict(id=o.id, quote=quote, payer=person(db.get(User, o.payer_id)),
         status='EXPIRED' if o.status == 'READY' and o.expires_at <= int(time.time()) else o.status,
         collection_status=o.collection_status, delivery_status=o.delivery_status,
         receipt_available=False, execution_available=bool(enabled(config) and not execution

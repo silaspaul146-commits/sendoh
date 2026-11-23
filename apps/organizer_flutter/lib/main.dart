@@ -20,6 +20,7 @@ import 'contribution_checkout.dart';
 import 'push_service.dart';
 import 'money_requests.dart';
 import 'settlement.dart';
+import 'near2pay.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError('Session required'));
@@ -325,6 +326,8 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                         unread: unread,
                         peopleGateway: ApiPeopleGateway(
                             ref.read(apiProvider), account['id'] as String),
+                        nearby: () =>
+                            NearScanScreen(api: ref.read(apiProvider)),
                         requests: homeRequests,
                         onReviewRequest: (item) async {
                           await Navigator.of(context).push(
@@ -1298,6 +1301,17 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         onTap: busy || data['status'] != 'ACTIVE'
                             ? null
                             : () => invitePerson()),
+                    CoordinationAction(
+                        icon: Icons.qr_code_2,
+                        label: 'Nearby',
+                        onTap: busy || data['status'] != 'ACTIVE'
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                    builder: (_) => NearReceiveScreen(
+                                        api: widget.api,
+                                        collectionId: data['id'],
+                                        collectionName: data['name'])))),
                     CoordinationAction(
                         icon: Icons.receipt_long_outlined,
                         label: 'Receipts',

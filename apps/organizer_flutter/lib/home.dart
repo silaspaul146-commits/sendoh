@@ -22,6 +22,7 @@ class CoordinationHome extends StatefulWidget {
     this.onViewInvitations,
     this.onViewActivity,
     this.peopleGateway,
+    this.nearby,
     this.onViewRequests,
     this.requests,
     this.onReviewRequest,
@@ -33,6 +34,9 @@ class CoordinationHome extends StatefulWidget {
   final Future<List<dynamic>>? requests;
   final ValueChanged<Map<String, dynamic>>? onReviewRequest;
   final PeopleFlowGateway? peopleGateway;
+
+  /// Builds the Near2Pay scanner; null keeps Near2Pay as a planned action.
+  final Widget Function()? nearby;
   final VoidCallback? onViewRequests;
   final Future<List<dynamic>>? invitations, recentActivity;
   final ValueChanged<Map<String, dynamic>>? onReviewInvitation;
@@ -197,6 +201,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
             HomeActionBar(
               onCollect: widget.onCreate,
               gateway: widget.peopleGateway,
+              nearby: widget.nearby,
             ),
             attention(),
             const SizedBox(height: 24),
@@ -571,8 +576,10 @@ class HomeJoinedCircle extends StatelessWidget {
 }
 
 class HomeActionBar extends StatelessWidget {
-  const HomeActionBar({super.key, required this.onCollect, this.gateway});
+  const HomeActionBar(
+      {super.key, required this.onCollect, this.gateway, this.nearby});
   final PeopleFlowGateway? gateway;
+  final Widget Function()? nearby;
   final VoidCallback onCollect;
 
   void showPlannedFlow(BuildContext context, bool pay) {
@@ -613,10 +620,12 @@ class HomeActionBar extends StatelessWidget {
             label: 'Near2Pay',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => PeopleFlow(nearby: true, gateway: gateway),
+                builder: (_) =>
+                    nearby?.call() ??
+                    PeopleFlow(nearby: true, gateway: gateway),
               ),
             ),
-            planned: true,
+            planned: nearby == null,
           ),
         ],
       );
