@@ -918,28 +918,55 @@ class _CollectionDetailState extends State<CollectionDetail> {
 
   Future<void> startNextRound() async {
     final next = ((data['round'] as num?)?.toInt() ?? 1) + 1;
+    final members = (data['participants'] as List)
+        .map((p) => Map<String, dynamic>.from(p))
+        .where(
+            (p) => p['invitation_state'] == 'ACCEPTED' && p['user_id'] != null)
+        .toList();
+    // '' = the organizer receives; otherwise a joined member's participant id.
+    String receiver = '';
     final ok = await showDialog<bool>(
         context: context,
-        builder: (dialog) => AlertDialog(
-              title: Text('Start round $next?'),
-              content: const Text(
-                  'Members start this round at 0 FCFA. Earlier rounds keep their settled records.'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(dialog, false),
-                    child: const Text('Cancel')),
-                TextButton(
-                    onPressed: () => Navigator.pop(dialog, true),
-                    child: Text('Open round $next')),
-              ],
-            ));
+        builder: (dialog) => StatefulBuilder(
+            builder: (dialog, setDialog) => AlertDialog(
+                  title: Text('Start round $next?'),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text(
+                        'Members start this round at 0 FCFA. Earlier rounds keep their settled records.'),
+                    const SizedBox(height: 16),
+                    const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Who receives this round',
+                            style: SendohTextStyles.caption)),
+                    DropdownButton<String>(
+                        isExpanded: true,
+                        value: receiver,
+                        items: [
+                          const DropdownMenuItem(value: '', child: Text('You')),
+                          ...members.map((m) => DropdownMenuItem(
+                              value: m['id'] as String,
+                              child: Text(m['name'] as String))),
+                        ],
+                        onChanged: (v) => setDialog(() => receiver = v ?? '')),
+                  ]),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialog, false),
+                        child: const Text('Cancel')),
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialog, true),
+                        child: Text('Open round $next')),
+                  ],
+                )));
     if (ok != true || !mounted) {
       return;
     }
     try {
       // from_round makes a repeated tap a safe replay, not a skipped round.
-      await widget.api.request('/collections/${data['id']}/rounds',
-          body: {'from_round': next - 1});
+      await widget.api.request('/collections/${data['id']}/rounds', body: {
+        'from_round': next - 1,
+        'beneficiary_participant_id': receiver
+      });
       await refresh();
     } catch (e) {
       if (mounted) {

@@ -249,3 +249,58 @@ def test_recurring_flag_is_set_at_creation(client):
     from test_invitations import collection
     c = collection(client, recurring=True)
     assert c['recurring'] is True and c['round'] == 1
+
+
+def bob_participant(client, c):
+    owned = client.get('/api/v1/collections/' + c['id'], headers=headers()).json()
+    return next(p for p in owned['participants'] if p['username'] == 'bob')
+
+
+def test_round_paid_to_a_chosen_member_on_their_own_number(ready):
+    client, c = ready
+    object.__setattr__(client.app.state.mesomb_config, 'test_phones',
+                       frozenset(('670000000', '682248238', '690123456')))
+    bob = bob_participant(client, c)
+    r = client.post(f"/api/v1/collections/{c['id']}/beneficiary", headers=headers(),
+                    json={'participant_id': bob['id']})
+    assert r.status_code == 200, r.text
+    o = r.json()
+    assert o['beneficiary'] == {'participant_id': bob['id'], 'name': 'bob', 'is_you': False}
+    # Only Bob can say where Bob receives money; the organizer cannot.
+    assert [b['code'] for b in o['blockers']] == ['BENEFICIARY_RECEIVING_DETAILS_NEEDED']
+    assert close(client, c, 905).status_code == 409
+    assert save(client, 'bob').status_code == 200
+    o = overview(client, c)
+    assert o['blockers'] == [] and o['destination']['masked'] == '••• 456'
+    assert close(client, c, 905).status_code == 200
+    assert deposits(client)[0]['receiver'] == '690123456'
+    sweep(client)
+    assert overview(client, c)['settlement']['beneficiary_id'] == bob['user_id']
+    received = notes(client, 'bob', 'SETTLEMENT_RECEIVED')
+    assert serialize_title(client, received[0]) == f"You received 905 FCFA from {c['name']} on your MTN MoMo"
+    assert notes(client, 'bob', 'COLLECTION_SETTLED') == []
+    delivered = notes(client, 'alice', 'SETTLEMENT_DELIVERED')
+    assert serialize_title(client, delivered[0]) == f"905 FCFA from {c['name']} delivered to bob's MTN MoMo"
+
+
+def test_only_joined_members_can_receive(ready):
+    client, c = ready
+    r = client.post(f"/api/v1/collections/{c['id']}/beneficiary", headers=headers(),
+                    json={'participant_id': 'not-a-member'})
+    assert r.status_code == 422
+    assert client.post(f"/api/v1/collections/{c['id']}/beneficiary", headers=headers('bob'),
+                       json={'participant_id': None}).status_code == 404
+
+
+def test_next_round_can_name_who_receives(ready):
+    client, c = ready
+    make_recurring(client, c)
+    close(client, c, 905)
+    sweep(client)
+    bob = bob_participant(client, c)
+    r = client.post(f"/api/v1/collections/{c['id']}/rounds", headers=headers(),
+                    json={'from_round': 1, 'beneficiary_participant_id': bob['id']})
+    assert r.status_code == 200, r.text
+    assert r.json()['round'] == 2 and r.json()['beneficiary']['participant_id'] == bob['id']
+    # Round 1's settlement still records the organizer as its recipient.
+    assert r.json()['history'][0]['beneficiary_id'] != bob['user_id']
