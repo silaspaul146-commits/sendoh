@@ -643,23 +643,85 @@ class ActivityView extends ConsumerStatefulWidget {
 
 class _ActivityViewState extends ConsumerState<ActivityView> {
   late Future<dynamic> activity;
+
+  /// Person payments sent and received, each reopening its own receipt.
+  late Future<dynamic> payments;
   @override
   void initState() {
     super.initState();
-    activity = ref.read(apiProvider).request('/me/activity');
+    load();
     PushService.updates.addListener(onUpdate);
+  }
+
+  void load() {
+    final api = ref.read(apiProvider);
+    activity = api.request('/me/activity');
+    payments = api
+        .request('/person-payments/activity')
+        .catchError((_) => <String, dynamic>{'items': <dynamic>[]});
   }
 
   void onUpdate() {
     if (mounted) {
-      setState(() => activity = ref.read(apiProvider).request('/me/activity'));
+      setState(load);
     }
   }
 
   Future<void> refresh() async {
     onUpdate();
-    await activity;
+    await Future.wait([activity, payments]);
   }
+
+  Widget paymentsSection() => FutureBuilder<dynamic>(
+        future: payments,
+        builder: (context, snapshot) {
+          final items = snapshot.data is Map
+              ? ((snapshot.data as Map)['items'] as List? ?? const [])
+              : const [];
+          if (items.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Payments', style: SendohTextStyles.titleSmall),
+                const SizedBox(height: 8),
+                for (final raw in items)
+                  Builder(builder: (context) {
+                    final item = Map<String, dynamic>.from(raw as Map);
+                    final line = personActivityLine(item);
+                    final sent = item['direction'] == 'SENT';
+                    return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: SurfaceCard(
+                            padding: EdgeInsets.zero,
+                            child: ListTile(
+                                leading: CircleAvatar(
+                                    backgroundColor: SendohColors.tealSoft,
+                                    child: Icon(
+                                        sent
+                                            ? Icons.north_east
+                                            : Icons.south_west,
+                                        color: SendohColors.teal,
+                                        size: 20)),
+                                title: Text(line.title,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                subtitle: Text(line.status),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => PersonCheckout(
+                                              api: ref.read(apiProvider),
+                                              orderId: item['id'] as String)));
+                                  onUpdate();
+                                })));
+                  }),
+                const SizedBox(height: 12),
+              ]);
+        },
+      );
 
   @override
   void dispose() {
@@ -685,10 +747,11 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                           color: SendohColors.teal)),
                   const SizedBox(height: 8),
                   const Text(
-                      'Updates from collections you organize. Invitations and joined-group alerts are in Notifications.',
+                      'Payments you sent or received, and updates from collections you organize.',
                       style: TextStyle(
                           height: 1.6, color: SendohColors.secondary)),
                   const SizedBox(height: 24),
+                  paymentsSection(),
                   if (snapshot.connectionState == ConnectionState.waiting)
                     const LinearProgressIndicator(),
                   if (snapshot.hasError) ...[
@@ -698,9 +761,9 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                         onPressed: onUpdate, child: const Text('Try again')),
                   ] else if (snapshot.hasData && entries.isEmpty)
                     const EmptyState(
-                        title: 'Your story starts here',
+                        title: 'No collection updates yet',
                         message:
-                            'Create a collection and invite your group. Updates will appear here as things happen.',
+                            'Create a collection and invite your group. Its updates will appear here.',
                         icon: Icons.history),
                   if (!snapshot.hasError)
                     ...entries.map((raw) {

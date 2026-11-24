@@ -165,6 +165,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) =>
                 MoneyRequestDetail(api: widget.api, id: item['request_id'])));
+      } else if (item['kind'] == 'RECEIVING_SETUP_NEEDED') {
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => ReceivingDetails(api: widget.api)));
       } else if (['SETTLEMENT_DELIVERED', 'SETTLEMENT_REVIEW']
           .contains(item['kind'])) {
         // Organizer: the same screen that shows Sending → Delivered.

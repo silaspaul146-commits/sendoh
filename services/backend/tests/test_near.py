@@ -25,7 +25,8 @@ def test_scanned_or_typed_code_shows_the_person_and_amount(client):
     for value in (code['qr'], code['short_code'], code['short_code'].replace('-', '').lower()):
         r = resolve(client, value)
         assert r.status_code == 200, r.text
-        assert r.json()['person'] == {'id': r.json()['person']['id'], 'name': 'alice', 'identity': '@alice'}
+        assert r.json()['person'] == {'id': r.json()['person']['id'], 'name': 'alice', 'identity': '@alice',
+                                      'receiving_ready': False}
         assert r.json()['amount'] == 2500
     # Identifying someone creates no order and no charge.
     with client.app.state.sessions() as db:

@@ -23,9 +23,20 @@ class CreateRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=140)
     expires_at: int | None = Field(default=None, strict=True)
 
+class ReceivingReminder(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    recipient_id: str = Field(min_length=36, max_length=36)
+
 class Respond(BaseModel):
     model_config = ConfigDict(extra='forbid')
     action: Literal['DECLINE', 'CANCEL']
+
+def receiving_ready(db, user_id):
+    """The recipient's own consented destination exists and matches their identity."""
+    from .receiving import current_destination, destination_current
+    d = current_destination(db, user_id)
+    return d is not None and destination_current(db, d)
+
 
 def person(user):
     return dict(id=user.id, name=user.display_name, identity='@' + user.username)
@@ -75,7 +86,23 @@ def router(database, actor):
             raise HTTPException(404, 'Sendoh person not found. Use their exact username.')
         if target.id == user.id:
             raise HTTPException(409, 'Choose another person.')
-        return person(target)
+        # Known before any amount or charge: can this person receive yet?
+        return {**person(target), 'receiving_ready': receiving_ready(db, target.id)}
+
+    @routes.post('/people/receiving-reminder')
+    def remind_receiving(data: ReceivingReminder, user=Depends(actor), db=Depends(database)):
+        """Tell someone a person wants to pay them and they need receiving details."""
+        from .notifications import notify as notify_once
+        target = db.get(User, data.recipient_id)
+        if target is None or target.id == user.id:
+            raise HTTPException(404, 'Sendoh person not found.')
+        if receiving_ready(db, target.id):
+            return {'sent': False, 'receiving_ready': True}
+        day = int(time.time()) // 86400
+        # At most one reminder per payer, recipient and day.
+        notify_once(db, target.id, 'RECEIVING_SETUP_NEEDED', f'receiving:{user.id}:{target.id}:{day}')
+        db.commit()
+        return {'sent': True, 'receiving_ready': False}
 
     @routes.post('/money-requests', status_code=201)
     def create(data: CreateRequest, idempotency_key: str = Header(min_length=8, max_length=120),

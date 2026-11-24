@@ -10,7 +10,7 @@ The promise: when two people open Sendoh, each can tell what happened to the sam
 
 No automated test proves MeSomb moved real money. Every payment test uses a fake provider.
 
-Last updated: 24 Nov 2026 (milestones "one contribution, two phones" and "Request and Pay").
+Last updated: 24 Nov 2026 (milestones "one contribution, two phones", "Request and Pay" and "Send and Near2Pay").
 
 ## 1. Collect: one contribution, two phones (milestone 1)
 
@@ -61,15 +61,29 @@ Last updated: 24 Nov 2026 (milestones "one contribution, two phones" and "Reques
 - A two-phone device walkthrough.
 - Settlement payouts and Request/Pay need the Render settings in `docs/SETTLEMENT.md`.
 
-## 3. Send and Near2Pay
+## 3. Send and Near2Pay (milestone 3)
 
-- **Implemented:**
-  - Send by username.
-  - Near2Pay with a short-lived QR code or a typed code. A code only identifies the person or collection.
-  - A personal code opens "Pay <name>" in the reviewed checkout. A collection code opens "Contribute to <collection>".
-  - "Payment received" appears only after verified delivery.
-- **Verified:** backend tests and Flutter widget tests.
-- **Unverified:** the camera on a device. The Android build in CI could not be checked locally because of network access.
+*Marie wants to be sure she's paying the right person, once. Alain wants to know when 2,500 FCFA is actually his.*
+
+### Steps
+
+| Step | Marie (payer) | Alain (recipient) | Evidence |
+|---|---|---|---|
+| Entry | Home → Send → "Send to a Sendoh user", or "Pay someone nearby" | Scanner → "Show my code" | Verified (widget tests) |
+| Find | A handle, a scanned QR code or a typed short code all lead to the same preview: name, @handle, "Check this is the person you mean", and a way to back out | Shows a QR code and a short code that refreshes every 2 minutes | Verified (backend: same person from all three; widget tests) |
+| Identify only | Scanning or typing creates no order and moves no money. An expired code asks for a new one. | — | Verified (backend journey) |
+| No receiving details | "Alain hasn't set where they receive money yet. Nothing has been charged." Offers "Let Alain know"; no pay button. | Gets "Marie wants to pay you. Set where you receive money", once per day, which opens Receiving details | Verified (backend journey; widget tests) |
+| Review once | Amount, "Alain receives on MTN MoMo ••• 238", her method, the quoted fee and the total | — | Verified (backend quote; checkout tests) |
+| Approve, then interruption | Approve on your phone → Confirming → "Paid · delivering to Alain". Reopening resumes the same order; a duplicate tap or callback does nothing new. | Nothing until the payment starts; then "Marie sent you 2,500 FCFA · On its way to you" | Verified (backend journey) |
+| Delivered | "Delivered" in Activity, with a receipt | "Received" in Activity, with a receipt; one "You received" notification | Verified (backend journey; Activity line tests) |
+
+Person-to-person screens use teal only. Orange stays with collection progress.
+
+### Still unverified
+
+- The camera on a device, including the "Camera access is off" message, which shows when permission is denied.
+- A two-device scan.
+- A real sandbox payout.
 
 ## 4. Settlement and recurring rounds
 

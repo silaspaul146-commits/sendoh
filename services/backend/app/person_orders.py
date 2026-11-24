@@ -9,7 +9,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from .models import User, MoneyRequest, PersonQuote, PersonOrder, ReceivingDestination, PersonExecution
@@ -213,6 +213,16 @@ def router(database, actor, config):
     @routes.get('/orders/{id}')
     def detail(id: str, user=Depends(actor), db=Depends(database)):
         return order_view(db, owned(db, id, user), config)
+
+    @routes.get('/activity')
+    def activity(user=Depends(actor), db=Depends(database)):
+        """Started person payments, sent and received, for Activity. A recipient
+        only sees a payment once it has started; prepared orders stay private."""
+        rows = db.scalars(select(PersonOrder).join(PersonExecution, PersonExecution.order_id == PersonOrder.id)
+            .where(or_(PersonOrder.payer_id == user.id, PersonOrder.beneficiary_id == user.id))
+            .order_by(PersonOrder.created_at.desc(), PersonOrder.id.desc()).limit(50))
+        return dict(items=[{**order_view(db, o, config),
+                            'direction': 'SENT' if o.payer_id == user.id else 'RECEIVED'} for o in rows])
 
     @routes.get('/orders')
     def history(user=Depends(actor), db=Depends(database)):

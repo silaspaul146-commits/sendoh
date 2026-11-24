@@ -820,7 +820,8 @@ class HomeActionBar extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => near
             ? nearby?.call() ?? PeopleFlow(nearby: true, gateway: gateway)
-            : PeopleFlow(intent: intent, gateway: gateway),
+            : PeopleFlow(
+                intent: intent, gateway: gateway, nearbyBuilder: nearby),
       ),
     );
   }

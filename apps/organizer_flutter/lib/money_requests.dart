@@ -60,8 +60,15 @@ class ApiPeopleGateway implements PeopleFlowGateway {
     final p = await api.request('/people/resolve',
         body: {'identity': identity, 'from_qr': fromQr});
     return ResolvedPerson(
-        id: p['id'], name: p['name'], identity: p['identity']);
+        id: p['id'],
+        name: p['name'],
+        identity: p['identity'],
+        receivingReady: p['receiving_ready'] != false);
   }
+
+  @override
+  Future<void> remindReceiving(String personId) => api
+      .request('/people/receiving-reminder', body: {'recipient_id': personId});
 
   @override
   Future<String?> scan(BuildContext context) async {
