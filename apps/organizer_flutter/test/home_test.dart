@@ -92,9 +92,9 @@ void main() {
           }
         };
     row['contribution_summary'] = position('FULFILLED', 5000, 0);
-    expect(joinedPersonalStatus(row), 'Your part paid');
+    expect(joinedPersonalStatus(row), 'Your share is paid');
     row['contribution_summary'] = position('PARTIAL', 2000, 3000);
-    expect(joinedPersonalStatus(row), '3,000 FCFA remaining');
+    expect(joinedPersonalStatus(row), '3,000 FCFA left');
   });
 
   testWidgets(
@@ -159,8 +159,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Needs your attention'), findsNothing);
-    expect(find.text('Near2Pay'), findsOneWidget);
+    for (final action in ['New collection', 'Request', 'Send']) {
+      expect(find.text(action), findsOneWidget);
+    }
     expect(find.text('Recent activity'), findsNothing);
+    // Near2Pay stays reachable from Send.
+    await tester.tap(find.text('Send'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pay someone nearby'), findsOneWidget);
   });
 
   testWidgets(
@@ -195,7 +201,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Third'), findsNothing);
-      await tester.tap(find.text('View all 3'));
+      await tester.tap(find.text('See all 3'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('Third'),
@@ -300,7 +306,9 @@ void main() {
         home: Scaffold(body: HomeActionBar(onCollect: () {})),
       ),
     );
-    await tester.tap(find.text('Pay'));
+    await tester.tap(find.text('Send'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Send to a Sendoh user'));
     await tester.pumpAndSettle();
     expect(find.text('Use Near2Pay'), findsOneWidget);
     expect(find.text('Not connected yet'), findsOneWidget);
@@ -333,7 +341,7 @@ void main() {
             }
           },
         }, onTap: () {}))));
-    expect(find.text('Your part paid'), findsOneWidget);
+    expect(find.text('Your share is paid'), findsOneWidget);
     expect(find.text('Group: 50% collected'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

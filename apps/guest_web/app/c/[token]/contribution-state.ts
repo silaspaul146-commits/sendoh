@@ -33,3 +33,11 @@ export function nextPollDelay(previous:number){return Math.min(previous*2,60000)
 export const FIRST_POLL_DELAY=5000;
 /** After this long a pending payment gets reassurance instead of silence. */
 export const SLOW_CONFIRMATION_SECONDS=300;
+
+export type Phase='AWAITING_APPROVAL'|'CONFIRMING'|'CONFIRMED'|'FAILED'|'REFUNDED';
+/** What the payer is told; only the backend decides between approval and confirmation. */
+export function pendingCopy(p:{phase?:Phase;created_at:number},method:string,now=Date.now()/1000){
+ if(now-p.created_at>SLOW_CONFIRMATION_SECONDS)return {title:'Confirming your payment',body:'This is taking longer than usual. Please don’t pay again: we keep checking, and this link will show the result.'};
+ if(p.phase==='AWAITING_APPROVAL')return {title:'Approve on your phone',body:`Check your ${method} phone for the prompt and approve it there.`};
+ return {title:'Confirming your payment',body:`We’re checking with ${method}. Please don’t pay again.`};
+}

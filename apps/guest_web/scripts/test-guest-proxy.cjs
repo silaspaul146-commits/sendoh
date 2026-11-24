@@ -70,5 +70,11 @@ test('provider proxy fixes payment purpose and never accepts client-set outcomes
   assert.equal(calls[2].options.body,'{}');
   await send({action:'payment-history',token:'a/b',before:'previous'});
   assert.equal(calls[3].url,'https://backend.example/api/v1/me/provider-payments?payer_only=true&collection_token=a%2Fb&before=previous');
+  // The review quote goes to the quote route, needs no request key and starts nothing.
+  const {request_key:_key,...quoteBody}={...body,action:'payment-quote'};
+  assert.equal((await send(quoteBody)).status,200);
+  assert.equal(calls[4].url,'https://backend.example/api/v1/provider-payments/quote');
+  assert.equal(calls[4].options.headers['Idempotency-Key'],undefined);
+  assert.deepEqual(JSON.parse(calls[4].options.body),{collection_token:'a/b',amount:1000,method:'MTN',payer_phone:'600000001'});
  }finally{global.fetch=originalFetch;if(originalBase===undefined)delete process.env.API_INTERNAL_URL;else process.env.API_INTERNAL_URL=originalBase;}
 });

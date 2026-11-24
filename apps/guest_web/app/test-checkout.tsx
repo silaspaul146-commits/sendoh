@@ -2,9 +2,11 @@
 import {useEffect,useRef,useState} from 'react';
 import {guestRequest} from './guest-identity';
 import {money,PaymentLogo,Row,Icon} from './components';
-import {FIRST_POLL_DELAY,nextPollDelay,SLOW_CONFIRMATION_SECONDS} from './c/[token]/contribution-state';
+import {FIRST_POLL_DELAY,nextPollDelay,SLOW_CONFIRMATION_SECONDS,personalContribution,pendingCopy,type ContributionSummary,type Phase} from './c/[token]/contribution-state';
 
-type Payment={id:string;reference:string;amount:number;method:'MTN'|'ORANGE';status:'PENDING'|'SUCCEEDED'|'FAILED'|'REFUNDED';mode:string;created_at:number;updated_at:number};
+type Payment={id:string;reference:string;amount:number;method:'MTN'|'ORANGE';status:'PENDING'|'SUCCEEDED'|'FAILED'|'REFUNDED';phase?:Phase;payer_masked?:string|null;mode:string;created_at:number;updated_at:number};
+/** The backend's review terms: nothing is created or charged by a quote. */
+type Quote={credited_to:{name:string;collection:string;organizer:string};method:'MTN'|'ORANGE';payer_masked:string;contribution:number;payer_fees:number;total:number;fees_from:string};
 type Stage='amount'|'review'|'pay'|'result'|'receipt'|'history';
 type Draft={action:'payment-create';token:string;amount:number;method:'MTN'|'ORANGE';payer_phone:string;request_key:string;id?:string};
 export default function ProviderCheckout({token,name,collection,expected,start,onBack}:{token:string;name:string;collection:string;expected:number|null;start?:'history';onBack:()=>void}) {
@@ -14,6 +16,7 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
  const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [payment,setPayment]=useState<Payment|null>(null),[rows,setRows]=useState<Payment[]>([]);
  const [cursor,setCursor]=useState<string|null>(null),[locked,setLocked]=useState(false);
+ const [quote,setQuote]=useState<Quote|null>(null),[standing,setStanding]=useState<string|null>(null);
  const lock=useRef(false),draft=useRef<Draft|null>(null),storageKey=useRef<string|null>(null);
  const unresolvedId=useRef<string|null>(null);
  const alive=useRef(true),heading=useRef<HTMLHeadingElement>(null);
@@ -26,6 +29,19 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
   else if(unresolvedId.current===p.id)unresolvedId.current=null;
   setPayment(p);
   setStage(p.status==='PENDING'?'pay':receipt&&p.status==='SUCCEEDED'?'receipt':'result');
+  if(p.status==='SUCCEEDED')void standingAfter();
+ }
+ /** After a verified contribution, say where Marie's own share stands, from the server. */
+ async function standingAfter(){
+  try{
+   const d=await guestRequest({action:'context',token});
+   const part=d.participant;if(!part||!alive.current)return;
+   const s=personalContribution((part.contribution_summary??null) as ContributionSummary|null,part.expected_amount??null);
+   setStanding(s.fulfilled?'Your share is paid':s.remaining!==null&&s.remaining>0?`${money(s.remaining)} left`:`${money(s.paid+s.cash)} contributed`);
+  }catch{/* The collection page shows it on return. */}
+ }
+ async function loadQuote(){
+  setQuote(await guestRequest({action:'payment-quote',token,amount:Number(amount),method,payer_phone:phone.trim()}));
  }
  async function run(action:()=>Promise<void>) {
   if(lock.current)return; lock.current=true;setBusy(true);setError('');
@@ -45,6 +61,7 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
        !['MTN','ORANGE'].includes(envelope.method)) throw new Error('Your saved payment could not be read. Check your contribution history before retrying.');
     draft.current=envelope;setLocked(true);setAmount(String(envelope.amount));
     setPhone(envelope.payer_phone);setMethod(envelope.method);setStage('review');
+    try{setQuote(await guestRequest({action:'payment-quote',token,amount:envelope.amount,method:envelope.method,payer_phone:envelope.payer_phone}));}catch{/* Recovery still works without it. */}
     if(envelope.id)present(await guestRequest({action:'payment-detail',id:envelope.id}));
    }
    const history=await guestRequest({action:'payment-history',token});
@@ -94,7 +111,8 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
   if(!/^(?:\+?237)?6[0-9]{8}$/.test(phone.trim())){
    setError('Enter the Mobile Money number that will authorise this contribution.');return;
   }
-  setError('');setStage('review');
+  setError('');
+  void run(async()=>{await loadQuote();setStage('review');});
  }
  async function submit(){await run(async()=>{
   if(!ready||!storageKey.current)return;
@@ -145,28 +163,38 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
     <button className="button" disabled={busy||!ready} onClick={review}>Review contribution</button>
    </>}
    {stage==='review'&&<>
-    <div className="review-amount">{money(Number(amount))}</div><div className="summary"><Row label="Pay with">{methodName(method)}</Row><Row label="Number">{phone}</Row><Row label="Total to authorise" strong>{money(Number(amount))}</Row></div>
-    <p className="helper">Processing fees come out of collection proceeds, not on top of this total.</p>
-    <button className="button" disabled={busy||!ready} onClick={submit}>{locked?'Recover this contribution':`Pay ${money(Number(amount))}`}</button>
+    {quote?<>
+     <div className="review-amount">{money(quote.total)}</div>
+     <div className="summary">
+      <Row label="Credited to">{quote.credited_to.name} · {quote.credited_to.collection}</Row>
+      <Row label="Organizer">{quote.credited_to.organizer}</Row>
+      <Row label="Pay with">{methodName(quote.method)} {quote.payer_masked}</Row>
+      <Row label="Contribution">{money(quote.contribution)}</Row>
+      <Row label="Fees">{money(quote.payer_fees)}</Row>
+      <Row label="Total to approve" strong>{money(quote.total)}</Row>
+     </div>
+     {quote.fees_from==='COLLECTION_PROCEEDS'&&<p className="helper">MeSomb’s processing fee is taken from the collection, not added to your total.</p>}
+    </>:<p role="status">Getting your payment details…</p>}
+    <button className="button" disabled={busy||!ready||!quote} onClick={submit}>{locked?'Recover this contribution':quote?`Approve ${money(quote.total)}`:'Approve'}</button>
     {!locked&&<button className="text-button" disabled={busy} onClick={()=>setStage('amount')}>Edit details</button>}
    </>}
    {stage==='pay'&&payment&&<>
-    <div className="center"><Icon name="info" size={40}/><h2>Confirming your contribution</h2><p>{money(payment.amount)}</p></div>
-    {Date.now()/1000-payment.created_at>SLOW_CONFIRMATION_SECONDS
-     ?<p role="status">This is taking longer than usual. Please don’t pay again: we keep checking, and this link will show the result.</p>
-     :<p>Approve on your Mobile Money phone if prompted.</p>}
+    {(()=>{const copy=pendingCopy(payment,methodName(payment.method));return <>
+     <div className="center" aria-live="polite"><Icon name="info" size={40}/><h2>{copy.title}</h2><p>{money(payment.amount)}{payment.payer_masked?` · ${methodName(payment.method)} ${payment.payer_masked}`:''}</p></div>
+     <p role="status">{copy.body}</p>
+    </>;})()}
     <p className="helper">You can return to this link to check your contribution.</p>
     <button className="button" disabled={busy} onClick={()=>void run(async()=>present(await guestRequest({action:'payment-refresh',id:payment.id})))}>Check status</button>
    </>}
    {stage==='result'&&payment&&<>
-    <div className="center"><Icon name={payment.status==='SUCCEEDED'?'check':'info'} size={48}/><h2>{payment.status==='SUCCEEDED'?'Contribution confirmed':payment.status==='REFUNDED'?'Contribution refunded':'Payment unsuccessful'}</h2><p>{money(payment.amount)}</p></div>
+    <div className="center"><Icon name={payment.status==='SUCCEEDED'?'check':'info'} size={48}/><h2>{payment.status==='SUCCEEDED'?'Contribution confirmed':payment.status==='REFUNDED'?'Contribution refunded':'Payment unsuccessful'}</h2><p>{money(payment.amount)}</p>{payment.status==='SUCCEEDED'&&standing&&<p><strong>{standing}</strong></p>}</div>
     <p>{payment.status==='SUCCEEDED'?'Your contribution is recorded in the collection.':payment.status==='REFUNDED'?'This contribution no longer counts toward the collection.':'This attempt has not increased the collection total.'}</p>
     {payment.status==='SUCCEEDED'?<button className="button" disabled={busy} onClick={()=>void detail(payment.id,true)}>View receipt</button>:<button className="button" disabled={busy} onClick={restart}>Make another contribution</button>}
     {payment.status==='SUCCEEDED'&&<button className="text-button" disabled={busy} onClick={restart}>Make another contribution</button>}
    </>}
    {stage==='receipt'&&payment&&<>
     <h2>{money(payment.amount)}</h2>
-    <div className="summary"><Row label="Contributor">{name}</Row><Row label="Collection">{collection}</Row><Row label="Status">Confirmed</Row><Row label="Method">{methodName(payment.method)}</Row><Row label="Reference">{payment.reference}</Row><Row label="Last verified">{new Date(payment.updated_at*1000).toLocaleString()}</Row></div>
+    <div className="summary"><Row label="Contributor">{name}</Row><Row label="Collection">{collection}</Row><Row label="Status">Confirmed</Row><Row label="Method">{methodName(payment.method)}{payment.payer_masked?` ${payment.payer_masked}`:''}</Row><Row label="Reference">{payment.reference}</Row><Row label="Last verified">{new Date(payment.updated_at*1000).toLocaleString()}</Row></div>
     <p className="helper">Sandbox receipt</p>
     <button className="button secondary" onClick={()=>window.print()}>Print / save receipt</button>
    </>}

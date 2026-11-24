@@ -8,6 +8,7 @@ class CheckoutApi extends SendohApi {
   CheckoutApi() : super('https://example.invalid', 'session');
   final keys = <String?>[];
   bool timeout = false;
+  int quotes = 0;
   String outcome = 'PENDING';
   Map<String, dynamic> record() => {
         'id': 'payment-1',
@@ -39,6 +40,21 @@ class CheckoutApi extends SendohApi {
       }
       return record();
     }
+    if (path == '/provider-payments/quote') {
+      quotes++;
+      return {
+        'credited_to': {'name': 'Sam', 'collection': 'Birthday', 'organizer': 'Ada'},
+        'method': 'MTN',
+        'payer_masked': '6•••••001',
+        'contribution': 1000,
+        'payer_fees': 0,
+        'total': 1000,
+        'fees_from': 'COLLECTION_PROCEEDS'
+      };
+    }
+    if (path == '/me/joined-collections') {
+      return [];
+    }
     if (path.startsWith('/provider-payments/')) {
       return record();
     }
@@ -63,14 +79,16 @@ void main() {
   Future<void> submit(WidgetTester tester) async {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(CheckboxListTile));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Continue to payment method'));
-    await tester.tap(find.text('Continue to payment method'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '600000001');
-    await tester.ensureVisible(find.text('Continue to pay'));
-    await tester.tap(find.text('Continue to pay'));
+    await tester.ensureVisible(find.text('Review contribution'));
+    await tester.tap(find.text('Review contribution'));
+    await tester.pumpAndSettle();
+    // The review shows the backend quote before anything is charged.
+    expect(find.text('Sam · Birthday'), findsOneWidget);
+    expect(find.text('MTN MoMo 6•••••001'), findsOneWidget);
+    expect(find.text('Total to approve'), findsOneWidget);
+    await tester.ensureVisible(find.text('Approve 1,000 FCFA'));
+    await tester.tap(find.text('Approve 1,000 FCFA'));
     await tester.pumpAndSettle();
   }
 
@@ -81,6 +99,7 @@ void main() {
     await submit(tester);
     expect(find.text('Contribution confirmed'), findsNothing);
     expect(find.text('Simulate successful payment'), findsNothing);
+    expect(find.text('Confirming your payment'), findsOneWidget);
     expect(api.keys.length, 1);
     api.outcome = 'SUCCEEDED';
     await tester.pump(const Duration(seconds: 6));

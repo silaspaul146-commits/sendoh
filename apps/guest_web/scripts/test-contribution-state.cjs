@@ -46,3 +46,10 @@ test('recorded cash is reported beside Mobile Money, never merged',()=>{
  const s=state({position},5000);
  assert.equal(s.paid,4000);assert.equal(s.cash,1000);assert.equal(s.fulfilled,true);
 });
+test('approval and confirmation are different moments, decided by the backend',()=>{
+ const {pendingCopy}=loaded.exports;const now=1000;
+ assert.equal(pendingCopy({phase:'AWAITING_APPROVAL',created_at:990},'MTN MoMo',now).title,'Approve on your phone');
+ assert.equal(pendingCopy({phase:'CONFIRMING',created_at:990},'MTN MoMo',now).title,'Confirming your payment');
+ assert.match(pendingCopy({phase:'CONFIRMING',created_at:990},'MTN MoMo',now).body,/don’t pay again/);
+ assert.match(pendingCopy({phase:'AWAITING_APPROVAL',created_at:0},'MTN MoMo',now).body,/longer than usual/);
+});

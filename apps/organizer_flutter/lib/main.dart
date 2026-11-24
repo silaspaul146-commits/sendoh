@@ -136,6 +136,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
   late Future<List<dynamic>> items;
   late Future<List<dynamic>> joinedItems;
   late Future<List<dynamic>> homeInvitations, homeActivity, homeRequests;
+  late Future<dynamic> homeSummary;
   @override
   void initState() {
     super.initState();
@@ -143,6 +144,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
     joinedItems = loadJoined();
     homeInvitations = homeList('/me/invitations');
     homeActivity = homeList('/me/activity');
+    homeSummary = ref.read(apiProvider).request('/me/home');
     homeRequests = requestList();
     WidgetsBinding.instance.addObserver(this);
     PushService.updates.addListener(pushUpdated);
@@ -251,6 +253,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
         joinedItems = loadJoined();
         homeInvitations = homeList('/me/invitations');
         homeActivity = homeList('/me/activity');
+        homeSummary = ref.read(apiProvider).request('/me/home');
         homeRequests = requestList();
       });
   Future<void> create() async {
@@ -351,6 +354,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                         joined: joinedItems,
                         invitations: homeInvitations,
                         recentActivity: homeActivity,
+                        summary: homeSummary,
                         onViewActivity: () => setState(() => tab = 2),
                         onViewInvitations: () async {
                           await Navigator.of(context).push(

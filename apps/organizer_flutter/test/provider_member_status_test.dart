@@ -12,12 +12,12 @@ void main() {
         },
       };
   test('Verified provider contribution fulfils personal share', () {
-    expect(joinedPersonalStatus(item(1000)), 'Your part paid');
+    expect(joinedPersonalStatus(item(1000)), 'Your share is paid');
   });
   test('Partial contribution shows outstanding share', () {
-    expect(joinedPersonalStatus(item(400)), '600 FCFA remaining');
+    expect(joinedPersonalStatus(item(400)), '600 FCFA left');
   });
   test('Pending attempt does not claim completion', () {
-    expect(joinedPersonalStatus(item(0, pending: true)), 'Payment pending');
+    expect(joinedPersonalStatus(item(0, pending: true)), 'Confirming your contribution');
   });
 }
