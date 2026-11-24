@@ -148,11 +148,16 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
     homeRequests = requestList();
     WidgetsBinding.instance.addObserver(this);
     PushService.updates.addListener(pushUpdated);
+    // Push can be off, denied or late. While Home is on screen, check quietly
+    // so a confirmed payment still reaches it.
+    homeTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) => quietRefresh());
     WidgetsBinding.instance.addPostFrameCallback((_) => connectNotifications());
   }
 
   @override
   void dispose() {
+    homeTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     PushService.updates.removeListener(pushUpdated);
     unawaited(PushService.detach());
@@ -246,6 +251,42 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
     unawaited(result.then<void>((_) {},
         onError: (Object error, StackTrace stack) {}));
     return result;
+  }
+
+  Timer? homeTimer;
+  bool quietRefreshing = false;
+
+  /// Fetch Home in the background and swap it in only when everything arrived:
+  /// no spinners, no flashing, and a failed check keeps what is on screen.
+  Future<void> quietRefresh() async {
+    if (!mounted ||
+        quietRefreshing ||
+        tab != 0 ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    quietRefreshing = true;
+    try {
+      final api = ref.read(apiProvider);
+      final results = await Future.wait<dynamic>([
+        api.collections(),
+        loadJoined(),
+        api.request('/me/home'),
+        requestList(),
+      ]);
+      if (mounted) {
+        setState(() {
+          items = Future.value(results[0] as List<dynamic>);
+          joinedItems = Future.value(results[1] as List<dynamic>);
+          homeSummary = Future.value(results[2]);
+          homeRequests = Future.value(results[3] as List<dynamic>);
+        });
+      }
+    } catch (_) {
+      // Keep the last known Home; the next check or pull-to-refresh retries.
+    } finally {
+      quietRefreshing = false;
+    }
   }
 
   void reload() => setState(() {
@@ -986,6 +1027,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
     super.initState();
     data = widget.data;
     PushService.updates.addListener(paymentUpdate);
+    // Without push, a member's confirmed payment still appears within 30 s.
+    detailTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) => quietCheck());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         refresh();
@@ -999,8 +1043,26 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
   }
 
+  Timer? detailTimer;
+
+  /// Background check: no busy state; a failure keeps what is on screen.
+  Future<void> quietCheck() async {
+    if (!mounted ||
+        busy ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    try {
+      final fresh = await widget.api.request('/collections/${data['id']}');
+      if (mounted && !busy) {
+        setState(() => data = Map<String, dynamic>.from(fresh));
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    detailTimer?.cancel();
     PushService.updates.removeListener(paymentUpdate);
     super.dispose();
   }

@@ -108,7 +108,9 @@ def create_app(database_url=None):
     @app.get('/health')
     def health(db=Depends(database)):
         db.execute(text('SELECT 1'))
-        return {'status': 'ok', 'stage': settings.environment, 'version': '0.6.0',
+        # Which build answered: Render sets RENDER_GIT_COMMIT on every deploy.
+        commit = (os.getenv('RENDER_GIT_COMMIT') or os.getenv('SENDOH_COMMIT') or '')[:12] or None
+        return {'status': 'ok', 'stage': settings.environment, 'version': '0.6.0', 'commit': commit,
                 'push_configured': sender is not None,
                 'otp_provider': settings.otp_provider, 'payments_enabled': False, 'mesomb_sandbox_enabled': mesomb_config is not None, 'test_payments_enabled': test_payments_enabled(settings)}
 
