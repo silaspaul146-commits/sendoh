@@ -78,6 +78,16 @@ def member_position(db, participant, membership: str) -> dict:
                 expected_amount=expected, remaining_amount=remaining)
 
 
+def _contributors(db, collection_id):
+    from .models import CashRecord
+    paid = set(db.scalars(select(ProviderPayment.participant_id).where(
+        ProviderPayment.collection_id == collection_id, ProviderPayment.mode == ENVIRONMENT,
+        ProviderPayment.status == 'SUCCEEDED', current_round(ProviderPayment))))
+    paid |= set(db.scalars(select(CashRecord.participant_id).where(
+        CashRecord.collection_id == collection_id, current_round(CashRecord))))
+    return len(paid)
+
+
 def collection_totals(db, collection) -> dict:
     confirmed, pending = _sums(db, collection.id)
     cash = _cash(db, collection.id)
@@ -85,5 +95,7 @@ def collection_totals(db, collection) -> dict:
     target = collection.target_amount
     return dict(environment=ENVIRONMENT, confirmed_amount=confirmed, pending_amount=pending,
                 cash_amount=cash, raised_amount=raised, target_amount=target,
+                # People whose payment counted, not people who joined.
+                contributors=_contributors(db, collection.id),
                 remaining_amount=max(0, target - raised) if target else None,
                 target_reached=bool(target) and raised >= target)

@@ -148,9 +148,9 @@ class MemberPosition {
 
   /// The member's own one-line position.
   String personalLine(String Function(Object?) money) => switch (state) {
-        'CONFIRMING' => 'Payment pending',
-        'FULFILLED' => 'Your part paid',
-        'PARTIAL' => '${money(remaining)} remaining',
+        'CONFIRMING' => 'Confirming your contribution',
+        'FULFILLED' => 'Your share is paid',
+        'PARTIAL' => '${money(remaining)} left',
         'CONTRIBUTED' => '${money(confirmed)} contributed',
         _ => expected != null && expected! > 0
             ? '${money(expected)} expected'

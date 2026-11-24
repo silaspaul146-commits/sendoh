@@ -5,7 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'design.dart';
-import 'coordination.dart' show coordinationMoney;
+import 'coordination.dart' show coordinationMoney, MemberPosition;
 
 String paymentKey() => List.generate(24,
         (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
@@ -35,6 +35,12 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
   final note = TextEditingController();
   Map<String, dynamic>? payment;
   Map<String, dynamic>? submission;
+
+  /// The backend's review terms. A quote creates nothing and charges nothing.
+  Map<String, dynamic>? quote;
+
+  /// Where the payer's own share stands after a verified contribution.
+  String? standing;
   String requestKey = paymentKey(), method = 'MTN';
   String? error, storageKey;
   Timer? poll;
@@ -72,6 +78,9 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
   /// "Refresh payment status" remains the explicit, visible check.
   void schedule() {
     poll?.cancel();
+    if (payment?['status'] == 'SUCCEEDED' && standing == null) {
+      loadStanding();
+    }
     if (mounted && payment?['status'] == 'PENDING') {
       poll = Timer(pollDelay, () async {
         await quietCheck();
@@ -97,6 +106,9 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
             step = 4;
           }
         });
+        if (payment!['status'] == 'SUCCEEDED') {
+          loadStanding();
+        }
       }
     } catch (_) {
       // The next check, or the explicit refresh, retries.
@@ -118,6 +130,11 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
           method = submission!['method'] as String;
           phone.text = submission!['payer_phone'] as String;
           step = 2;
+          try {
+            quote = await fetchQuote();
+          } catch (_) {
+            // Recovery still works without the review terms.
+          }
           if (draft['id'] != null) {
             payment = Map<String, dynamic>.from(
                 await widget.api.request('/provider-payments/${draft['id']}'));
@@ -158,6 +175,46 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
       if (mounted) {
         setState(() => busy = false);
       }
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchQuote() async => Map<String, dynamic>.from(
+      await widget.api.request('/provider-payments/quote',
+          body: submission ??
+              {
+                'collection_id': widget.collectionId,
+                'amount': int.parse(amount.text),
+                'method': method,
+                'payer_phone': phone.text.trim()
+              }));
+
+  Future<void> reviewQuote() => run(() async {
+        if (!RegExp(r'^(?:\+237)?6[0-9]{8}$').hasMatch(phone.text.trim())) {
+          throw const FormatException('Enter a valid Mobile Money number.');
+        }
+        final q = await fetchQuote();
+        if (mounted) {
+          setState(() {
+            quote = q;
+            step = 2;
+          });
+        }
+      });
+
+  /// Read the member's own position from the server after confirmation.
+  Future<void> loadStanding() async {
+    try {
+      final joined = await widget.api.request('/me/joined-collections');
+      final item = (joined as List)
+          .map((j) => Map<String, dynamic>.from(j))
+          .where((j) => j['collection_id'] == widget.collectionId)
+          .firstOrNull;
+      if (item != null && mounted) {
+        setState(() => standing =
+            MemberPosition.fromJoined(item).personalLine(coordinationMoney));
+      }
+    } catch (_) {
+      // The collection screen shows it on return.
     }
   }
 
@@ -219,6 +276,9 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                     ? 5
                     : 4;
           });
+          if (payment!['status'] == 'SUCCEEDED' && standing == null) {
+            loadStanding();
+          }
         }
       });
 
@@ -310,17 +370,9 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
               child: const Text('Continue')),
         ],
         if (step == 1) ...[
-          SummaryRow('Your contribution', '${amount.text} FCFA'),
-          CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: confirmed,
-              onChanged: (v) => setState(() => confirmed = v ?? false),
-              title: const Text('I confirm these details.')),
-          FilledButton(
-              onPressed: confirmed ? () => setState(() => step = 2) : null,
-              child: const Text('Continue to payment method')),
-        ],
-        if (step == 2) ...[
+          SummaryRow('Your contribution',
+              coordinationMoney(int.tryParse(amount.text))),
+          const SizedBox(height: 12),
           ...['MTN', 'ORANGE'].map((value) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: OutlinedButton.icon(
@@ -340,7 +392,33 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                   const InputDecoration(labelText: 'Mobile Money number')),
           const SizedBox(height: 16),
           FilledButton(
-              onPressed: busy || !ready
+              onPressed: busy || !ready ? null : reviewQuote,
+              child: const Text('Review contribution')),
+        ],
+        if (step == 2) ...[
+          if (quote != null) ...[
+            Text(coordinationMoney(quote!['total']),
+                style: SendohTextStyles.displayLarge),
+            const SizedBox(height: 8),
+            SummaryRow('Credited to',
+                '${quote!['credited_to']['name']} · ${quote!['credited_to']['collection']}'),
+            SummaryRow('Organizer', '${quote!['credited_to']['organizer']}'),
+            SummaryRow('Pay with',
+                '${quote!['method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'} ${quote!['payer_masked']}'),
+            SummaryRow(
+                'Contribution', coordinationMoney(quote!['contribution'])),
+            SummaryRow('Fees', coordinationMoney(quote!['payer_fees'])),
+            SummaryRow('Total to approve', coordinationMoney(quote!['total']),
+                bold: true),
+            if (quote!['fees_from'] == 'COLLECTION_PROCEEDS')
+              const Text(
+                  'MeSomb’s processing fee is taken from the collection, not added to your total.',
+                  style: SendohTextStyles.caption),
+          ] else
+            const Text('Getting your payment details…'),
+          const SizedBox(height: 16),
+          FilledButton(
+              onPressed: busy || !ready || (quote == null && submission == null)
                   ? null
                   : () async {
                       await create();
@@ -350,17 +428,26 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                   ? 'Saving payment…'
                   : submission != null
                       ? 'Recover contribution'
-                      : 'Continue to pay')),
+                      : 'Approve ${coordinationMoney(quote?['total'])}')),
         ],
         if (step == 3) ...[
+          // The backend decides between approval and confirmation; never "failed" on a timeout.
+          Semantics(
+              liveRegion: true,
+              child: Text(
+                  payment!['phase'] == 'AWAITING_APPROVAL'
+                      ? 'Approve on your phone'
+                      : 'Confirming your payment',
+                  style: SendohTextStyles.headingMedium)),
+          const SizedBox(height: 8),
           SummaryRow('Amount', coordinationMoney(payment!['amount'])),
           SummaryRow(
               'Using',
-              payment!['method'] == 'MTN'
-                  ? 'MTN Mobile Money'
-                  : 'Orange Money'),
-          const Text(
-              'Confirming your contribution. You can return to the collection while we check the result.'),
+              '${payment!['method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'} ${payment!['payer_masked'] ?? ''}'
+                  .trim()),
+          Text(payment!['phase'] == 'AWAITING_APPROVAL'
+              ? 'Check your phone for the Mobile Money prompt and approve it there.'
+              : 'We’re checking with Mobile Money. Please don’t pay again. You can leave and come back; this payment will be here.'),
           const SizedBox(height: 24),
           TextButton(
               onPressed: busy ? null : reload,
@@ -376,9 +463,14 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 22)),
           const SizedBox(height: 16),
+          if (success && standing != null)
+            Text(standing!,
+                textAlign: TextAlign.center,
+                style: SendohTextStyles.titleSmall
+                    .copyWith(color: SendohColors.teal)),
           Text(success
-              ? 'Your contribution has been recorded. Return to the collection to see the updated progress.'
-              : 'This attempt has not added to the collection total.'),
+              ? 'Your contribution counts toward ${payment?['collection_name'] ?? widget.collection}.'
+              : 'This attempt has not added to the collection total. You can try again.'),
           FilledButton(
               onPressed: busy
                   ? null

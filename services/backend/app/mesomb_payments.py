@@ -70,8 +70,33 @@ class Intent(BaseModel):
         return self
 
 
+APPROVAL_WINDOW = 120
+
+
+def phase(p, now=None):
+    """What the payer should be told. Only SUCCEEDED is 'CONFIRMED'.
+
+    AWAITING_APPROVAL: just submitted; the payer may still need to approve the
+    Mobile Money prompt. CONFIRMING: approval window passed or the provider has
+    been asked; the outcome is unknown and must not be treated as failure.
+    """
+    if p.status == 'SUCCEEDED':
+        return 'CONFIRMED'
+    if p.status in ('FAILED', 'REFUNDED'):
+        return p.status
+    now = now or int(time.time())
+    if p.provider_status is None and p.attempts == 0 and now - p.created_at < APPROVAL_WINDOW:
+        return 'AWAITING_APPROVAL'
+    return 'CONFIRMING'
+
+
+def masked_phone(phone):
+    return phone[0] + '•••••' + phone[-3:] if phone and len(phone) >= 4 else None
+
+
 def view(p):
-    return dict(id=p.id, reference=p.id, mode='SANDBOX', provider='MESOMB',
+    return dict(id=p.id, reference=p.id, mode='SANDBOX', provider='MESOMB', phase=phase(p),
+                payer_masked=masked_phone(p.payer_phone),
                 purpose='COLLECTION_CONTRIBUTION', collection_id=p.collection_id,
                 participant_id=p.participant_id, payer_id=p.payer_id,
                 beneficiary_id=p.beneficiary_id, amount=p.amount, currency='XAF',
@@ -294,6 +319,29 @@ def router(database, actor, sessions, config):
         if p is None or user.id not in (p.payer_id, p.beneficiary_id):
             raise HTTPException(404, 'Payment not found.')
         return p
+
+    @routes.post('/provider-payments/quote')
+    def quote(data: Intent, user=Depends(actor), db=Depends(database)):
+        """The review before approval: who is credited, method, masked number,
+        contribution, payer fees and total. Creates nothing and charges nothing."""
+        require_enabled()
+        if data.payer_phone not in config.test_phones:
+            raise HTTPException(422, 'Use an approved MeSomb sandbox test number.')
+        target = Collection.id == data.collection_id if data.collection_id else Collection.public_token == data.collection_token
+        c = db.scalar(select(Collection).where(target))
+        if c is None or c.status != 'ACTIVE':
+            raise HTTPException(404, 'Active collection not found.')
+        member = db.scalar(select(Participant).where(Participant.collection_id == c.id,
+                                                     Participant.user_id == user.id))
+        if c.organizer_id != user.id and (member is None or member.invitation_state != 'ACCEPTED'):
+            raise HTTPException(403, 'Join this collection before contributing.')
+        organizer = db.get(User, c.organizer_id).display_name
+        # Collections are charged with fees included: the payer approves exactly the
+        # contribution; MeSomb's fee is deducted from the collection's proceeds.
+        return dict(credited_to=dict(name=user.display_name, collection=c.name, organizer=organizer),
+                    method=data.method, payer_masked=masked_phone(data.payer_phone),
+                    contribution=data.amount, payer_fees=0, total=data.amount,
+                    fees_from='COLLECTION_PROCEEDS', currency='XAF', environment='SANDBOX')
 
     @routes.post('/provider-payments', status_code=201)
     def create(data: Intent, request: Request,

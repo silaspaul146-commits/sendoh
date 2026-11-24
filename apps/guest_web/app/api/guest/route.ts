@@ -39,15 +39,18 @@ export async function POST(request: NextRequest) {
     case 'context':
       if (typeof token !== 'string') return new NextResponse(null,{status:400});
       path=`/me/guest-collections/${encodeURIComponent(token)}`; method='GET'; break;
+    case 'payment-quote':
     case 'payment-create':
-      if (typeof token !== 'string' || typeof request_key !== 'string' ||
-          request_key.length < 8 || request_key.length > 120 ||
+      if (typeof token !== 'string' ||
+          (action === 'payment-create' && (typeof request_key !== 'string' ||
+          request_key.length < 8 || request_key.length > 120)) ||
           !Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000 ||
           !['MTN','ORANGE'].includes(paymentMethod) || typeof payer_phone !== 'string' ||
           !/^(?:\+?237)?6[0-9]{8}$/.test(payer_phone)) {
         return new NextResponse(null,{status:400});
       }
-      path='/provider-payments';
+      // A quote creates nothing and charges nothing; only payment-create starts a payment.
+      path=action === 'payment-quote' ? '/provider-payments/quote' : '/provider-payments';
       body={collection_token:token,amount,method:paymentMethod,payer_phone}; break;
     case 'payment-refresh':
       if (typeof id !== 'string') return new NextResponse(null,{status:400});

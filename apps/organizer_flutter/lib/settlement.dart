@@ -627,7 +627,7 @@ class _MemberShareCardState extends State<MemberShareCard> {
               fontWeight: FontWeight.w800,
               color: SendohColors.teal)),
       if (!fulfilled && p.remaining != null && p.remaining! > 0)
-        Text('${coordinationMoney(p.remaining)} remaining',
+        Text('${coordinationMoney(p.remaining)} left',
             style: SendohTextStyles.bodyMedium),
       const SizedBox(height: 8),
       SummaryRow('Mobile Money', coordinationMoney(p.confirmed)),
