@@ -67,7 +67,16 @@ def invitation_view(db, p, c, web_url):
     # Recipient view contains only their own participant row, never the roster.
     info = serialize(db, c, web_url, public=True)
     personal = participant_summary(db, p)
-    return dict(contribution_summary=dict(live_available=False, confirmed_amount=None,
+    from .models import Settlement
+    earlier = db.scalar(select(Settlement).where(Settlement.collection_id == c.id,
+        Settlement.round < c.round).order_by(Settlement.round.desc()).limit(1))
+    snap = next((m for m in (earlier.amounts.get('members') or []) if m['participant_id'] == p.id),
+                None) if earlier else None
+    previous_round = dict(round=earlier.round, state=snap['state'], confirmed=snap['confirmed'],
+                          cash=snap['cash'], expected=snap['expected'],
+                          delivered=earlier.state == 'DELIVERED') if snap else None
+    return dict(previous_round=previous_round,
+                contribution_summary=dict(live_available=False, confirmed_amount=None,
                     test_paid_amount=personal['test_paid_amount'],
                     sandbox_paid_amount=personal['sandbox_paid_amount'],
                     sandbox_payment_pending=personal['sandbox_payment_pending'],

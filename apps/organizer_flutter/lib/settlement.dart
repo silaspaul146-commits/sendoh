@@ -150,12 +150,44 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
         entries.add({'participant_id': p['id'], 'amount': amount});
       }
     }
+    if (entries.isNotEmpty) {
+      final names = {for (final m in members) m['id']: m['name']};
+      final ok = await showDialog<bool>(
+          context: context,
+          builder: (d) => AlertDialog(
+                title: const Text('Record this cash?'),
+                content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final e in entries)
+                        Text(
+                            '${names[e['participant_id']]} · ${e['amount'] == 0 ? 'remove cash' : coordinationMoney(e['amount'])}'),
+                      const SizedBox(height: 12),
+                      const Text(
+                          'Each member sees it as cash recorded by you, separate from Mobile Money.',
+                          style: SendohTextStyles.caption),
+                    ]),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(d, false),
+                      child: const Text('Edit')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(d, true),
+                      child: const Text('Record cash')),
+                ],
+              ));
+      if (ok != true) {
+        return;
+      }
+    }
     setState(() {
       busy = true;
       error = null;
     });
     try {
       if (entries.isNotEmpty) {
+        // Replaces each member's cash amount: saving twice records nothing twice.
         await widget.api.request('/collections/${widget.data['id']}/cash',
             body: {'entries': entries});
       }
@@ -229,9 +261,13 @@ class SettlementScreen extends StatefulWidget {
       {super.key,
       required this.api,
       required this.collectionId,
-      required this.collectionName});
+      required this.collectionName,
+      this.round});
   final SendohApi api;
   final String collectionId, collectionName;
+
+  /// Open a specific round's receipt (e.g. from Activity). Null: the current round.
+  final int? round;
   @override
   State<SettlementScreen> createState() => _SettlementScreenState();
 }
@@ -385,13 +421,26 @@ class _SettlementScreenState extends State<SettlementScreen> {
     await load();
   }
 
+  /// An earlier round's settlement, unchanged since it was closed.
+  Map<String, dynamic>? get pastReceipt {
+    final o = overview;
+    if (o == null || widget.round == null || widget.round == o['round']) {
+      return null;
+    }
+    return (o['history'] as List? ?? [])
+        .map((h) => Map<String, dynamic>.from(h as Map))
+        .where((h) => h['round'] == widget.round)
+        .firstOrNull;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final s = settlement;
+    final s = pastReceipt ?? settlement;
     return Scaffold(
         appBar: AppBar(
-            title:
-                Text(s == null ? 'Review settlement' : widget.collectionName)),
+            title: Text(s == null
+                ? 'Review settlement'
+                : '${widget.collectionName}${s['round'] != null && (overview?['recurring'] == true) ? ' · Round ${s['round']}' : ''}')),
         body: RefreshIndicator(
             onRefresh: () => load(lookup: s != null),
             child: ListView(
@@ -444,35 +493,36 @@ class _SettlementScreenState extends State<SettlementScreen> {
                 child: const Text('Change who receives'))),
         const SizedBox(height: 4),
         const Divider(),
+        // The arithmetic, from the backend's accounting records and fee quote.
+        SummaryRow('Group total', coordinationMoney(raised['total'])),
+        SummaryRow('Cash already with you', coordinationMoney(raised['cash'])),
+        const Text('Not sent again. No fee on cash.',
+            style: SendohTextStyles.caption),
         SummaryRow(
-            'Mobile Money collected', coordinationMoney(quote['mobile_money'])),
-        InkWell(
-            onTap: () => setState(() => showFees = !showFees),
-            child: Row(children: [
-              Expanded(
-                  child: SummaryRow(
-                      'Fees', coordinationMoney(quote['fees_total']))),
-              Icon(showFees ? Icons.expand_less : Icons.expand_more,
-                  size: 20,
-                  semanticLabel: showFees ? 'Hide fees' : 'Show fees'),
-            ])),
-        if (showFees) ...[
+            'Confirmed Mobile Money', coordinationMoney(quote['mobile_money'])),
+        SummaryRow('MeSomb fees, already deducted',
+            '− ${coordinationMoney(num.tryParse('${quote['provider_fees']}')?.round())}'),
+        SummaryRow('Sendoh settlement fee',
+            '− ${coordinationMoney(quote['sendoh_fee'])}'),
+        if ((quote['payout_cost'] as num) > 0)
           SummaryRow(
-              'MeSomb collection fees', '${quote['provider_fees']} FCFA'),
-          SummaryRow(
-              'Sendoh settlement fee', coordinationMoney(quote['sendoh_fee'])),
-          if ((quote['payout_cost'] as num) > 0)
-            SummaryRow('Payout cost', coordinationMoney(quote['payout_cost'])),
-        ],
+              'Payout cost', '− ${coordinationMoney(quote['payout_cost'])}'),
+        SummaryRow('Payout', coordinationMoney(quote['payout_amount']),
+            bold: true),
         const Divider(),
-      ] else
+      ] else ...[
         Text('${coordinationMoney(raised['total'])} raised',
             style: SendohTextStyles.headingMedium),
-      if ((raised['cash'] as num) > 0)
+        SummaryRow('Confirmed Mobile Money',
+            coordinationMoney(raised['mobile_money'])),
+        SummaryRow('Cash already with you', coordinationMoney(raised['cash'])),
+      ],
+      // Name who is still confirming: the final settlement waits for them.
+      for (final pending in (raised['pending'] as List? ?? const []))
         Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-                'You already hold ${coordinationMoney(raised['cash'])} in cash.',
+                'Waiting for ${pending['name']} · ${coordinationMoney(pending['amount'])} confirming',
                 style: SendohTextStyles.bodyMedium)),
       if (quote == null)
         Align(
@@ -535,7 +585,39 @@ class _SettlementScreenState extends State<SettlementScreen> {
           '${widget.collectionName} is closed. We’ll notify you when it arrives.'
         ),
     };
+    final amounts =
+        Map<String, dynamic>.from((s['amounts'] as Map?) ?? const {});
+    final delivered = state == 'DELIVERED';
     return [
+      // Two separate events: the collection closed; the payout delivered.
+      SurfaceCard(
+          child: Column(children: [
+        Row(children: [
+          const Icon(Icons.check_circle, color: SendohColors.teal, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(
+                  s['round'] != null && overview?['recurring'] == true
+                      ? 'Round ${s['round']} closed · no new contributions'
+                      : 'Collection closed · no new contributions',
+                  style: SendohTextStyles.bodyMedium)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Icon(delivered ? Icons.check_circle : Icons.schedule,
+              color: delivered ? SendohColors.teal : SendohColors.secondary,
+              size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(
+                  delivered
+                      ? 'Payout delivered'
+                      : state == 'REVIEW'
+                          ? 'Payout needs attention'
+                          : 'Payout sending',
+                  style: SendohTextStyles.bodyMedium)),
+        ]),
+      ])),
       const SizedBox(height: 24),
       Icon(icon, size: 56, color: color),
       const SizedBox(height: 12),
@@ -554,6 +636,19 @@ class _SettlementScreenState extends State<SettlementScreen> {
       Text(body,
           textAlign: TextAlign.center, style: SendohTextStyles.bodyMedium),
       const SizedBox(height: 16),
+      if (amounts.isNotEmpty) ...[
+        SummaryRow(
+            'Group total',
+            coordinationMoney(amounts['raised_total'] ??
+                ((amounts['mobile_money'] as num? ?? 0) +
+                    (amounts['cash'] as num? ?? 0)))),
+        SummaryRow(
+            'Cash already with organizer', coordinationMoney(amounts['cash'])),
+        SummaryRow('Confirmed Mobile Money',
+            coordinationMoney(amounts['mobile_money'])),
+        SummaryRow('Fees', '− ${coordinationMoney(amounts['fees_total'])}'),
+        SummaryRow('Payout', amount, bold: true),
+      ],
       Text(
           'Reference: ${(s['reference'] as String).substring(0, 8).toUpperCase()}',
           textAlign: TextAlign.center,
@@ -605,9 +700,15 @@ class _MemberShareCardState extends State<MemberShareCard> {
     final p = MemberPosition.fromJoined(widget.item);
     final c = Map<String, dynamic>.from(widget.item['collection'] as Map);
     final organizer = c['organizer_name'] ?? 'the organizer';
+    final handle = c['organizer_handle'] as String?;
     final fulfilled = p.state == 'FULFILLED';
+    final round = (c['round'] as num?)?.toInt() ?? 1;
+    final showRound = c['recurring'] == true && round > 1;
+    final previous = widget.item['previous_round'] as Map?;
     return SurfaceCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (showRound)
+        Text('Round $round · Your share', style: SendohTextStyles.caption),
       if (fulfilled)
         Row(children: [
           const Icon(Icons.check_circle, color: SendohColors.teal, size: 22),
@@ -635,11 +736,20 @@ class _MemberShareCardState extends State<MemberShareCard> {
         SummaryRow('Awaiting confirmation', coordinationMoney(p.pending)),
       if (p.cash > 0) ...[
         SummaryRow('Cash recorded by $organizer', coordinationMoney(p.cash)),
+        Text(
+            'Cash entry wrong? Contact $organizer${handle == null ? '' : ' ($handle)'}.',
+            style: SendohTextStyles.caption),
         TextButton(
             onPressed: busy || flagged ? null : flag,
             child: Text(
                 flagged ? '$organizer has been told' : 'Flag a cash error')),
       ],
+      // An earlier round stays paid: a new share never hides it.
+      if (previous != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(previousRoundLine(previous),
+                style: SendohTextStyles.bodyMedium)),
       if (c['status'] == 'SETTLED')
         Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -647,4 +757,150 @@ class _MemberShareCardState extends State<MemberShareCard> {
                 style: SendohTextStyles.bodyMedium)),
     ]));
   }
+}
+
+/// "Round 1 · Paid": the member's earlier round, from the snapshot taken at close.
+String previousRoundLine(Map previous) {
+  final round = previous['round'];
+  final paid = ((previous['confirmed'] as num?) ?? 0) +
+      ((previous['cash'] as num?) ?? 0);
+  return switch (previous['state']) {
+    'FULFILLED' || 'CONTRIBUTED' => 'Round $round · Paid',
+    'PARTIAL' =>
+      'Round $round · ${coordinationMoney(paid)} of ${coordinationMoney(previous['expected'])}',
+    _ => 'Round $round · Not paid',
+  };
+}
+
+/// Review the next round before opening it: members, share, who receives, due date.
+class NextRoundScreen extends StatefulWidget {
+  const NextRoundScreen({super.key, required this.api, required this.data});
+  final SendohApi api;
+  final Map<String, dynamic> data;
+  @override
+  State<NextRoundScreen> createState() => _NextRoundScreenState();
+}
+
+class _NextRoundScreenState extends State<NextRoundScreen> {
+  late final int next = ((widget.data['round'] as num?)?.toInt() ?? 1) + 1;
+  late final bool hasShare = widget.data['mode'] != 'ANY_AMOUNT';
+  late final share =
+      TextEditingController(text: '${widget.data['expected_amount'] ?? ''}');
+  late final List<Map<String, dynamic>> members =
+      (widget.data['participants'] as List)
+          .map((p) => Map<String, dynamic>.from(p as Map))
+          .where((p) => p['invitation_state'] == 'ACCEPTED')
+          .toList();
+
+  /// '' = the organizer receives; otherwise a joined member's participant id.
+  String receiver = '';
+  DateTime? due;
+  bool busy = false;
+  String? error;
+
+  @override
+  void dispose() {
+    share.dispose();
+    super.dispose();
+  }
+
+  Future<void> open() async {
+    final amount = int.tryParse(share.text.trim().replaceAll(',', ''));
+    if (hasShare && (amount == null || amount <= 0)) {
+      setState(() => error = 'Enter each member’s share in whole FCFA.');
+      return;
+    }
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      // from_round makes a repeated tap a safe replay, not a skipped round.
+      await widget.api
+          .request('/collections/${widget.data['id']}/rounds', body: {
+        'from_round': next - 1,
+        'beneficiary_participant_id': receiver,
+        if (hasShare) 'expected_amount': amount,
+        if (due != null)
+          'deadline_at': DateTime.utc(due!.year, due!.month, due!.day, 22, 59)
+              .toIso8601String(),
+      });
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = '$e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(title: Text('Round $next')),
+      body: ListView(padding: const EdgeInsets.all(22), children: [
+        Text('${members.length} members carry forward',
+            style: SendohTextStyles.titleSmall),
+        Text(members.map((m) => m['name']).join(', '),
+            style: SendohTextStyles.caption),
+        const SizedBox(height: 16),
+        if (hasShare)
+          TextField(
+              controller: share,
+              enabled: !busy,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Each member’s share', suffixText: 'FCFA')),
+        const SizedBox(height: 16),
+        const Text('Who receives this round', style: SendohTextStyles.caption),
+        DropdownButton<String>(
+            isExpanded: true,
+            value: receiver,
+            items: [
+              const DropdownMenuItem(value: '', child: Text('You')),
+              ...members.where((m) => m['user_id'] != null).map((m) =>
+                  DropdownMenuItem(
+                      value: m['id'] as String,
+                      child: Text(m['name'] as String))),
+            ],
+            onChanged: busy ? null : (v) => setState(() => receiver = v ?? '')),
+        const SizedBox(height: 8),
+        ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Due date'),
+            subtitle: Text(due == null
+                ? 'No due date'
+                : '${due!.day}/${due!.month}/${due!.year}'),
+            trailing: const Icon(Icons.calendar_today_outlined),
+            onTap: busy
+                ? null
+                : () async {
+                    final now = DateTime.now();
+                    final picked = await showDatePicker(
+                        context: context,
+                        initialDate: due ?? now.add(const Duration(days: 30)),
+                        firstDate: now,
+                        lastDate: now.add(const Duration(days: 730)));
+                    if (picked != null) {
+                      setState(() => due = picked);
+                    }
+                  }),
+        const SizedBox(height: 8),
+        Text(
+            'Everyone starts Round $next at 0 FCFA. Round ${next - 1} records and receipts stay as they are.',
+            style: SendohTextStyles.bodyMedium),
+        if (error != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(error!,
+                  style: const TextStyle(color: SendohColors.red))),
+        const SizedBox(height: 20),
+        FilledButton(
+            onPressed: busy ? null : open,
+            child: Text(busy ? 'Opening…' : 'Open Round $next')),
+      ]));
 }
