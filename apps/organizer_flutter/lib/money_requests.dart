@@ -7,6 +7,37 @@ import 'design.dart';
 import 'people_flows.dart';
 import 'person_payments.dart';
 
+/// The request's state from the reader's side. "Received" only after delivery.
+String requestHeadline(Map<String, dynamic> r) {
+  final mine = r['direction'] == 'RECEIVED'; // I was asked to pay
+  final requester = '${r['requester']['name']}';
+  final payer = '${r['recipient']['name']}';
+  final amount = personMoney(r['amount']);
+  switch (r['status']) {
+    case 'PAID':
+      return mine
+          ? 'Paid · delivered to $requester'
+          : 'Paid · you received $amount';
+    case 'PAYMENT_REVIEW':
+      return 'Payment needs attention · nobody pays again';
+    case 'DECLINED':
+      return mine ? 'You declined this request' : '$payer declined';
+    case 'CANCELLED':
+      return mine
+          ? '$requester cancelled this request'
+          : 'You cancelled this request';
+    case 'EXPIRED':
+      return 'This request expired';
+    case 'PROCESSING':
+      return r['payment_phase'] == 'DELIVERING'
+          ? (mine
+              ? 'You paid · delivering to $requester'
+              : '$payer paid · on its way to you')
+          : (mine ? 'Confirming your payment' : '$payer is paying');
+  }
+  return mine ? '$requester is waiting for your payment' : 'Waiting for $payer';
+}
+
 String requestStatus(dynamic value) =>
     const {
       'PENDING': 'Awaiting payment',
@@ -329,7 +360,7 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
                     title: Text(
                         '${r['amount']} FCFA · ${r['direction'] == 'SENT' ? r['recipient']['name'] : r['requester']['name']}'),
                     subtitle: Text(
-                        '${r['reason']} · ${r['direction'] == 'SENT' ? 'Sent' : 'Received'} · ${requestStatus(r['status'])}'),
+                        '${r['reason']} · ${requestHeadline(Map<String, dynamic>.from(r))}'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
                       await Navigator.push(
@@ -436,19 +467,29 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
       body: ListView(padding: const EdgeInsets.all(24), children: [
         if (busy) const LinearProgressIndicator(),
         if (data != null) ...[
-          Text(
-              data!['direction'] == 'RECEIVED'
-                  ? '${data!['requester']['name']} requested'
-                  : 'Requested from ${data!['recipient']['name']}',
-              style: const TextStyle(fontSize: 20)),
+          Row(children: [
+            PersonAvatar(
+                data!['direction'] == 'RECEIVED'
+                    ? '${data!['requester']['name']}'
+                    : '${data!['recipient']['name']}',
+                radius: 22),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Text(
+                    data!['direction'] == 'RECEIVED'
+                        ? '${data!['requester']['name']} asked you for'
+                        : 'You asked ${data!['recipient']['name']} for',
+                    style: SendohTextStyles.titleSmall)),
+          ]),
+          const SizedBox(height: 16),
+          Text(personMoney(data!['amount']),
+              style: SendohTextStyles.displayLarge),
+          Text('For ${data!['reason']}', style: SendohTextStyles.bodyMedium),
           const SizedBox(height: 20),
-          Text('${data!['amount']} FCFA',
-              style:
-                  const TextStyle(fontSize: 32, fontWeight: FontWeight.w600)),
-          Text(data!['reason']),
-          const SizedBox(height: 20),
-          StatusBadge(requestStatus(data!['status']),
-              pending: data!['status'] == 'PENDING'),
+          Semantics(
+              liveRegion: true,
+              child: StatusBadge(requestHeadline(data!),
+                  pending: data!['status'] != 'PAID')),
           if (data!['payment_order_id'] != null)
             TextButton(
                 onPressed: () async {
@@ -462,7 +503,9 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
                     load();
                   }
                 },
-                child: const Text('View payment')),
+                child: Text(data!['status'] == 'PAID'
+                    ? 'View receipt'
+                    : 'View payment')),
           if (data!['expires_at'] != null)
             Text(
                 'Expires: ${DateTime.fromMillisecondsSinceEpoch((data!['expires_at'] as int) * 1000).toLocal()}'),

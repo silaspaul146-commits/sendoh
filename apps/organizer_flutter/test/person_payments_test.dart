@@ -10,10 +10,14 @@ class PersonApi extends SendohApi {
   bool uncertain = false, acceptUncertain = false;
   final List<String?> acceptKeys = [];
   String status = 'READY';
+  String me = 'user-1';
   Map<String, dynamic> quote() => {
         'id': 'quote-1',
-        'recipient': {'name': 'Alice', 'identity': '@alice'},
+        'recipient': {'id': 'alice-id', 'name': 'Alice', 'identity': '@alice'},
+        'reason': 'Saturday dinner',
         'payer_method': 'MTN',
+        'receiving_method': 'MTN',
+        'receiving_masked': '••• 123',
         'execution_available': true,
         'expires_at': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 300,
         'amounts': {
@@ -28,6 +32,13 @@ class PersonApi extends SendohApi {
         'id': 'order-1',
         'quote': quote(),
         'status': status,
+        'phase': const {
+              'DELIVERING': 'DELIVERING',
+              'SUCCEEDED': 'DELIVERED',
+              'FUNDED': 'DELIVERING',
+            }[status] ??
+            status,
+        'payer': {'name': 'Marie'},
         'execution_available': status == 'READY',
         'receipt_available': status == 'SUCCEEDED',
         'collection_status': status == 'READY' ? 'NOT_STARTED' : 'SUCCEEDED',
@@ -37,7 +48,7 @@ class PersonApi extends SendohApi {
   Future<dynamic> request(String path,
       {Map<String, dynamic>? body, String? key, bool retry = true}) async {
     if (path == '/me') {
-      return {'id': 'user-1'};
+      return {'id': me};
     }
     if (path == '/person-payments/quotes') {
       return quote();
@@ -82,6 +93,9 @@ void main() {
     final button = find.text('Pay 5,179 FCFA');
     await tester.scrollUntilVisible(button, 200,
         scrollable: find.byType(Scrollable).first);
+    // Bring it fully on screen; scrollUntilVisible stops at the edge.
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pumpAndSettle();
   }
@@ -125,8 +139,8 @@ void main() {
     await open(tester, api);
     await confirm(tester);
     expect(api.executions, 1);
-    expect(find.text('Payment delivered'), findsNothing);
-    expect(find.text('Payment in progress'), findsOneWidget);
+    expect(find.text('Delivered to Alice'), findsNothing);
+    expect(find.text('Paid · delivering to Alice'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('Reopening uncertain dispatch reads same order without charging',
@@ -145,7 +159,7 @@ void main() {
     await open(tester, api);
     expect(api.executions, 1);
     expect(api.accepts, 1);
-    expect(find.text('Payment in progress'), findsOneWidget);
+    expect(find.text('Paid · delivering to Alice'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('Uncertain order acceptance reuses its persisted key',
@@ -181,7 +195,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: PersonCheckout(api: api, orderId: 'order-1')));
     await tester.pumpAndSettle();
-    expect(find.text('Payment delivered'), findsOneWidget);
+    expect(find.text('Delivered to Alice'), findsWidgets);
     expect(api.executions, 0);
     await tester.pumpWidget(const SizedBox());
   });
@@ -205,5 +219,38 @@ void main() {
     expect(find.text('Pay 5,179 FCFA').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Review shows where the money goes and why', (tester) async {
+    final api = PersonApi();
+    await open(tester, api);
+    expect(find.text('For Saturday dinner'), findsOneWidget);
+    expect(find.text('Alice receives on'), findsOneWidget);
+    expect(find.text('MTN MoMo ••• 123'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Pay 5,179 FCFA'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Pay 5,179 FCFA'), findsOneWidget);
+  });
+
+  testWidgets('Alain never reads received before delivery is verified',
+      (tester) async {
+    final api = PersonApi()
+      ..me = 'alice-id'
+      ..status = 'DELIVERING';
+    await tester.pumpWidget(
+        MaterialApp(home: PersonCheckout(api: api, orderId: 'order-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Marie paid · on its way to you'), findsOneWidget);
+    expect(find.textContaining('You received'), findsNothing);
+    expect(find.text('From Marie'), findsOneWidget);
+    expect(find.textContaining('Pay '),
+        findsNothing); // no payer actions for Alain
+    api.status = 'SUCCEEDED';
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+        MaterialApp(home: PersonCheckout(api: api, orderId: 'order-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('You received 5,000 FCFA'), findsOneWidget);
+    expect(find.text('View receipt'), findsOneWidget);
   });
 }

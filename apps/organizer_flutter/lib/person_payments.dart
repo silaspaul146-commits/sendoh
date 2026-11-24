@@ -23,6 +23,76 @@ String paymentStatus(dynamic value) =>
     }[value] ??
     'Checking status';
 
+String walletLabel(dynamic method) =>
+    method == 'ORANGE' ? 'Orange Money' : 'MTN MoMo';
+
+/// One line per moment, from the reader's side. Only DELIVERED says "received".
+({String title, String body}) personPaymentCopy(
+    {required String? phase,
+    required bool recipient,
+    required String payer,
+    required String payee,
+    required String amount}) {
+  if (recipient) {
+    return switch (phase) {
+      'DELIVERED' => (title: 'You received $amount', body: 'From $payer.'),
+      'DELIVERING' => (
+          title: '$payer paid · on its way to you',
+          body:
+              'It isn’t in your Mobile Money yet. We’ll tell you when it arrives.'
+        ),
+      'REVIEW_FUNDS_HELD' => (
+          title: 'Delivery needs attention',
+          body: '$payer’s payment is held safely. Nobody pays again.'
+        ),
+      'FAILED' => (
+          title: '$payer’s payment didn’t go through',
+          body: 'Nothing was taken or delivered.'
+        ),
+      _ => (
+          title: '$payer is paying',
+          body: 'We’ll tell you when it reaches you.'
+        ),
+    };
+  }
+  return switch (phase) {
+    'AWAITING_APPROVAL' => (
+        title: 'Approve on your phone',
+        body:
+            'Check your Mobile Money phone for the prompt and approve it there.'
+      ),
+    'CONFIRMING' => (
+        title: 'Confirming your payment',
+        body: 'We’re checking with Mobile Money. Please don’t pay again.'
+      ),
+    'DELIVERING' => (
+        title: 'Paid · delivering to $payee',
+        body:
+            'We collected your payment. Delivery to $payee is still being confirmed. Please don’t pay again.'
+      ),
+    'DELIVERED' => (
+        title: 'Delivered to $payee',
+        body: '$payee received $amount.'
+      ),
+    'REVIEW_FUNDS_HELD' => (
+        title: 'Delivery needs attention',
+        body:
+            'Your payment was collected and is held safely. Please don’t pay again.'
+      ),
+    'REVIEW' => (
+        title: 'We’re checking this payment',
+        body: 'Please don’t pay again.'
+      ),
+    'FAILED' => (
+        title: 'Payment not completed',
+        body: 'Nothing was delivered. You can try again.'
+      ),
+    'CANCELLED' => (title: 'Payment cancelled', body: 'Nothing was charged.'),
+    'EXPIRED' => (title: 'Quote expired', body: 'Review a new quote.'),
+    _ => (title: 'Review payment', body: ''),
+  };
+}
+
 String personMoney(dynamic value) {
   final s = '${value ?? 0}';
   return '${s.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} FCFA';
@@ -221,7 +291,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
   static const storage = FlutterSecureStorage();
   static bool submitting = false;
   Map<String, dynamic>? quote, order, pending;
-  String? slot, error;
+  String? slot, error, meId;
   late String method;
   bool busy = false,
       checking = false,
@@ -291,6 +361,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
     });
     try {
       final me = await widget.api.request('/me');
+      meId = me['id'] as String?;
       slot = 'sendoh-person-payment:${widget.api.baseUrl}:${me['id']}';
       final raw = await storage.read(key: slot!);
       pending = raw == null ? null : Map<String, dynamic>.from(jsonDecode(raw));
@@ -500,21 +571,20 @@ class _PersonCheckoutState extends State<PersonCheckout>
     final expired = q != null &&
         (q['expires_at'] as int) <=
             DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final title = delivered
-        ? 'Payment delivered'
-        : status == 'REVIEW'
-            ? 'Payment needs review'
-            : status == 'FAILED'
-                ? 'Payment not completed'
-                : status == 'CANCELLED'
-                    ? 'Payment cancelled'
-                    : status == 'EXPIRED'
-                        ? 'Quote expired'
-                        : ready
-                            ? (widget.nearby && q != null
-                                ? 'Pay ${q['recipient']['name']}'
-                                : 'Review payment')
-                            : 'Payment in progress';
+    // The recipient reads the same payment from their side.
+    final isRecipient =
+        q != null && meId != null && q['recipient']['id'] == meId;
+    final payee = q == null ? '' : '${q['recipient']['name']}';
+    final payer = '${order?['payer']?['name'] ?? 'They'}';
+    final copy = personPaymentCopy(
+        phase: order == null ? null : order!['phase'] as String?,
+        recipient: isRecipient,
+        payer: payer,
+        payee: payee,
+        amount: personMoney(a['recipient_amount']));
+    final title = ready && !isRecipient
+        ? (widget.nearby && q != null ? 'Pay $payee' : 'Review payment')
+        : copy.title;
     return paymentPage(title, [
       if (busy) const LinearProgressIndicator(color: SendohColors.orange),
       if (q != null) ...[
@@ -541,15 +611,23 @@ class _PersonCheckoutState extends State<PersonCheckout>
                 style: SendohTextStyles.displayLarge)),
         const SizedBox(height: 4),
         Text(
-            delivered
-                ? 'Delivered to ${q['recipient']['name']}'
-                : terminal
-                    ? 'To ${q['recipient']['name']}'
-                    : '${q['recipient']['name']} receives',
+            isRecipient
+                ? 'From $payer'
+                : delivered
+                    ? 'Delivered to $payee'
+                    : ready
+                        ? '$payee receives'
+                        : 'To $payee',
             style: SendohTextStyles.bodyMedium),
+        if (q['reason'] != null)
+          Text('For ${q['reason']}', style: SendohTextStyles.caption),
         const SizedBox(height: 28),
-        if (ready) ...[
+        if (ready && !isRecipient) ...[
           paymentSurface([
+            paymentRow(
+                '$payee receives on',
+                '${walletLabel(q['receiving_method'])} ${q['receiving_masked'] ?? ''}'
+                    .trim()),
             paymentRow(
                 'Fees',
                 personMoney((a['collection_fee'] as num) +
@@ -613,18 +691,26 @@ class _PersonCheckoutState extends State<PersonCheckout>
             paymentRow('Method',
                 q['payer_method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
         ],
-        if (!ready && !terminal)
-          Text(
-              status == 'REVIEW'
-                  ? 'We’re checking this payment. Do not pay again.'
-                  : 'You can leave and return to check this payment.',
-              style: SendohTextStyles.bodyMedium),
+        if (!ready || isRecipient)
+          Semantics(
+              liveRegion: true,
+              child: Text(copy.body, style: SendohTextStyles.bodyMedium)),
+        if (!ready && !terminal && !isRecipient)
+          const Text('You can leave and come back; this payment will be here.',
+              style: SendohTextStyles.caption),
         if (order != null && !ready)
           ExpansionTile(
               key: const ValueKey('payment-details'),
               tilePadding: EdgeInsets.zero,
               title: Text(delivered ? 'View receipt' : 'Payment details'),
               children: [
+                paymentRow('From', payer),
+                paymentRow('To', payee),
+                if (q['reason'] != null) paymentRow('For', '${q['reason']}'),
+                paymentRow(
+                    'Received on',
+                    '${walletLabel(q['receiving_method'])} ${q['receiving_masked'] ?? ''}'
+                        .trim()),
                 paymentRow('Payment collection',
                     paymentStatus(order!['collection_status'])),
                 paymentRow('Recipient delivery',
