@@ -643,23 +643,151 @@ class ActivityView extends ConsumerStatefulWidget {
 
 class _ActivityViewState extends ConsumerState<ActivityView> {
   late Future<dynamic> activity;
+
+  /// Person payments sent and received, each reopening its own receipt.
+  late Future<dynamic> payments;
+
+  /// Settlements this organizer closed, each reopening its round's receipt.
+  late Future<dynamic> settlements;
   @override
   void initState() {
     super.initState();
-    activity = ref.read(apiProvider).request('/me/activity');
+    load();
     PushService.updates.addListener(onUpdate);
+  }
+
+  void load() {
+    final api = ref.read(apiProvider);
+    activity = api.request('/me/activity');
+    payments = api
+        .request('/person-payments/activity')
+        .catchError((_) => <String, dynamic>{'items': <dynamic>[]});
+    settlements = api
+        .request('/me/settlements')
+        .catchError((_) => <String, dynamic>{'items': <dynamic>[]});
   }
 
   void onUpdate() {
     if (mounted) {
-      setState(() => activity = ref.read(apiProvider).request('/me/activity'));
+      setState(load);
     }
   }
 
   Future<void> refresh() async {
     onUpdate();
-    await activity;
+    await Future.wait([activity, payments, settlements]);
   }
+
+  Widget settlementsSection() => FutureBuilder<dynamic>(
+        future: settlements,
+        builder: (context, snapshot) {
+          final items = snapshot.data is Map
+              ? ((snapshot.data as Map)['items'] as List? ?? const [])
+              : const [];
+          if (items.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Settlements', style: SendohTextStyles.titleSmall),
+                const SizedBox(height: 8),
+                for (final raw in items)
+                  Builder(builder: (context) {
+                    final s = Map<String, dynamic>.from(raw as Map);
+                    final status = switch (s['state']) {
+                      'DELIVERED' => 'Payout delivered',
+                      'REVIEW' => 'Payout needs attention',
+                      _ => 'Payout sending',
+                    };
+                    return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: SurfaceCard(
+                            padding: EdgeInsets.zero,
+                            child: ListTile(
+                                leading: const CircleAvatar(
+                                    backgroundColor: SendohColors.tealSoft,
+                                    child: Icon(
+                                        Icons.account_balance_wallet_outlined,
+                                        color: SendohColors.teal,
+                                        size: 20)),
+                                title: Text(
+                                    '${s['collection_name']} · Round ${s['round']}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                subtitle: Text(
+                                    '$status · ${money(s['payout_amount'])}'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => SettlementScreen(
+                                              api: ref.read(apiProvider),
+                                              collectionId:
+                                                  s['collection_id'] as String,
+                                              collectionName:
+                                                  s['collection_name']
+                                                      as String,
+                                              round: (s['round'] as num)
+                                                  .toInt())));
+                                  onUpdate();
+                                })));
+                  }),
+                const SizedBox(height: 12),
+              ]);
+        },
+      );
+
+  Widget paymentsSection() => FutureBuilder<dynamic>(
+        future: payments,
+        builder: (context, snapshot) {
+          final items = snapshot.data is Map
+              ? ((snapshot.data as Map)['items'] as List? ?? const [])
+              : const [];
+          if (items.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Payments', style: SendohTextStyles.titleSmall),
+                const SizedBox(height: 8),
+                for (final raw in items)
+                  Builder(builder: (context) {
+                    final item = Map<String, dynamic>.from(raw as Map);
+                    final line = personActivityLine(item);
+                    final sent = item['direction'] == 'SENT';
+                    return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: SurfaceCard(
+                            padding: EdgeInsets.zero,
+                            child: ListTile(
+                                leading: CircleAvatar(
+                                    backgroundColor: SendohColors.tealSoft,
+                                    child: Icon(
+                                        sent
+                                            ? Icons.north_east
+                                            : Icons.south_west,
+                                        color: SendohColors.teal,
+                                        size: 20)),
+                                title: Text(line.title,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                subtitle: Text(line.status),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => PersonCheckout(
+                                              api: ref.read(apiProvider),
+                                              orderId: item['id'] as String)));
+                                  onUpdate();
+                                })));
+                  }),
+                const SizedBox(height: 12),
+              ]);
+        },
+      );
 
   @override
   void dispose() {
@@ -685,10 +813,12 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                           color: SendohColors.teal)),
                   const SizedBox(height: 8),
                   const Text(
-                      'Updates from collections you organize. Invitations and joined-group alerts are in Notifications.',
+                      'Payments you sent or received, and updates from collections you organize.',
                       style: TextStyle(
                           height: 1.6, color: SendohColors.secondary)),
                   const SizedBox(height: 24),
+                  paymentsSection(),
+                  settlementsSection(),
                   if (snapshot.connectionState == ConnectionState.waiting)
                     const LinearProgressIndicator(),
                   if (snapshot.hasError) ...[
@@ -698,9 +828,9 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                         onPressed: onUpdate, child: const Text('Try again')),
                   ] else if (snapshot.hasData && entries.isEmpty)
                     const EmptyState(
-                        title: 'Your story starts here',
+                        title: 'No collection updates yet',
                         message:
-                            'Create a collection and invite your group. Updates will appear here as things happen.',
+                            'Create a collection and invite your group. Its updates will appear here.',
                         icon: Icons.history),
                   if (!snapshot.hasError)
                     ...entries.map((raw) {
@@ -924,61 +1054,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 
   Future<void> startNextRound() async {
-    final next = ((data['round'] as num?)?.toInt() ?? 1) + 1;
-    final members = (data['participants'] as List)
-        .map((p) => Map<String, dynamic>.from(p))
-        .where(
-            (p) => p['invitation_state'] == 'ACCEPTED' && p['user_id'] != null)
-        .toList();
-    // '' = the organizer receives; otherwise a joined member's participant id.
-    String receiver = '';
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (dialog) => StatefulBuilder(
-            builder: (dialog, setDialog) => AlertDialog(
-                  title: Text('Start round $next?'),
-                  content: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Text(
-                        'Members start this round at 0 FCFA. Earlier rounds keep their settled records.'),
-                    const SizedBox(height: 16),
-                    const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('Who receives this round',
-                            style: SendohTextStyles.caption)),
-                    DropdownButton<String>(
-                        isExpanded: true,
-                        value: receiver,
-                        items: [
-                          const DropdownMenuItem(value: '', child: Text('You')),
-                          ...members.map((m) => DropdownMenuItem(
-                              value: m['id'] as String,
-                              child: Text(m['name'] as String))),
-                        ],
-                        onChanged: (v) => setDialog(() => receiver = v ?? '')),
-                  ]),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(dialog, false),
-                        child: const Text('Cancel')),
-                    TextButton(
-                        onPressed: () => Navigator.pop(dialog, true),
-                        child: Text('Open round $next')),
-                  ],
-                )));
-    if (ok != true || !mounted) {
-      return;
-    }
-    try {
-      // from_round makes a repeated tap a safe replay, not a skipped round.
-      await widget.api.request('/collections/${data['id']}/rounds', body: {
-        'from_round': next - 1,
-        'beneficiary_participant_id': receiver
-      });
+    final opened = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => NextRoundScreen(api: widget.api, data: data)));
+    if (mounted && opened == true) {
       await refresh();
-    } catch (e) {
-      if (mounted) {
-        setState(() => error = '$e');
-      }
     }
   }
 

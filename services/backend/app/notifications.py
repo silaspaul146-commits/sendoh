@@ -15,6 +15,7 @@ KINDS = {
     'SETTLEMENT_REVIEW': 'Settlement needs attention',
     'COLLECTION_SETTLED': 'Collection settled',
     'CASH_RECORDED': 'Cash recorded',
+    'RECEIVING_SETUP_NEEDED': 'Someone wants to pay you',
     'ROUND_STARTED': 'A new round is open',
     'CASH_FLAGGED': 'Cash record flagged',
     'CONTRIBUTION_CONFIRMED': 'Contribution confirmed',
@@ -114,6 +115,11 @@ def serialize(db, n):
         return dict(id=n.id, kind=n.kind, title=KINDS[n.kind], request_id=n.request_id,
             collection_name=r.reason if r else 'Money request', created_at=n.created_at,
             read_at=n.read_at, invitation_available=False)
+    if n.kind == 'RECEIVING_SETUP_NEEDED':
+        payer = db.get(User, n.event_key.split(':')[1])
+        return dict(id=n.id, kind=n.kind, collection_name='Receiving details',
+            title=f"{payer.display_name if payer else 'Someone'} wants to pay you. Set where you receive money.",
+            created_at=n.created_at, read_at=n.read_at, invitation_available=False)
     c = db.get(Collection, n.collection_id)
     p = db.get(Participant, n.participant_id)
     available = bool(p and c and c.status == 'ACTIVE' and

@@ -108,9 +108,12 @@ def raised(db, c):
     paid = list(db.scalars(select(ProviderPayment).where(
         ProviderPayment.collection_id == c.id, ProviderPayment.mode == 'SANDBOX',
         ProviderPayment.status == 'SUCCEEDED', current_round(ProviderPayment))))
-    pending = int(db.scalar(select(func.count()).select_from(ProviderPayment).where(
+    pending_rows = list(db.scalars(select(ProviderPayment).where(
         ProviderPayment.collection_id == c.id, ProviderPayment.status == 'PENDING',
         current_round(ProviderPayment))))
+    pending = len(pending_rows)
+    names = dict(db.execute(select(User.id, User.display_name).where(
+        User.id.in_({p.payer_id for p in pending_rows}))).all()) if pending_rows else {}
     mobile = sum(p.amount for p in paid)
     cash = sum(r.amount for r in cash_by_participant(db, c.id).values())
     unverified = sum(1 for p in paid if p.accounting_verified_at is None or p.confirmed_net is None)
@@ -118,7 +121,9 @@ def raised(db, c):
     total = mobile + cash
     return dict(mobile_money=mobile, cash=cash, total=total, target=c.target_amount,
                 target_reached=bool(c.target_amount) and total >= c.target_amount,
-                pending_count=pending, _unverified=unverified, _net=net)
+                pending_count=pending,
+                pending=[dict(name=names.get(p.payer_id, 'A member'), amount=p.amount) for p in pending_rows],
+                _unverified=unverified, _net=net)
 
 
 def beneficiary(db, c):
@@ -329,6 +334,8 @@ class NextRound(BaseModel):
     from_round: int = Field(ge=1, strict=True)
     # Who receives the new round: '' means the organizer; omitted keeps the current choice.
     beneficiary_participant_id: str | None = Field(default=None, max_length=36)
+    # Each member's share for the new round; omitted keeps the current rule.
+    expected_amount: int | None = Field(default=None, gt=0, le=LIMIT)
     deadline_at: AwareDatetime | None = None
 
 
@@ -435,6 +442,16 @@ def router(database, actor, sessions, config):
         if amounts['payout_amount'] != data.payout_amount:
             raise HTTPException(409, 'The amounts changed. Review the settlement again.')
         now = int(time.time())
+        from .contribution_state import member_position
+        from .service import participant_state
+        members = []
+        for p in db.scalars(select(Participant).where(Participant.collection_id == c.id)):
+            pos = member_position(db, p, participant_state(p))
+            if pos['membership'] == 'ACCEPTED' or pos['paid_amount'] > 0:
+                members.append(dict(participant_id=p.id, state=pos['state'],
+                                    confirmed=pos['confirmed_amount'], cash=pos['cash_amount'],
+                                    expected=pos['expected_amount']))
+        amounts = {**amounts, 'members': members, 'raised_total': amounts['mobile_money'] + amounts['cash']}
         s = Settlement(collection_id=c.id, round=c.round, organizer_id=user.id, beneficiary_id=recipient,
                        request_key=idempotency_key,
                        destination_id=dest.id, phone=dest.phone, method=dest.method,
@@ -498,6 +515,15 @@ def router(database, actor, sessions, config):
             raise HTTPException(409, 'Settle this round before starting the next one.')
         if data.beneficiary_participant_id is not None:
             choose(db, c, data.beneficiary_participant_id or None)
+        if data.expected_amount is not None:
+            if c.mode == 'ANY_AMOUNT':
+                raise HTTPException(422, 'This collection takes any amount; it has no share to set.')
+            old = c.expected_amount
+            c.expected_amount = data.expected_amount
+            # Members on the group rule follow it; personal shares stay as agreed.
+            for p in db.scalars(select(Participant).where(Participant.collection_id == c.id)):
+                if p.expected_amount in (None, old):
+                    p.expected_amount = data.expected_amount
         c.round += 1
         c.status = 'ACTIVE'
         if data.deadline_at is not None:

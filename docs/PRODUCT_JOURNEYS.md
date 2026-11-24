@@ -10,7 +10,7 @@ The promise: when two people open Sendoh, each can tell what happened to the sam
 
 No automated test proves MeSomb moved real money. Every payment test uses a fake provider.
 
-Last updated: 24 Nov 2026 (milestones "one contribution, two phones" and "Request and Pay").
+Last updated: 24 Nov 2026 (milestones "one contribution, two phones", "Request and Pay", "Send and Near2Pay" and "Settlement and rounds").
 
 ## 1. Collect: one contribution, two phones (milestone 1)
 
@@ -61,26 +61,67 @@ Last updated: 24 Nov 2026 (milestones "one contribution, two phones" and "Reques
 - A two-phone device walkthrough.
 - Settlement payouts and Request/Pay need the Render settings in `docs/SETTLEMENT.md`.
 
-## 3. Send and Near2Pay
+## 3. Send and Near2Pay (milestone 3)
 
-- **Implemented:**
-  - Send by username.
-  - Near2Pay with a short-lived QR code or a typed code. A code only identifies the person or collection.
-  - A personal code opens "Pay <name>" in the reviewed checkout. A collection code opens "Contribute to <collection>".
-  - "Payment received" appears only after verified delivery.
-- **Verified:** backend tests and Flutter widget tests.
-- **Unverified:** the camera on a device. The Android build in CI could not be checked locally because of network access.
+*Marie wants to be sure she's paying the right person, once. Alain wants to know when 2,500 FCFA is actually his.*
 
-## 4. Settlement and recurring rounds
+### Steps
 
-- **Implemented:**
-  - Cash recorded separately from Mobile Money confirmed by MeSomb. Cash already held is never paid out.
-  - A review leading with "You receive", and "Close and send" that sends exactly once.
-  - "Delivered" only after MeSomb evidence.
-  - Rounds, with earlier rounds kept in history.
-  - Rotating beneficiaries.
-- **Verified in the backend:** settlement tests, including timeout without resend, failure kept in review, rounds and beneficiaries.
-- **Unverified:** a real sandbox payout. Settlement needs the Render settings described in `docs/SETTLEMENT.md`.
+| Step | Marie (payer) | Alain (recipient) | Evidence |
+|---|---|---|---|
+| Entry | Home → Send → "Send to a Sendoh user", or "Pay someone nearby" | Scanner → "Show my code" | Verified (widget tests) |
+| Find | A handle, a scanned QR code or a typed short code all lead to the same preview: name, @handle, "Check this is the person you mean", and a way to back out | Shows a QR code and a short code that refreshes every 2 minutes | Verified (backend: same person from all three; widget tests) |
+| Identify only | Scanning or typing creates no order and moves no money. An expired code asks for a new one. | — | Verified (backend journey) |
+| No receiving details | "Alain hasn't set where they receive money yet. Nothing has been charged." Offers "Let Alain know"; no pay button. | Gets "Marie wants to pay you. Set where you receive money", once per day, which opens Receiving details | Verified (backend journey; widget tests) |
+| Review once | Amount, "Alain receives on MTN MoMo ••• 238", her method, the quoted fee and the total | — | Verified (backend quote; checkout tests) |
+| Approve, then interruption | Approve on your phone → Confirming → "Paid · delivering to Alain". Reopening resumes the same order; a duplicate tap or callback does nothing new. | Nothing until the payment starts; then "Marie sent you 2,500 FCFA · On its way to you" | Verified (backend journey) |
+| Delivered | "Delivered" in Activity, with a receipt | "Received" in Activity, with a receipt; one "You received" notification | Verified (backend journey; Activity line tests) |
+
+Person-to-person screens use teal only. Orange stays with collection progress.
+
+### Still unverified
+
+- The camera on a device, including the "Camera access is off" message, which shows when permission is denied.
+- A two-device scan.
+- A real sandbox payout.
+
+## 4. Settlement and recurring rounds (milestone 4)
+
+*Alain wants the correct payout exactly once, without paying out cash he already holds. Marie wants her whole 5,000 FCFA to count, and Round 2 not to make Round 1 look unpaid.*
+
+### Scenario figures (automated)
+
+Mobile Money: Marie 4,000 and Eve 44,000. Cash: Marie 1,000 and Eve 5,000.
+
+| Line | Amount |
+|---|---:|
+| Group total | 54,000 FCFA |
+| Cash already with Alain (not sent again, no fee) | 6,000 FCFA |
+| Confirmed Mobile Money | 48,000 FCFA |
+| MeSomb collection fees, already deducted by MeSomb | 960 FCFA |
+| Sendoh settlement fee | 480 FCFA |
+| Payout | 46,560 FCFA |
+
+The MeSomb fees come from a fake provider using a 2% model, and the Sendoh fee from a synthetic 1% policy. These are not provider-verified amounts.
+
+### Steps
+
+| Step | Alain (organizer) | Marie (member) | Evidence |
+|---|---|---|---|
+| Record cash | Sees each member's confirmed Mobile Money, enters cash, reviews the list, then records it. Saving again records nothing twice. | "Cash recorded by Alain · 1,000 FCFA" | Verified (backend journey; Flutter) |
+| A payment still confirming | Named on the review ("Waiting for Marie · 500 FCFA confirming"); Close and send stays disabled | — | Verified (backend journey; widget test) |
+| Review | Group total, cash already held, confirmed Mobile Money, fees already deducted, Sendoh fee, payout and the beneficiary's masked number. All from the backend accounting and fee quote. | — | Verified (backend arithmetic; widget test) |
+| Close once | "Collection closed · no new contributions", then a separate "Payout sending". Contributions are refused. A double tap replays the same payout; another request is refused. | — | Verified (backend journey) |
+| Uncertain payout | A timeout keeps it "Sending". It is recovered by lookup and never sent again. | — | Verified (backend, fake provider) |
+| Delivered | "Payout delivered" appears only after the delivery evidence matches. One notification. The receipt can be reopened from the collection and from Activity → Settlements. | "Settlement delivered to Alain" | Verified (backend journey; widget test) |
+| Progress | The orange bar shows 54,000 (confirmed Mobile Money plus recorded cash) and doesn't move when the payout arrives | "Your 5,000 FCFA share is paid": 4,000 Mobile Money + 1,000 cash, with "Cash entry wrong? Contact Alain (@alain)" and "Flag a cash error" | Verified |
+| Round 2 | Reviews the members carried forward, each member's share, who receives and the due date, then opens Round 2 at 0 | Home and card: "Round 2 · Your share", with "Round 1 · Paid" taken from the snapshot made at close | Verified (backend round isolation; widget tests) |
+
+### Still unverified
+
+- A real MeSomb sandbox payout. Delivery above is simulated by the fake provider; it is not provider-verified.
+- A two-phone walkthrough.
+- The Render settings in `docs/SETTLEMENT.md` must be set.
 
 ## 5. Reminders
 

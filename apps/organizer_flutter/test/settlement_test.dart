@@ -76,19 +76,34 @@ void main() {
             api: api, collectionId: 'c1', collectionName: 'Family Trip')));
     await tester.pumpAndSettle();
     expect(find.text('You receive'), findsOneWidget);
-    expect(find.text('46,560 FCFA'), findsOneWidget);
+    expect(find.text('46,560 FCFA'), findsWidgets); // headline and Payout row
     expect(find.text('MTN MoMo ••• 123'), findsOneWidget);
-    expect(find.text('You already hold 6,000 FCFA in cash.'), findsOneWidget);
-    // Fee breakdown only on tap.
-    expect(find.text('Sendoh settlement fee'), findsNothing);
-    await tester.tap(find.text('Fees'));
-    await tester.pumpAndSettle();
-    expect(find.text('Sendoh settlement fee'), findsOneWidget);
+    // The arithmetic is shown in full before approval.
+    for (final row in [
+      'Group total',
+      'Cash already with you',
+      'Confirmed Mobile Money',
+      'MeSomb fees, already deducted',
+      'Sendoh settlement fee',
+      'Payout'
+    ]) {
+      await tester.scrollUntilVisible(find.text(row), 100,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.text(row), findsOneWidget);
+    }
 
+    await tester.scrollUntilVisible(find.text('Close and send'), 100,
+        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('Close and send'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Close and send'));
     await tester.pump();
     await tester.pump();
     expect(find.text('Sending to MTN MoMo'), findsOneWidget);
+    // Two events: closed now, payout still sending.
+    expect(
+        find.text('Collection closed · no new contributions'), findsOneWidget);
+    expect(find.text('Payout sending'), findsOneWidget);
     expect(find.text('Number ending in 123'), findsOneWidget);
     // No second Send while the payout is unresolved.
     expect(find.text('Close and send'), findsNothing);

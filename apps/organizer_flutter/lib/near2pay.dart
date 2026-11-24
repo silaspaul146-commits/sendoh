@@ -15,6 +15,7 @@ import 'api.dart';
 import 'contribution_checkout.dart' show ContributionCheckout;
 import 'coordination.dart' show coordinationMoney;
 import 'design.dart';
+import 'people_flows.dart' show RecipientPreview, CannotReceiveYet;
 import 'person_payments.dart' show PersonCheckout, ReceivingDetails;
 
 const nearQrPrefix = 'sendoh:near:';
@@ -75,27 +76,6 @@ class _TextPromptState extends State<TextPrompt> {
               child: Text(widget.action)),
         ],
       );
-}
-
-class _Who extends StatelessWidget {
-  const _Who({required this.name, required this.subtitle});
-  final String name, subtitle;
-  @override
-  Widget build(BuildContext context) => Row(children: [
-        CircleAvatar(
-            radius: 26,
-            backgroundColor: SendohColors.tealSoft,
-            child: Text(initials(name),
-                style: const TextStyle(
-                    color: SendohColors.teal, fontWeight: FontWeight.w700))),
-        const SizedBox(width: 12),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, style: SendohTextStyles.titleSmall),
-          Text(subtitle, style: SendohTextStyles.caption),
-        ])),
-      ]);
 }
 
 /// Aïcha: "Get paid nearby". A personal code, or a code for her open collection.
@@ -471,9 +451,12 @@ class _NearScanScreenState extends State<NearScanScreen> {
             builder: (_) => NearContributeScreen(api: widget.api, result: r)));
       } else {
         final person = Map<String, dynamic>.from(r['person'] as Map);
-        var amount = (r['amount'] as num?)?.toInt();
-        amount ??= await Navigator.of(context).push<int>(MaterialPageRoute(
-            builder: (_) => NearAmountScreen(person: person)));
+        // Always show who it is first, so Marie can back out before any money moves.
+        final amount = await Navigator.of(context).push<int>(MaterialPageRoute(
+            builder: (_) => NearAmountScreen(
+                api: widget.api,
+                person: person,
+                requested: (r['amount'] as num?)?.toInt())));
         if (amount != null && mounted) {
           // The existing checkout: who, amount, fees and total before approval.
           await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -597,21 +580,29 @@ class _NearScanScreenState extends State<NearScanScreen> {
                         MaterialPageRoute<void>(
                             builder: (_) =>
                                 NearReceiveScreen(api: widget.api))),
-                    child: const Text('Get paid nearby',
-                        style: TextStyle(color: Color(0xFFE6FFFA)))),
+                    child: const Text('Show my code',
+                        style: TextStyle(
+                            color: Color(0xFFE6FFFA),
+                            fontWeight: FontWeight.w600))),
               ]))));
 }
 
 /// Only when the code carries no amount: the payer enters it, then reviews fees.
 class NearAmountScreen extends StatefulWidget {
-  const NearAmountScreen({super.key, required this.person});
+  const NearAmountScreen(
+      {super.key, required this.api, required this.person, this.requested});
+  final SendohApi api;
   final Map<String, dynamic> person;
+
+  /// The amount the recipient put on their code, if any; the payer can see it.
+  final int? requested;
   @override
   State<NearAmountScreen> createState() => _NearAmountScreenState();
 }
 
 class _NearAmountScreenState extends State<NearAmountScreen> {
-  final field = TextEditingController();
+  late final field =
+      TextEditingController(text: widget.requested?.toString() ?? '');
   String? error;
   @override
   void dispose() {
@@ -623,34 +614,44 @@ class _NearAmountScreenState extends State<NearAmountScreen> {
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: Text('Pay ${widget.person['name']}')),
       body: ListView(padding: const EdgeInsets.all(22), children: [
-        _Who(
+        RecipientPreview(
             name: widget.person['name'] as String,
-            subtitle: widget.person['identity'] as String),
+            identity: widget.person['identity'] as String),
         const SizedBox(height: 24),
-        TextField(
-            controller: field,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-            decoration: InputDecoration(
-                labelText: 'Amount', suffixText: 'FCFA', errorText: error)),
-        const SizedBox(height: 8),
-        const Text('You’ll see fees and approve on the next screen.',
-            style: SendohTextStyles.caption),
-        const SizedBox(height: 24),
-        FilledButton(
-            onPressed: () {
-              final n = int.tryParse(field.text.trim().replaceAll(',', ''));
-              if (n == null || n <= 0 || n > 1000000000) {
-                setState(() => error = 'Enter a whole FCFA amount.');
-                return;
-              }
-              Navigator.pop(context, n);
-            },
-            child: const Text('Review payment')),
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Wrong person? Scan again')),
+        if (widget.person['receiving_ready'] == false) ...[
+          CannotReceiveYet(
+              name: widget.person['name'] as String,
+              onRemind: () => widget.api.request('/people/receiving-reminder',
+                  body: {'recipient_id': widget.person['id']})),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Wrong person? Scan again')),
+        ] else ...[
+          TextField(
+              controller: field,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              decoration: InputDecoration(
+                  labelText: 'Amount', suffixText: 'FCFA', errorText: error)),
+          const SizedBox(height: 8),
+          const Text('You’ll see fees and approve on the next screen.',
+              style: SendohTextStyles.caption),
+          const SizedBox(height: 24),
+          FilledButton(
+              onPressed: () {
+                final n = int.tryParse(field.text.trim().replaceAll(',', ''));
+                if (n == null || n <= 0 || n > 1000000000) {
+                  setState(() => error = 'Enter a whole FCFA amount.');
+                  return;
+                }
+                Navigator.pop(context, n);
+              },
+              child: const Text('Review payment')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Wrong person? Scan again')),
+        ],
       ]));
 }
 

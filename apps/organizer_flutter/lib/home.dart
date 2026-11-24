@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'coordination.dart';
 import 'design.dart';
 import 'people_flows.dart';
+import 'settlement.dart' show previousRoundLine;
 
 /// Presentation only. Shell retains fetching, identity and navigation ownership.
 class CoordinationHome extends StatefulWidget {
@@ -751,7 +752,13 @@ class HomeJoinedCircle extends StatelessWidget {
   Widget build(BuildContext context) {
     final collection = Map<String, dynamic>.from(item['collection']);
     final name = collection['name'] as String;
-    final status = joinedPersonalStatus(item);
+    final joinedCollection = Map<String, dynamic>.from(item['collection']);
+    final round = (joinedCollection['round'] as num?)?.toInt() ?? 1;
+    // "Round 2 · 5,000 FCFA expected" never hides "Round 1 · Paid".
+    final status = joinedCollection['recurring'] == true && round > 1
+        ? 'Round $round · ${joinedPersonalStatus(item)}'
+        : joinedPersonalStatus(item);
+    final previous = item['previous_round'] as Map?;
     final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
     final initials =
         words.take(2).map((w) => w.characters.first).join().toUpperCase();
@@ -800,6 +807,9 @@ class HomeJoinedCircle extends StatelessWidget {
                             Text(status, style: SendohTextStyles.bodyMedium),
                             const SizedBox(height: 4),
                             Text(groupStatus, style: SendohTextStyles.caption),
+                            if (previous != null)
+                              Text(previousRoundLine(previous),
+                                  style: SendohTextStyles.caption),
                           ])),
                     ]),
               )),
@@ -820,7 +830,8 @@ class HomeActionBar extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => near
             ? nearby?.call() ?? PeopleFlow(nearby: true, gateway: gateway)
-            : PeopleFlow(intent: intent, gateway: gateway),
+            : PeopleFlow(
+                intent: intent, gateway: gateway, nearbyBuilder: nearby),
       ),
     );
   }

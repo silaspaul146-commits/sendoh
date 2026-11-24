@@ -7,8 +7,108 @@ enum PeopleIntent { pay, request }
 /// Identity must come from an authenticated backend lookup, never raw QR text.
 class ResolvedPerson {
   const ResolvedPerson(
-      {required this.id, required this.name, required this.identity});
+      {required this.id,
+      required this.name,
+      required this.identity,
+      this.receivingReady = true});
   final String id, name, identity;
+
+  /// They have set where they receive money; known before any amount or charge.
+  final bool receivingReady;
+}
+
+String _initials(String name) => name
+    .trim()
+    .split(RegExp(r'\s+'))
+    .where((w) => w.isNotEmpty)
+    .take(2)
+    .map((w) => w.characters.first.toUpperCase())
+    .join();
+
+/// The same recipient preview for a handle search and a Near2Pay code.
+class RecipientPreview extends StatelessWidget {
+  const RecipientPreview(
+      {super.key, required this.name, required this.identity});
+  final String name, identity;
+  @override
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        label: 'Paying $name, $identity',
+        child: Column(children: [
+          CircleAvatar(
+              radius: 36,
+              backgroundColor: SendohColors.tealSoft,
+              child: Text(_initials(name),
+                  style: const TextStyle(
+                      color: SendohColors.teal,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700))),
+          const SizedBox(height: 12),
+          Text(name,
+              textAlign: TextAlign.center,
+              style: SendohTextStyles.headingMedium),
+          Text(identity,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(fontSize: 16, color: SendohColors.secondary)),
+          const SizedBox(height: 8),
+          const Text('Check this is the person you mean.',
+              textAlign: TextAlign.center, style: SendohTextStyles.caption),
+        ]),
+      );
+}
+
+/// Shown instead of a payment button when the recipient cannot receive yet.
+class CannotReceiveYet extends StatefulWidget {
+  const CannotReceiveYet(
+      {super.key, required this.name, required this.onRemind});
+  final String name;
+  final Future<void> Function() onRemind;
+  @override
+  State<CannotReceiveYet> createState() => _CannotReceiveYetState();
+}
+
+class _CannotReceiveYetState extends State<CannotReceiveYet> {
+  bool sent = false, busy = false;
+  String? error;
+  @override
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: SendohColors.amberSoft,
+              borderRadius: BorderRadius.circular(14)),
+          child: Text(
+              '${widget.name} hasn’t set where they receive money yet. Nothing has been charged. Once they add it in Sendoh, you can pay.',
+              style: SendohTextStyles.bodyMedium),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+            onPressed: busy || sent
+                ? null
+                : () async {
+                    setState(() {
+                      busy = true;
+                      error = null;
+                    });
+                    try {
+                      await widget.onRemind();
+                      if (mounted) setState(() => sent = true);
+                    } catch (_) {
+                      if (mounted) {
+                        setState(() => error = 'Couldn’t send. Try again.');
+                      }
+                    } finally {
+                      if (mounted) setState(() => busy = false);
+                    }
+                  },
+            child: Text(sent
+                ? 'We let ${widget.name} know'
+                : 'Let ${widget.name} know')),
+        if (error != null)
+          Text(error!, style: const TextStyle(color: SendohColors.red)),
+      ]);
 }
 
 class PeopleDraft {
@@ -34,6 +134,9 @@ abstract class PeopleFlowGateway {
   Future<ResolvedPerson> resolve(String identity, {required bool fromQr});
   Future<String?> scan(BuildContext context);
   Future<void> openCheckout(BuildContext context, PeopleDraft draft);
+
+  /// Tell someone a person wants to pay them and they need receiving details.
+  Future<void> remindReceiving(String personId);
 }
 
 class PeopleFlow extends StatefulWidget {
@@ -41,10 +144,14 @@ class PeopleFlow extends StatefulWidget {
       {super.key,
       this.intent = PeopleIntent.pay,
       this.nearby = false,
-      this.gateway});
+      this.gateway,
+      this.nearbyBuilder});
   final PeopleIntent intent;
   final bool nearby;
   final PeopleFlowGateway? gateway;
+
+  /// The Near2Pay scanner, when connected.
+  final Widget Function()? nearbyBuilder;
   @override
   State<PeopleFlow> createState() => _PeopleFlowState();
 }
@@ -295,31 +402,28 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                       : () => Navigator.push(
                                           context,
                                           MaterialPageRoute<void>(
-                                              builder: (_) => PeopleFlow(
-                                                  intent: intent,
-                                                  nearby: true,
-                                                  gateway: widget.gateway))),
+                                              builder: (_) =>
+                                                  widget.nearbyBuilder
+                                                      ?.call() ??
+                                                  PeopleFlow(
+                                                      intent: intent,
+                                                      nearby: true,
+                                                      gateway:
+                                                          widget.gateway))),
                                   icon: const Icon(Icons.qr_code_scanner),
                                   label: const Text('Use Near2Pay')),
                           ],
                           if (step >= 1 && person != null) ...[
-                            const Icon(Icons.person_outline,
-                                size: 36, color: SendohColors.teal),
-                            const SizedBox(height: 12),
-                            Text(person!.name,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    fontSize: 24, fontWeight: FontWeight.w600)),
-                            Text(person!.identity,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    color: SendohColors.secondary)),
+                            RecipientPreview(
+                                name: person!.name, identity: person!.identity),
                             const SizedBox(height: 24),
                           ],
-                          if (step == 1) ...[
-                            const Text(
-                                'Check the name and identity before continuing.'),
-                            const SizedBox(height: 24),
+                          if (step == 1 && !request && !person!.receivingReady)
+                            CannotReceiveYet(
+                                name: person!.name,
+                                onRemind: () =>
+                                    widget.gateway!.remindReceiving(person!.id))
+                          else if (step == 1) ...[
                             if (widget.nearby) ...[
                               FilledButton(
                                   onPressed: () => setState(() {

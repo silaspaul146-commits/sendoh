@@ -50,7 +50,9 @@ def serialize(db, collection, web_url, public=False):
     result['round'] = collection.round
     result['test_collected_amount'] = int(db.scalar(select(func.coalesce(func.sum(TestPayment.amount), 0)).where(TestPayment.collection_id == collection.id, TestPayment.status == 'SUCCEEDED')))
     if public:
-        result['organizer_name'] = db.get(User, collection.organizer_id).display_name
+        organizer = db.get(User, collection.organizer_id)
+        result['organizer_name'] = organizer.display_name
+        result['organizer_handle'] = '@' + organizer.username if organizer.username else None
         result.pop('id')
         return result
     result['share_url'] = f'{web_url}/c/{collection.public_token}' if collection.status == 'ACTIVE' else None

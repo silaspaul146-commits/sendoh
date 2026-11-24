@@ -52,4 +52,15 @@ def router(database, actor):
                                               month=month, environment='SANDBOX'),
                     recent=recent)
 
+    @routes.get('/settlements')
+    def settlements(user=Depends(actor), db=Depends(database)):
+        """Every settlement Alain closed, each reopening its own receipt."""
+        from .models import Settlement
+        rows = db.execute(select(Settlement, Collection.name).join(Collection, Collection.id == Settlement.collection_id)
+                          .where(Settlement.organizer_id == user.id)
+                          .order_by(Settlement.created_at.desc()).limit(50)).all()
+        return dict(items=[dict(collection_id=s.collection_id, collection_name=name, round=s.round,
+                                state=s.state, payout_amount=s.payout_amount, created_at=s.created_at)
+                           for s, name in rows])
+
     return routes

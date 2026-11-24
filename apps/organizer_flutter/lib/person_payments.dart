@@ -93,6 +93,26 @@ String walletLabel(dynamic method) =>
   };
 }
 
+/// One Activity line for a person payment, from the reader's side.
+({String title, String status}) personActivityLine(Map<String, dynamic> item) {
+  final quote = Map<String, dynamic>.from(item['quote'] as Map);
+  final amount = personMoney(quote['amounts']['recipient_amount']);
+  final sent = item['direction'] == 'SENT';
+  final other = sent
+      ? '${quote['recipient']['name']}'
+      : '${item['payer']?['name'] ?? 'Someone'}';
+  final title = sent ? 'You sent $amount to $other' : '$other sent you $amount';
+  final status = switch (item['phase']) {
+    'DELIVERED' => sent ? 'Delivered' : 'Received',
+    'DELIVERING' => sent ? 'Paid · delivering' : 'On its way to you',
+    'REVIEW_FUNDS_HELD' => 'Needs attention · held safely',
+    'REVIEW' => 'Being checked',
+    'FAILED' => 'Not completed',
+    _ => sent ? 'Confirming your payment' : 'Being paid',
+  };
+  return (title: title, status: status);
+}
+
 String personMoney(dynamic value) {
   final s = '${value ?? 0}';
   return '${s.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} FCFA';
@@ -131,10 +151,9 @@ Widget paymentPage(String title, List<Widget> children) => Scaffold(
                       const SizedBox(height: 10),
                       Align(
                           alignment: Alignment.centerLeft,
+                          // Teal for people payments; orange is collection progress.
                           child: Container(
-                              width: 36,
-                              height: 3,
-                              color: SendohColors.orange)),
+                              width: 36, height: 3, color: SendohColors.teal)),
                       const SizedBox(height: 28),
                       ...children
                     ])))));
@@ -225,7 +244,7 @@ class _ReceivingDetailsState extends State<ReceivingDetails> {
 
   @override
   Widget build(BuildContext context) => paymentPage('Receiving details', [
-        if (busy) const LinearProgressIndicator(color: SendohColors.orange),
+        if (busy) const LinearProgressIndicator(color: SendohColors.teal),
         Text(
             data?['account_masked_phone'] ??
                 data?['destination']?['masked_phone'] ??
@@ -586,7 +605,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
         ? (widget.nearby && q != null ? 'Pay $payee' : 'Review payment')
         : copy.title;
     return paymentPage(title, [
-      if (busy) const LinearProgressIndicator(color: SendohColors.orange),
+      if (busy) const LinearProgressIndicator(color: SendohColors.teal),
       if (q != null) ...[
         Row(children: [
           const CircleAvatar(
@@ -833,7 +852,7 @@ class _PersonPaymentHistoryState extends State<PersonPaymentHistory> {
 
   @override
   Widget build(BuildContext context) => paymentPage('Person payments', [
-        if (busy) const LinearProgressIndicator(color: SendohColors.orange),
+        if (busy) const LinearProgressIndicator(color: SendohColors.teal),
         if (items?.isEmpty == true)
           const Text('Your person payments will appear here.'),
         for (final item in items ?? [])

@@ -131,6 +131,8 @@ def router(database, actor):
                                         expected_amount=c.expected_amount),
                         membership=member.invitation_state if member else 'NOT_JOINED')
         # Identity and amount only; the payer still confirms and authorizes in checkout.
-        return dict(purpose='PERSON', person=person, amount=code.amount, expires_at=code.expires_at)
+        from .people import receiving_ready
+        return dict(purpose='PERSON', person={**person, 'receiving_ready': receiving_ready(db, target.id)},
+                    amount=code.amount, expires_at=code.expires_at)
 
     return routes
