@@ -6,7 +6,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('new user defaults on while an existing opt-out survives', () async {
-    FlutterSecureStorage.setMockInitialValues({'sendoh_push_existing': 'false'});
+    FlutterSecureStorage.setMockInitialValues(
+        {'sendoh_push_existing': 'false'});
     expect(await PushService.optedIn('new'), isTrue);
     expect(await PushService.optedIn('existing'), isFalse);
   });

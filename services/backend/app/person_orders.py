@@ -31,9 +31,14 @@ class AcceptQuote(BaseModel):
 
 def quote_view(db, q, config=None):
     d = db.get(ReceivingDestination, q.destination_id)
+    request = db.get(MoneyRequest, q.request_id) if q.request_id else None
     return dict(id=q.id, purpose='REQUEST_PAYMENT' if q.request_id else 'PERSON_PAYMENT',
         request_id=q.request_id, recipient=person(db.get(User, q.beneficiary_id)),
+        reason=request.reason if request else None,
         payer_method=q.payer_method, receiving_method=d.method,
+        # The recipient's own consented destination, masked; never the payer's choice.
+        receiving_masked='••• ' + d.phone[-3:],
+        payer_masked=q.payer_phone[0] + '•••••' + q.payer_phone[-3:],
         amounts=q.amounts, fee_policy_version=q.policy['version'],
         created_at=q.created_at, expires_at=q.expires_at,
         expired=q.expires_at <= int(time.time()), mode='SANDBOX', execution_available=bool(enabled(config) and q.expires_at > int(time.time())
@@ -45,15 +50,17 @@ def order_view(db, o, config=None):
     from .person_execution import execution_view
     execution = execution_view(db, o.id)
     quote = quote_view(db, db.get(PersonQuote, o.quote_id), config)
+    status = 'EXPIRED' if o.status == 'READY' and o.expires_at <= int(time.time()) else o.status
     result = dict(id=o.id, quote=quote, payer=person(db.get(User, o.payer_id)),
-        status='EXPIRED' if o.status == 'READY' and o.expires_at <= int(time.time()) else o.status,
+        status=status, phase=status,
         collection_status=o.collection_status, delivery_status=o.delivery_status,
         receipt_available=False, execution_available=bool(enabled(config) and not execution
             and o.status == 'READY' and o.expires_at > int(time.time())
             and quote['execution_available']),
         created_at=o.created_at, expires_at=o.expires_at)
     if execution:
-        result.update(status=execution['state'], collection_status=execution['collection_status'],
+        result.update(status=execution['state'], phase=execution['phase'],
+            collection_status=execution['collection_status'],
             delivery_status=execution['delivery_status'], receipt_available=execution['recipient_delivery_confirmed'],
             execution=execution)
     return result

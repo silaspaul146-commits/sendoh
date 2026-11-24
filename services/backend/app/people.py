@@ -40,7 +40,16 @@ def view(db, r, actor_id):
         direction='SENT' if actor_id == r.requester_id else 'RECEIVED',
         status=request_payment_state(db, r.id) or state(r), expires_at=r.expires_at, created_at=r.created_at,
         payment_order_id=execution.order_id if execution else None,
+        # Same phase both people see: collected is not delivered.
+        payment_phase=payment_phase(db, execution),
         payment_available=False)
+
+
+def payment_phase(db, execution):
+    if execution is None:
+        return None
+    from .person_execution import execution_view
+    return execution_view(db, execution.order_id)['phase']
 
 def notify(db, r, recipient, kind):
     timestamp = int(time.time())

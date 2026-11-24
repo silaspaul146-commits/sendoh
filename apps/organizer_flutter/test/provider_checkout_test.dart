@@ -43,7 +43,11 @@ class CheckoutApi extends SendohApi {
     if (path == '/provider-payments/quote') {
       quotes++;
       return {
-        'credited_to': {'name': 'Sam', 'collection': 'Birthday', 'organizer': 'Ada'},
+        'credited_to': {
+          'name': 'Sam',
+          'collection': 'Birthday',
+          'organizer': 'Ada'
+        },
         'method': 'MTN',
         'payer_masked': '6•••••001',
         'contribution': 1000,

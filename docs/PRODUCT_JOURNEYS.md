@@ -10,7 +10,7 @@ The promise: when two people open Sendoh, each can tell what happened to the sam
 
 No automated test proves MeSomb moved real money. Every payment test uses a fake provider.
 
-Last updated: 24 Nov 2026 (milestone "one contribution, two phones").
+Last updated: 24 Nov 2026 (milestones "one contribution, two phones" and "Request and Pay").
 
 ## 1. Collect: one contribution, two phones (milestone 1)
 
@@ -38,16 +38,28 @@ Last updated: 24 Nov 2026 (milestone "one contribution, two phones").
 - The browser and device walkthrough.
 - WhatsApp link previews.
 
-## 2. Request and Pay (next priority)
+## 2. Request and Pay (milestone 2)
 
-*The requester wants to know if they were paid. The payer wants to know their payment reached them.*
+*Marie wants to know her payment reached Alain and that she can't pay twice. Alain wants to know whether the money has actually arrived.*
 
-- **Implemented:** create, notify, decline, cancel and expiry. A requester must set receiving details first. A quote binds payer, recipient, amounts and fees. Execution runs separate collection and delivery legs; "PAID" only follows verified delivery.
-- **Verified in the backend:** person execution tests cover duplicate dispatch, ambiguous outcomes, delivery failure kept as an obligation, and refund review.
-- **Gaps:**
-  - The requester's and payer's screens need the same three distinct states as collections: requested, paid by sender, delivered to recipient.
-  - A two-phone walkthrough is unverified.
-  - A real sandbox payout has not been demonstrated end to end.
+### Steps
+
+| Step | Alain (requester) | Marie (payer) | Evidence |
+|---|---|---|---|
+| Request | Home → Request: Marie, 5,000, "Saturday dinner". He must have set his receiving details first. | Sees "Alain asked you for 5,000 FCFA, for Saturday dinner", with Review payment or Decline | Verified (backend journey; receiving-gate widget test) |
+| Review | — | "Alain receives on MTN MoMo ••• 123", her method, fees and total, all from the server quote. The destination is Alain's own consented one. | Verified (backend quote; checkout widget test) |
+| Approve | "Marie is paying" | "Approve on your phone", then "Confirming your payment" | Verified (backend phase) |
+| Collected, not yet delivered | "Marie paid · on its way to you". No "received", no notification, no receipt. | "Paid · delivering to Alain. Please don't pay again." | Verified (backend journey; widget and headline tests) |
+| Leave and reopen | — | Reopens the same order. A repeat approval returns the same payment, and a second quote for the request is refused. | Verified (backend journey; checkout recovery tests) |
+| Delivery verified | "Paid · you received 5,000 FCFA". "You received" notification; can reopen the receipt. | "Paid · delivered to Alain". Can reopen the receipt. | Verified (backend journey; widget test) |
+| Delivery fails | "Delivery needs attention" | "Your payment was collected and is held safely". No second charge. | Verified (backend journey) |
+| Declined | "Marie declined", plus a notification | "You declined this request". Payment is no longer possible. | Verified (backend journey; headline test) |
+
+### Still unverified
+
+- A real sandbox payout end to end.
+- A two-phone device walkthrough.
+- Settlement payouts and Request/Pay need the Render settings in `docs/SETTLEMENT.md`.
 
 ## 3. Send and Near2Pay
 

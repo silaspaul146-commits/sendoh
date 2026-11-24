@@ -65,6 +65,32 @@ def emit_state(db, e, order):
                 token_hash=device.token_hash, family_id=device.family_id, due_at=now))
 
 
+APPROVAL_WINDOW = 120
+
+
+def execution_phase(e, collect, now=None):
+    """What both people are told. Only DELIVERED means the recipient has the money.
+
+    AWAITING_APPROVAL: just sent to the payer's phone. CONFIRMING: checking the
+    payer's debit; unknown is never failure. DELIVERING: collected from the payer,
+    delivery to the recipient not yet verified. DELIVERED: verified delivery.
+    REVIEW_FUNDS_HELD: collected, delivery failed or uncertain; nobody pays again.
+    """
+    now = now or int(time.time())
+    if e.state == 'SUCCEEDED':
+        return 'DELIVERED'
+    if e.state in ('FUNDED', 'DELIVERING'):
+        return 'DELIVERING'
+    if e.state == 'FAILED':
+        return 'FAILED'
+    if e.state == 'REVIEW':
+        return 'REVIEW_FUNDS_HELD' if collect is not None and collect.status == 'SUCCEEDED' else 'REVIEW'
+    if (collect is not None and collect.provider_id is None and collect.attempts == 0
+            and now - collect.created_at < APPROVAL_WINDOW):
+        return 'AWAITING_APPROVAL'
+    return 'CONFIRMING'
+
+
 def execution_view(db, order_id):
     e = db.get(PersonExecution, order_id)
     if e is None:
@@ -72,6 +98,7 @@ def execution_view(db, order_id):
     legs = db.scalars(select(PersonPaymentLeg).where(PersonPaymentLeg.order_id == order_id)).all()
     by_kind = {l.kind:l for l in legs}
     return dict(state=e.state, review_reason=e.reason,
+        phase=execution_phase(e, by_kind.get('COLLECT')),
         collection_status=by_kind['COLLECT'].status,
         delivery_status=by_kind['DELIVER'].status if 'DELIVER' in by_kind else 'NOT_STARTED',
         collection_reference=by_kind['COLLECT'].id,

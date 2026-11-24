@@ -18,6 +18,7 @@ void main() {
     expect(joinedPersonalStatus(item(400)), '600 FCFA left');
   });
   test('Pending attempt does not claim completion', () {
-    expect(joinedPersonalStatus(item(0, pending: true)), 'Confirming your contribution');
+    expect(joinedPersonalStatus(item(0, pending: true)),
+        'Confirming your contribution');
   });
 }
