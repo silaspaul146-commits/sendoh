@@ -22,19 +22,8 @@ class InboxApi extends SendohApi {
       return {'ok': true};
     }
     if (path.startsWith('/me/invitations/participant?')) {
-      return {
-        'id': 'participant',
-        'invitation_state': 'PENDING',
-        'invitation_version': 1,
-        'expected_amount': null,
-        'collection': {
-          'name': 'Family support',
-          'organizer_name': 'Alice',
-          'description': '',
-          'deadline_at': null,
-          'collected_amount': 0
-        }
-      };
+      return {'id':'participant','invitation_state':'PENDING','invitation_version':1,'expected_amount':null,
+        'collection':{'name':'Family support','organizer_name':'Alice','description':'','deadline_at':null,'collected_amount':0}};
     }
     if (path == '/me/invitations' || path == '/me/joined-collections') {
       return [];
@@ -45,9 +34,7 @@ class InboxApi extends SendohApi {
           'id': 'notification',
           'kind': 'INVITED',
           'title': 'You have a collection invitation',
-          'participant_id': 'participant',
-          'invitation_version': 1,
-          'collection_name': 'Family support',
+          'participant_id':'participant', 'invitation_version':1, 'collection_name': 'Family support',
           'collection_id': 'collection',
           'created_at': 1790000000,
           'read_at': read ? 1790000001 : null,
@@ -76,8 +63,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets(
-      'opening an update marks it read then opens its specific invitation',
+  testWidgets('opening an update marks it read then opens its specific invitation',
       (tester) async {
     final api = InboxApi();
     await tester.pumpWidget(MaterialApp(
