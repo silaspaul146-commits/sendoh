@@ -71,6 +71,13 @@ class Intent(BaseModel):
 
 
 APPROVAL_WINDOW = 120
+# A payment MeSomb has never acknowledged, still unknown to its lookup a day later
+# after repeated checks, never reached the provider: no money was taken. It is
+# closed as FAILED so it stops holding the group's totals, settlement and the
+# payer's next attempt. It is still rechecked daily: if MeSomb ever reports it,
+# the FAILED -> SUCCEEDED conflict is flagged for review, never silently credited.
+NO_RECORD_AFTER = 24 * 3600
+NO_RECORD_MIN_CHECKS = 6
 
 
 def phase(p, now=None):
@@ -101,7 +108,7 @@ def view(p):
                 participant_id=p.participant_id, payer_id=p.payer_id,
                 beneficiary_id=p.beneficiary_id, amount=p.amount, currency='XAF',
                 method=p.method, status=p.status, provider_status=p.provider_status,
-                reconciliation_required=p.status == 'PENDING' or p.review_reason is not None,
+                reconciliation_required=p.status == 'PENDING' or p.review_reason not in (None, 'PROVIDER_NO_RECORD'),
                 review_reason=p.review_reason, created_at=p.created_at, updated_at=p.updated_at,
                 receipt_available=p.status == 'SUCCEEDED',
                 accounting=dict(verified=p.accounting_verified_at is not None,
@@ -230,7 +237,15 @@ def reconcile(sessions, config, api, payment_id):
                     p.status = desired
                     db.add(ProviderPaymentEvent(payment_id=p.id, status=desired, created_at=p.updated_at))
                     announce(db, p, desired)
-        delay = min(3600, 15 * 2 ** min(p.attempts, 8)) if p.status == 'PENDING' else 86400
+        if reason == 'NO_MATCH_YET' and p.provider_id is None and p.provider_status is None:
+            if (p.status == 'PENDING' and p.attempts >= NO_RECORD_MIN_CHECKS
+                    and p.updated_at - p.created_at >= NO_RECORD_AFTER):
+                p.status = 'FAILED'
+                db.add(ProviderPaymentEvent(payment_id=p.id, status='FAILED', created_at=p.updated_at))
+                announce(db, p, 'FAILED')
+            if p.status == 'FAILED':
+                p.review_reason = 'PROVIDER_NO_RECORD'
+        delay =min(3600, 15 * 2 ** min(p.attempts, 8)) if p.status == 'PENDING' else 86400
         p.next_check_at = p.updated_at + delay
         p.lease_until = 0
         p.lease_owner = None
