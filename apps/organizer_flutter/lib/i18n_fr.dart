@@ -1294,4 +1294,85 @@ const Map<String, String> frenchStrings = {
       'C’est déjà votre numéro de connexion.',
   'This number already signs in to another Sendoh account.':
       'Ce numéro sert déjà à se connecter à un autre compte Sendoh.',
+  // Cleaner getting in, Profile and Activity
+  'Someone':
+      'Quelqu’un',
+  'Payment to {name}':
+      'Paiement à {name}',
+  'Payment from {name}':
+      'Paiement de {name}',
+  'Needs attention':
+      'À vérifier',
+  'Sending payout':
+      'Versement en cours',
+  'Today':
+      'Aujourd’hui',
+  'Yesterday':
+      'Hier',
+  'Earlier':
+      'Plus tôt',
+  'In progress':
+      'En cours',
+  'Nothing here yet':
+      'Rien pour l’instant',
+  'Payments and collection updates will show up here.':
+      'Les paiements et les nouvelles de vos collectes apparaîtront ici.',
+  'Three friends coordinating money together':
+      'Trois amis qui coordonnent leur argent ensemble',
+  '{step} of 4':
+      '{step} sur 4',
+  'By continuing, you accept our':
+      'En continuant, vous acceptez nos',
+  'Mobile money':
+      'Mobile Money',
+  'Where you pay from and get paid.':
+      'Pour payer et être payé.',
+  'Pay and receive':
+      'Payer et recevoir',
+  'Mobile money numbers':
+      'Numéros Mobile Money',
+  'Help & legal':
+      'Aide et mentions légales',
+  'Add a number':
+      'Ajouter un numéro',
+  'Network':
+      'Réseau',
+  'Use this number to':
+      'Utiliser ce numéro pour',
+  'Pay':
+      'Payer',
+  'Receive money':
+      'Recevoir de l’argent',
+  'We’ll text a code to this number.':
+      'Nous enverrons un code par SMS à ce numéro.',
+  'Enter the code':
+      'Saisissez le code',
+  'Sent to {wallet} {number}':
+      'Envoyé au {wallet} {number}',
+  'Resend in 0:{seconds}':
+      'Renvoyer dans 0:{seconds}',
+  'A parent’s number? Ask them for the code.':
+      'Le numéro d’un parent ? Demandez-lui le code.',
+  'We’ll text you a code to sign in.':
+      'Nous vous enverrons un code par SMS pour vous connecter.',
+  'Sent to {phoneNumber}':
+      'Envoyé au {phoneNumber}',
+  'Change number':
+      'Changer de numéro',
+  'Check your other signed-in device for the code.':
+      'Le code est sur votre autre appareil connecté.',
+  'Add photo':
+      'Ajouter une photo',
+  'Optional':
+      'Facultatif',
+  'Name':
+      'Nom',
+  '3 to 24 letters, numbers or _, starting with a letter':
+      '3 à 24 lettres, chiffres ou _, en commençant par une lettre',
+  'I’m at least 12 and, if under 18, have a parent or guardian’s permission.':
+      'J’ai au moins 12 ans et, si j’ai moins de 18 ans, l’accord d’un parent ou tuteur.',
+  'Change photo':
+      'Changer la photo',
+  'Your username can’t be changed':
+      'Votre nom d’utilisateur ne peut pas être changé',
 };

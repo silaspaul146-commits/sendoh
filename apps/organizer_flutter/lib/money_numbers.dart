@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 
 import 'api.dart';
 import 'design.dart';
+import 'getting_in.dart' show FieldLabel, PhoneField;
 import 'i18n.dart';
+import 'onboarding.dart' show OtpBoxes;
 
 /// MTN or Orange from a Cameroon mobile prefix; null when unknown.
 String? networkOf(String digits) {
@@ -31,30 +33,32 @@ String walletLabel(String? method) =>
 
 /// The small MTN / Orange mark used wherever a number appears.
 class NetworkBadge extends StatelessWidget {
-  const NetworkBadge(this.method, {super.key});
+  const NetworkBadge(this.method, {super.key, this.large = false});
   final String? method;
+
+  /// The bigger mark used when choosing a network.
+  final bool large;
   @override
-  Widget build(BuildContext context) => method == 'ORANGE'
-      ? Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
-          decoration: BoxDecoration(
-              color: const Color(0xFF111111),
-              borderRadius: BorderRadius.circular(8)),
-          child: const Text('orange',
-              style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFFF8A1F))))
-      : Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          decoration: BoxDecoration(
-              color: const Color(0xFFFFCC00),
-              borderRadius: BorderRadius.circular(8)),
-          child: const Text('MTN',
-              style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A))));
+  Widget build(BuildContext context) {
+    final orange = method == 'ORANGE';
+    return Container(
+        width: large ? 64 : null,
+        height: large ? 40 : null,
+        alignment: large ? Alignment.center : null,
+        padding: large
+            ? null
+            : EdgeInsets.symmetric(horizontal: orange ? 5 : 6, vertical: orange ? 7 : 6),
+        decoration: BoxDecoration(
+            color: orange ? const Color(0xFF111111) : const Color(0xFFFFCC00),
+            borderRadius: BorderRadius.circular(large ? 10 : 8)),
+        child: Text(orange ? 'orange' : 'MTN',
+            style: TextStyle(
+                fontSize: large ? (orange ? 13 : 15) : (orange ? 8 : 10),
+                fontWeight: FontWeight.w700,
+                color: orange
+                    ? const Color(0xFFFF8A1F)
+                    : const Color(0xFF1A1A1A))));
+  }
 }
 
 /// Testing without SMS: staging servers can return the code with the request.
@@ -116,8 +120,12 @@ class MoneyNumberTile extends StatelessWidget {
 
 /// Settings › Mobile Money numbers: the person's numbers, and adding one.
 class MoneyNumbersSection extends StatefulWidget {
-  const MoneyNumbersSection({super.key, required this.api});
+  const MoneyNumbersSection(
+      {super.key, required this.api, this.showTitle = true});
   final SendohApi api;
+
+  /// False on the Mobile money numbers page, which has its own title.
+  final bool showTitle;
   @override
   State<MoneyNumbersSection> createState() => _MoneyNumbersSectionState();
 }
@@ -158,6 +166,7 @@ class _MoneyNumbersSectionState extends State<MoneyNumbersSection> {
         .toList();
     final full = numbers.length >= ((data?['limit'] as num?) ?? 3);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (widget.showTitle)
       Padding(
           padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
           child: Text(t('MOBILE MONEY NUMBERS'),
@@ -237,7 +246,9 @@ class _AddNumberScreenState extends State<AddNumberScreen> {
   }
 
   void detect(String value) {
-    if (!chosenByHand) setState(() => method = networkOf(value));
+    setState(() {
+      if (!chosenByHand) method = networkOf(value);
+    });
   }
 
   Future<void> run(Future<void> Function() action) async {
@@ -310,133 +321,110 @@ class _AddNumberScreenState extends State<AddNumberScreen> {
         if (mounted) Navigator.pop(context, true);
       });
 
-  Widget methodChoice(String value) => Expanded(
-      child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(60),
-              side: BorderSide(
-                  color:
-                      method == value ? SendohColors.teal : SendohColors.border,
-                  width: method == value ? 2 : 1),
-              foregroundColor: SendohColors.ink),
-          onPressed: busy
-              ? null
-              : () => setState(() {
-                    method = value;
-                    chosenByHand = true;
-                  }),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            NetworkBadge(value),
-            const SizedBox(width: 8),
-            Flexible(
+  Widget networkRow(String value) => InkWell(
+      onTap: busy
+          ? null
+          : () => setState(() {
+                method = value;
+                chosenByHand = true;
+              }),
+      child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
+            NetworkBadge(value, large: true),
+            const SizedBox(width: 16),
+            Expanded(
                 child: Text(walletLabel(value),
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700))),
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w700))),
+            Icon(
+                method == value
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                size: 26,
+                color: method == value
+                    ? SendohColors.teal
+                    : SendohColors.secondary),
           ])));
+
+  Widget use(String label, bool value, ValueChanged<bool> changed) => InkWell(
+      onTap: busy ? null : () => changed(!value),
+      child: Row(children: [
+        Checkbox(value: value, onChanged: busy ? null : (v) => changed(v == true)),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 16)),
+      ]));
+
+  static const _title = TextStyle(
+      fontSize: 32,
+      height: 1.1,
+      fontWeight: FontWeight.w800,
+      color: SendohColors.ink);
 
   @override
   Widget build(BuildContext context) {
     final verifying = numberId != null;
+    final ready = phone.text.length == 9 && method != null;
     return Scaffold(
-      appBar: AppBar(
-          title: Text(verifying
-              ? t('Confirm this number')
-              : t('Add a Mobile Money number'))),
+      appBar: AppBar(centerTitle: false, title: Text(t('Mobile money'))),
       body: SafeArea(
-          child: ListView(padding: const EdgeInsets.all(24), children: [
+          child: ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 24), children: [
         if (!verifying) ...[
-          Text(
-              t('Use any number you’re allowed to pay with: yours, or a parent’s with their permission.'),
-              style: SendohTextStyles.bodyMedium),
-          const SizedBox(height: 20),
-          Row(children: [
-            methodChoice('MTN'),
-            const SizedBox(width: 10),
-            methodChoice('ORANGE'),
-          ]),
-          const SizedBox(height: 20),
-          TextField(
+          Text(t('Add a number'), style: _title),
+          const SizedBox(height: 28),
+          FieldLabel(t('Phone number')),
+          PhoneField(
               controller: phone,
               enabled: !busy,
-              keyboardType: TextInputType.phone,
-              onChanged: detect,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(9),
-              ],
-              decoration: InputDecoration(
-                  labelText: t('Mobile Money number'),
-                  prefixText: '+237  ',
-                  hintText: '6XX XX XX XX')),
-          if (method != null && !chosenByHand)
-            Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                    t('This is an {network} number, so {network} is selected for you.',
-                        {'network': walletLabel(method)}),
-                    style: SendohTextStyles.caption)),
-          const SizedBox(height: 16),
-          Text(t('USE IT TO'),
+              autofocus: true,
+              onChanged: detect),
+          const SizedBox(height: 24),
+          FieldLabel(t('Network')),
+          SurfaceCard(
+              padding: EdgeInsets.zero,
+              child: Column(children: [
+                networkRow('MTN'),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                networkRow('ORANGE'),
+              ])),
+          const SizedBox(height: 24),
+          FieldLabel(t('Use this number to')),
+          use(t('Pay'), pay, (v) => setState(() => pay = v)),
+          use(t('Receive money'), receive, (v) => setState(() => receive = v)),
+          const SizedBox(height: 20),
+          Text(t('We’ll text a code to this number.'),
               style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                  color: SendohColors.secondary)),
-          CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: pay,
-              onChanged: busy ? null : (v) => setState(() => pay = v == true),
-              title: Text(t('Pay with this number'))),
-          CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: receive,
-              onChanged:
-                  busy ? null : (v) => setState(() => receive = v == true),
-              title: Text(t('Receive money on this number'))),
-          const SizedBox(height: 8),
-          Text(
-              t('We’ll text a code to this number to confirm it’s yours to use. Nothing is charged.'),
-              style: SendohTextStyles.caption),
+                  fontSize: 15, color: SendohColors.secondary)),
           const SizedBox(height: 16),
           FilledButton(
-              onPressed: busy ? null : add,
-              child: Text(
-                  busy ? t('Please wait…') : t('Text a code to this number'))),
+              onPressed: busy || !ready ? null : add,
+              child: Text(busy ? t('Please wait…') : t('Send code'))),
         ] else ...[
-          Text(
-              t('Enter the code sent to {wallet} {number}',
-                  {'wallet': walletLabel(method), 'number': masked ?? ''}),
-              style:
-                  const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+          Text(t('Enter the code'), style: _title),
           const SizedBox(height: 10),
           Text(
-              t('If it’s a parent’s phone, ask them for the code. That’s how we know they agree.'),
-              style: SendohTextStyles.bodyMedium),
-          const SizedBox(height: 20),
-          TextField(
-              controller: code,
-              enabled: !busy,
-              keyboardType: TextInputType.number,
-              autofillHints: const [AutofillHints.oneTimeCode],
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
-              style: const TextStyle(fontSize: 24, letterSpacing: 8),
-              decoration: InputDecoration(labelText: t('6-digit code'))),
+              t('Sent to {wallet} {number}',
+                  {'wallet': walletLabel(method), 'number': masked ?? ''}),
+              style: const TextStyle(
+                  fontSize: 15, color: SendohColors.secondary)),
+          const SizedBox(height: 28),
+          OtpBoxes(controller: code, enabled: !busy),
           if (testCode != null)
             TestCodeHint(
                 code: testCode!,
                 onUse: () => setState(() => code.text = testCode!)),
-          TextButton(
-              onPressed: busy || seconds > 0 ? null : resend,
-              child: Text(seconds > 0
-                  ? t('Send a new code in 0:{seconds}',
-                      {'seconds': seconds.toString().padLeft(2, '0')})
-                  : t('Send a new code'))),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                  onPressed: busy || seconds > 0 ? null : resend,
+                  child: Text(seconds > 0
+                      ? t('Resend in 0:{seconds}',
+                          {'seconds': seconds.toString().padLeft(2, '0')})
+                      : t('Resend code')))),
+          Text(t('A parent’s number? Ask them for the code.'),
+              style: SendohTextStyles.caption),
+          const SizedBox(height: 28),
           FilledButton(
               onPressed: busy ? null : verify,
               child: Text(busy ? t('Please wait…') : t('Verify'))),
@@ -728,51 +716,6 @@ class _PayWithPickerState extends State<PayWithPicker> {
                 labelText: t('Mobile Money number'), prefixText: '+237  ')),
     ]);
   }
-}
-
-/// Settings › Sign-in number: shown masked, changeable with a code to the new number.
-class SignInNumberTile extends StatefulWidget {
-  const SignInNumberTile({super.key, required this.api});
-  final SendohApi api;
-  @override
-  State<SignInNumberTile> createState() => _SignInNumberTileState();
-}
-
-class _SignInNumberTileState extends State<SignInNumberTile> {
-  String? masked;
-
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    try {
-      final r = await widget.api.request('/me/money-numbers');
-      if (mounted) setState(() => masked = r['sign_in_masked'] as String?);
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-        title: Text(t('Sign-in number'),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-        subtitle: Text(
-            masked == null
-                ? t('Only for signing in')
-                : t('{number} · only for signing in', {'number': masked}),
-            style: const TextStyle(fontSize: 12)),
-        trailing: TextButton(
-            onPressed: () async {
-              final changed = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          ChangeSignInNumberScreen(api: widget.api)));
-              if (changed == true) await load();
-            },
-            child: Text(t('Change'))),
-      );
 }
 
 /// A new sign-in number takes effect only after its SMS code is entered.

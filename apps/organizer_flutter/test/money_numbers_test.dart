@@ -76,6 +76,9 @@ void main() {
 
   testWidgets('add a number, then verify it with the code we texted',
       (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.6;
+    addTearDown(tester.view.reset);
     final api = NumbersApi();
     bool? result;
     await tester.pumpWidget(app(Builder(
@@ -87,13 +90,17 @@ void main() {
                 child: const Text('open'))))));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
+    expect(find.text('Add a number'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '655000000');
     await tester.pump();
+    // Orange is chosen from the number.
     expect(
-        find.text(
-            'This is an Orange Money number, so Orange Money is selected for you.'),
+        find.descendant(
+            of: find.ancestor(
+                of: find.text('Orange Money'), matching: find.byType(Row)),
+            matching: find.byIcon(Icons.radio_button_checked)),
         findsOneWidget);
-    await tester.tap(find.text('Text a code to this number'));
+    await tester.tap(find.text('Send code'));
     await tester.pumpAndSettle();
     expect(api.calls['/me/money-numbers'], {
       'phone': '655000000',
@@ -155,9 +162,9 @@ void main() {
                 onDone: () => done = true,
                 onSkip: () {})))));
     expect(find.text('MTN MoMo · 671 •• •• 89'), findsOneWidget);
-    expect(find.text('Step 4 of 4'), findsOneWidget);
-    await tester.ensureVisible(find.text('Done'));
-    await tester.tap(find.text('Done'));
+    expect(find.text('Pay and receive'), findsOneWidget);
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
     expect(done, isTrue);
   });
 }
