@@ -49,10 +49,10 @@ Upload `build/app/outputs/bundle/release/app-release.aab`. Raise `version:` in `
 - **Account deletion:** in the app at Profile → Delete account; on the web at `https://sendoh.vercel.app/delete-account`.
 - **Privacy policy:** `https://sendoh.vercel.app/privacy`.
 - **Data safety** (matches the privacy policy): collects phone number, name, optional photo, financial info (payment records, Mobile Money number), and device ID (push token). Data is encrypted in transit. People can request deletion. Payment records are kept after deletion as financial records. Nothing is shared for advertising.
-- **Financial features declaration:** declare person-to-person payments and group collections through a licensed payment provider (MeSomb). Answer according to your MeSomb contract and legal advice.
+- **Financial features declaration:** declare person-to-person payments and group collections through our payment provider (MeSomb). Answer according to your MeSomb contract and legal advice.
 - **Closed testing:** a new personal developer account needs a closed test with at least 12 testers for 14 days before production access.
 
 ## 5. Website settings (Vercel)
 
 - `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_SUPPORT_WHATSAPP`: shown on `/support`.
-- `NEXT_PUBLIC_LEGAL_ENTITY`: the operator name in the privacy policy and terms (defaults to "Sendoh").
+- `NEXT_PUBLIC_LEGAL_ENTITY`: the operator name in the privacy policy and terms (defaults to "Ihimbru Kanyimi").

@@ -10,6 +10,17 @@ from .config import Settings
 logger = logging.getLogger('sendoh.otp')
 
 
+def test_code(settings: Settings, code: str) -> str | None:
+    """Testing without SMS: the code is returned to the app, outside production only.
+
+    Needs SENDOH_SHOW_TEST_CODES=1 on a development or staging server. Production
+    never returns a code, whatever its settings say.
+    """
+    if settings.environment in ('development', 'staging') and os.getenv('SENDOH_SHOW_TEST_CODES') == '1':
+        return code
+    return None
+
+
 def otp_directory() -> Path:
     return Path(os.getenv('SENDOH_DEV_OTP_DIR', '.dev-otp'))
 

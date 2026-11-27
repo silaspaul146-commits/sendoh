@@ -1165,4 +1165,133 @@ const Map<String, String> frenchStrings = {
   '{value} d ago': 'il y a {value} j',
   '{value} h ago': 'il y a {value} h',
   '{value} min ago': 'il y a {value} min',
+  // Getting in, Mobile Money numbers and Settings
+  '+ Use another number': '+ Utiliser un autre numéro',
+  '6-digit code': 'Code à 6 chiffres',
+  'ACCOUNT': 'COMPTE',
+  'Add a Mobile Money number': 'Ajouter un numéro Mobile Money',
+  'Add a photo (optional)': 'Ajouter une photo (facultatif)',
+  'Add another number': 'Ajouter un autre numéro',
+  'Add the Mobile Money numbers you use. You can change them anytime in Settings.':
+      'Ajoutez les numéros Mobile Money que vous utilisez. Vous pouvez les changer à tout moment dans les Réglages.',
+  'Already verified by the code you just entered. Use it to pay and to receive?':
+      'Déjà vérifié par le code que vous venez de saisir. L’utiliser pour payer et pour recevoir ?',
+  'Also your sign-in number': 'C’est aussi votre numéro de connexion',
+  'An Orange Money number, or a parent’s MoMo':
+      'Un numéro Orange Money, ou le MoMo d’un parent',
+  'Ask, pay and collect with the people you know. Everyone sees who has paid and what is left.':
+      'Demandez, payez et collectez avec les personnes que vous connaissez. Chacun voit qui a payé et ce qu’il reste.',
+  'By continuing you accept the': 'En continuant, vous acceptez les',
+  'Change': 'Changer',
+  'Change sign-in number': 'Changer le numéro de connexion',
+  'Choose MTN MoMo or Orange Money for this number.':
+      'Choisissez MTN MoMo ou Orange Money pour ce numéro.',
+  'Choose the Mobile Money number where money sent to you, and collection payouts, arrive. Verify it once by SMS code.':
+      'Choisissez le numéro Mobile Money où arrivent l’argent qu’on vous envoie et les versements de collecte. Vérifiez-le une fois par code SMS.',
+  'Chosen first when you pay. You can pick another each time.':
+      'Choisi en premier quand vous payez. Vous pouvez en prendre un autre à chaque fois.',
+  'Code sent to the new number': 'Code envoyé au nouveau numéro',
+  'Confirm this number': 'Confirmer ce numéro',
+  'Enter the code sent to {wallet} {number}':
+      'Saisissez le code envoyé au {wallet} {number}',
+  'Enter the code we texted you': 'Saisissez le code reçu par SMS',
+  'For everyone aged 12 and over': 'Pour tous, dès 12 ans',
+  'Get started': 'Commencer',
+  'How do you pay and get paid?': 'Comment payez-vous et êtes-vous payé ?',
+  'I already have an account · Sign in': 'J’ai déjà un compte · Se connecter',
+  'If it’s a parent’s phone, ask them for the code. That’s how we know they agree.':
+      'Si c’est le téléphone d’un parent, demandez-lui le code. C’est ainsi que nous savons qu’il est d’accord.',
+  'In groups': 'En groupe',
+  'In person': 'En personne',
+  'Individually': 'Individuellement',
+  'I’m 12 or older. If I’m under 18, I use Sendoh with a parent or guardian’s permission.':
+      'J’ai 12 ans ou plus. Si j’ai moins de 18 ans, j’utilise Sendoh avec l’accord d’un parent ou tuteur.',
+  'Keep': 'Garder',
+  'MOBILE MONEY NUMBERS': 'NUMÉROS MOBILE MONEY',
+  'Money between people, finally coordinated.':
+      'L’argent entre proches, enfin coordonné.',
+  'New phone number': 'Nouveau numéro de téléphone',
+  'One link, everyone stays aligned':
+      'Un seul lien, tout le monde reste aligné',
+  'Only for signing in': 'Uniquement pour se connecter',
+  'PAY WITH': 'PAYER AVEC',
+  'Past payments keep their records. You can add it again later with a new code.':
+      'Les paiements passés gardent leurs relevés. Vous pourrez le rajouter plus tard avec un nouveau code.',
+  'Pay with this': 'Payer avec celui-ci',
+  'Pay with this number': 'Payer avec ce numéro',
+  'Payouts and money sent to you arrive here.':
+      'Les versements et l’argent qu’on vous envoie arrivent ici.',
+  'Privacy policy': 'Politique de confidentialité',
+  'Receive money on this number': 'Recevoir l’argent sur ce numéro',
+  'Receive on this': 'Recevoir sur celui-ci',
+  'Remove': 'Retirer',
+  'Remove this number': 'Retirer ce numéro',
+  'Remove this number?': 'Retirer ce numéro ?',
+  'Request or send to a friend': 'Demander ou envoyer à un ami',
+  'Scan a code, pay the right person':
+      'Scannez un code, payez la bonne personne',
+  'Send a new code': 'Envoyer un nouveau code',
+  'Send a new code in 0:{seconds}': 'Nouveau code dans 0:{seconds}',
+  'Sendoh is for people aged 12 and over.':
+      'Sendoh est destiné aux personnes de 12 ans et plus.',
+  'Sendoh will never ask for this code by phone or WhatsApp. Don’t share it.':
+      'Sendoh ne vous demandera jamais ce code par téléphone ou WhatsApp. Ne le partagez pas.',
+  'Sent by SMS to {phoneNumber}.': 'Envoyé par SMS au {phoneNumber}.',
+  'Settings': 'Réglages',
+  'Sign-in number': 'Numéro de connexion',
+  'Skip for now': 'Plus tard',
+  'Step {step} of 4': 'Étape {step} sur 4',
+  'Terms': 'Conditions',
+  'Testing: your code is {code}': 'Test : votre code est {code}',
+  'Text a code to the new number': 'Envoyer un code au nouveau numéro',
+  'Text a code to this number': 'Envoyer un code à ce numéro',
+  'Text me a code': 'M’envoyer un code',
+  'This is an {network} number, so {network} is selected for you.':
+      'C’est un numéro {network}, donc {network} est choisi pour vous.',
+  'This is how friends recognise you when you ask, pay or collect.':
+      'C’est ainsi que vos amis vous reconnaissent quand vous demandez, payez ou collectez.',
+  'This only changes how you sign in. Your name, @username, collections and Mobile Money numbers stay the same.':
+      'Cela change seulement votre façon de vous connecter. Votre nom, votre @nom d’utilisateur, vos collectes et vos numéros Mobile Money restent les mêmes.',
+  'USE IT TO': 'L’UTILISER POUR',
+  'Under 18? Use Sendoh with a parent or guardian’s permission.':
+      'Moins de 18 ans ? Utilisez Sendoh avec l’accord d’un parent ou tuteur.',
+  'Use any number you’re allowed to pay with: yours, or a parent’s with their permission.':
+      'Utilisez un numéro avec lequel vous avez le droit de payer : le vôtre, ou celui d’un parent avec son accord.',
+  'Use it': 'L’utiliser',
+  'Verified': 'Vérifié',
+  'Verified · default': 'Vérifié · par défaut',
+  'Waiting for its code': 'En attente de son code',
+  'We’ll text a code to this number to confirm it’s yours to use. Nothing is charged.':
+      'Nous enverrons un code par SMS à ce numéro pour confirmer que vous pouvez l’utiliser. Rien n’est débité.',
+  'We’ll text you a 6-digit code. Your number is only how you sign in: people find you by your name and @username, never by your number.':
+      'Nous vous enverrons un code à 6 chiffres par SMS. Votre numéro sert seulement à vous connecter : on vous trouve par votre nom et votre @nom d’utilisateur, jamais par votre numéro.',
+  'What’s your phone number?': 'Quel est votre numéro de téléphone ?',
+  'Who are you?': 'Qui êtes-vous ?',
+  'Wrong number?': 'Mauvais numéro ?',
+  'You can keep up to 3 numbers. Remove one to add another.':
+      'Vous pouvez garder jusqu’à 3 numéros. Retirez-en un pour en ajouter un autre.',
+  'Your @username': 'Votre @nom d’utilisateur',
+  'Your Mobile Money numbers couldn’t load.':
+      'Impossible de charger vos numéros Mobile Money.',
+  'Your name': 'Votre nom',
+  'Your sign-in number': 'Votre numéro de connexion',
+  'Your sign-in number is changed. Use it next time you sign in.':
+      'Votre numéro de connexion est changé. Utilisez-le à votre prochaine connexion.',
+  'and': 'et la',
+  '{network} number. You can add Mobile Money numbers later.':
+      'Numéro {network}. Vous pourrez ajouter des numéros Mobile Money plus tard.',
+  '{number} · only for signing in': '{number} · uniquement pour se connecter',
+  'Choose one of your verified Mobile Money numbers.':
+      'Choisissez l’un de vos numéros Mobile Money vérifiés.',
+  'Mobile Money number not found.': 'Numéro Mobile Money introuvable.',
+  'Verify this number first.': 'Vérifiez d’abord ce numéro.',
+  'You can keep up to 3 Mobile Money numbers. Remove one first.':
+      'Vous pouvez garder jusqu’à 3 numéros Mobile Money. Retirez-en un d’abord.',
+  'This number was just added. Refresh and try again.':
+      'Ce numéro vient d’être ajouté. Actualisez et réessayez.',
+  'This number is already verified.': 'Ce numéro est déjà vérifié.',
+  'This is already your sign-in number.':
+      'C’est déjà votre numéro de connexion.',
+  'This number already signs in to another Sendoh account.':
+      'Ce numéro sert déjà à se connecter à un autre compte Sendoh.',
 };

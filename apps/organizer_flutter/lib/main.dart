@@ -24,6 +24,7 @@ import 'money_requests.dart';
 import 'settlement.dart';
 import 'near2pay.dart';
 import 'account.dart';
+import 'money_numbers.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError(t('Session required')));
@@ -542,130 +543,139 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
           radius: radius,
           backgroundImage:
               MemoryImage(base64Decode(account['avatar'] as String)));
-  Widget profile() => ListView(padding: const EdgeInsets.all(24), children: [
-        Center(child: accountAvatar(36)),
-        const SizedBox(height: 14),
-        Text(displayName,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 28),
-        if (account['username'] != null)
-          Text('@${account['username']}', textAlign: TextAlign.center),
-        TextButton(
-            onPressed: () async {
-              final updated = await Navigator.of(context)
-                  .push<Map<String, dynamic>>(MaterialPageRoute(
-                      builder: (_) => EditProfile(
-                          api: ref.read(apiProvider), account: account)));
-              if (mounted && updated != null) {
-                setState(() => account = updated);
-              }
-            },
-            child: Text(t('Edit profile'))),
-        ListTile(
-            leading: const Icon(Icons.account_balance_outlined),
-            title: Text(t('Receiving details')),
-            onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                    builder: (_) =>
-                        ReceivingDetails(api: ref.read(apiProvider))))),
-        ListTile(
-            leading: const Icon(Icons.receipt_long_outlined),
-            title: Text(t('Person payments')),
-            onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                    builder: (_) =>
-                        PersonPaymentHistory(api: ref.read(apiProvider))))),
-        ListTile(
-            leading: const Icon(Icons.fingerprint),
-            title: Text(t('Device unlock')),
-            subtitle:
-                Text(t('Use biometrics or your device PIN when returning.')),
-            onTap: () async {
-              try {
-                final ok = await authenticateDevice(
-                    t('Confirm device unlock settings for Sendoh'));
-                if (!ok) {
-                  return;
-                }
-                final enabled = !await SessionStore.locked();
-                await SessionStore.setLocked(enabled);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        enabled
-                            ? t('Device unlock enabled.')
-                            : t('Device unlock disabled.'),
-                      ),
-                    ),
-                  );
-                }
-              } catch (_) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        t('Set up a screen lock on this device, then try again.'),
-                      ),
-                    ),
-                  );
-                }
-              }
-            }),
-        const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: LanguageChoice()),
-        const AboutLinks(),
-        SurfaceCard(
-            child: Column(children: [
-          SummaryRow(t('Account'), t('Sendoh member')),
-          ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history),
-              title: Text(t('Activity'), style: TextStyle(fontSize: 14)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => setState(() => tab = 2))
-        ])),
-        const SizedBox(height: 28),
-        OutlinedButton(
-            onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              final navigator = Navigator.of(context);
-              try {
-                await ref.read(apiProvider).request('/auth/logout', body: {});
-              } catch (_) {
-                if (mounted) {
-                  messenger.showSnackBar(SnackBar(
-                      content: Text(t(
-                          'Could not reach server. Your session will expire automatically.'))));
-                }
-              }
-              await PushService.detach(deleteToken: true);
-              await SessionStore.clear();
-              if (mounted) {
-                navigator.pop();
-              }
-            },
-            child: Text(t('Sign out'))),
-        const SizedBox(height: 8),
-        TextButton(
-            style: TextButton.styleFrom(foregroundColor: SendohColors.red),
-            onPressed: () {
-              final navigator = Navigator.of(context);
-              navigator.push(MaterialPageRoute<void>(
-                  builder: (_) => DeleteAccountScreen(
-                      api: ref.read(apiProvider),
-                      onDeleted: () async {
-                        await PushService.detach(deleteToken: true);
-                        await SessionStore.clear();
-                        navigator.popUntil((route) => route.isFirst);
-                      })));
-            },
-            child: Text(t('Delete account')))
-      ]);
+  Widget sectionLabel(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+      child: Text(text,
+          style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+              color: SendohColors.secondary)));
+
+  Future<void> toggleDeviceUnlock() async {
+    try {
+      final ok = await authenticateDevice(
+          t('Confirm device unlock settings for Sendoh'));
+      if (!ok) return;
+      final enabled = !await SessionStore.locked();
+      await SessionStore.setLocked(enabled);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(enabled
+                ? t('Device unlock enabled.')
+                : t('Device unlock disabled.'))));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                t('Set up a screen lock on this device, then try again.'))));
+      }
+    }
+  }
+
+  Future<void> signOut() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await ref.read(apiProvider).request('/auth/logout', body: {});
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+            content: Text(t(
+                'Could not reach server. Your session will expire automatically.'))));
+      }
+    }
+    await PushService.detach(deleteToken: true);
+    await SessionStore.clear();
+    if (mounted) navigator.pop();
+  }
+
+  /// Settings, as approved: you first, then how you pay and get paid, then the account.
+  Widget profile() {
+    final api = ref.read(apiProvider);
+    return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          Text(t('Settings'),
+              style:
+                  const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 14),
+          SurfaceCard(
+              child: Row(children: [
+            accountAvatar(28),
+            const SizedBox(width: 14),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(displayName,
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w700)),
+                  if (account['username'] != null)
+                    Text('@${account['username']}',
+                        style: const TextStyle(color: SendohColors.secondary)),
+                ])),
+            TextButton(
+                onPressed: () async {
+                  final updated = await Navigator.of(context)
+                      .push<Map<String, dynamic>>(MaterialPageRoute(
+                          builder: (_) =>
+                              EditProfile(api: api, account: account)));
+                  if (mounted && updated != null) {
+                    setState(() => account = updated);
+                  }
+                },
+                child: Text(t('Edit'))),
+          ])),
+          MoneyNumbersSection(api: api),
+          sectionLabel(t('ACCOUNT')),
+          SurfaceCard(
+              padding: EdgeInsets.zero,
+              child: Column(children: [
+                SignInNumberTile(api: api),
+                const Divider(height: 1),
+                const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: LanguageChoice()),
+                const Divider(height: 1),
+                ListTile(
+                    leading: const Icon(Icons.fingerprint),
+                    title: Text(t('Device unlock')),
+                    subtitle: Text(
+                        t('Use biometrics or your device PIN when returning.')),
+                    onTap: toggleDeviceUnlock),
+                const Divider(height: 1),
+                ListTile(
+                    leading: const Icon(Icons.receipt_long_outlined),
+                    title: Text(t('Person payments')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => PersonPaymentHistory(api: api)))),
+              ])),
+          const SizedBox(height: 8),
+          const AboutLinks(),
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: signOut, child: Text(t('Sign out'))),
+          const SizedBox(height: 8),
+          TextButton(
+              style: TextButton.styleFrom(foregroundColor: SendohColors.red),
+              onPressed: () {
+                final navigator = Navigator.of(context);
+                navigator.push(MaterialPageRoute<void>(
+                    builder: (_) => DeleteAccountScreen(
+                        api: api,
+                        onDeleted: () async {
+                          await PushService.detach(deleteToken: true);
+                          await SessionStore.clear();
+                          navigator.popUntil((route) => route.isFirst);
+                        })));
+              },
+              child: Text(t('Delete account'))),
+        ]);
+  }
 }
 
 class CollectionCard extends StatelessWidget {

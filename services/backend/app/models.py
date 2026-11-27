@@ -451,3 +451,41 @@ class ProviderReferenceClaim(Base):
     application_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     provider_id: Mapped[str] = mapped_column(String(120), primary_key=True)
     sendoh_reference: Mapped[str] = mapped_column(String(36))
+
+
+class MoneyNumber(Base):
+    """A Mobile Money number a person pays with or receives on. Not their identity.
+
+    Verified by an SMS code to that number (or by sign-in, for the sign-in
+    number itself). Removed numbers are kept for the records that used them.
+    """
+    __tablename__ = 'money_numbers'
+    __table_args__ = (
+        CheckConstraint("method IN ('MTN','ORANGE')", name='ck_money_number_method'),
+        Index('uq_money_number_active', 'user_id', 'phone', unique=True,
+              sqlite_where=text('removed_at IS NULL'), postgresql_where=text('removed_at IS NULL')),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    phone: Mapped[str] = mapped_column(String(16))
+    method: Mapped[str] = mapped_column(String(8))
+    verified_at: Mapped[int | None] = mapped_column(BigInteger)
+    pay_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    receive_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_at: Mapped[int] = mapped_column(BigInteger)
+    removed_at: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class NumberChallenge(Base):
+    """An SMS code proving control of a number: a Mobile Money number, or a new sign-in number."""
+    __tablename__ = 'number_challenges'
+    __table_args__ = (CheckConstraint("purpose IN ('MONEY_NUMBER','SIGN_IN')", name='ck_number_challenge_purpose'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    purpose: Mapped[str] = mapped_column(String(16))
+    phone: Mapped[str] = mapped_column(String(16))
+    number_id: Mapped[str | None] = mapped_column(String(36))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    sent_at: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)

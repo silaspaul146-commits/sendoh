@@ -1,4 +1,5 @@
 import 'i18n.dart';
+import 'money_numbers.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -180,123 +181,23 @@ Widget paymentSurface(List<Widget> children) => Container(
           crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
     );
 
-class ReceivingDetails extends StatefulWidget {
+/// Where money reaches you: your verified Mobile Money numbers, one marked
+/// "Receive on this". Opened wherever receiving still needs setting up.
+class ReceivingDetails extends StatelessWidget {
   const ReceivingDetails({super.key, required this.api});
   final SendohApi api;
   @override
-  State<ReceivingDetails> createState() => _ReceivingDetailsState();
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(t('Receiving details'))),
+        body: ListView(padding: const EdgeInsets.all(20), children: [
+          Text(
+              t('Choose the Mobile Money number where money sent to you, and collection payouts, arrive. Verify it once by SMS code.'),
+              style: SendohTextStyles.bodyMedium),
+          MoneyNumbersSection(api: api),
+        ]),
+      );
 }
 
-class _ReceivingDetailsState extends State<ReceivingDetails> {
-  Map<String, dynamic>? data;
-  String method = 'MTN';
-  String? error;
-  bool busy = false, consent = false;
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    setState(() {
-      busy = true;
-      error = null;
-    });
-    try {
-      final result = Map<String, dynamic>.from(
-          await widget.api.request('/me/receiving-destination'));
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        data = result;
-        method = result['destination']?['method'] ?? 'MTN';
-        consent = false;
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() => error = '$e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => busy = false);
-      }
-    }
-  }
-
-  Future<void> save() async {
-    if (busy || !consent || data == null) {
-      return;
-    }
-    setState(() {
-      busy = true;
-      error = null;
-    });
-    try {
-      await widget.api.request('/me/receiving-destination', body: {
-        'method': method,
-        'expected_version': data!['version'],
-        'consent': 'RECEIVE_ON_MY_AUTHENTICATED_PHONE'
-      });
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => error = '$e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => busy = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => paymentPage(t('Receiving details'), [
-        if (busy) const LinearProgressIndicator(color: SendohColors.teal),
-        Text(
-            data?['account_masked_phone'] ??
-                data?['destination']?['masked_phone'] ??
-                t('Your Sendoh account number'),
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 12),
-        Text(t('Receive on the number linked to your account.')),
-        const SizedBox(height: 24),
-        Wrap(
-            spacing: 12,
-            children: ['MTN', 'ORANGE']
-                .map((m) => ChoiceChip(
-                    label: Text(m == 'MTN' ? 'MTN MoMo' : t('Orange Money')),
-                    selected: method == m,
-                    onSelected: busy
-                        ? null
-                        : (_) => setState(() {
-                              method = m;
-                              consent = false;
-                            })))
-                .toList()),
-        const SizedBox(height: 20),
-        CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(t('Receive payments on my account number')),
-            value: consent,
-            onChanged:
-                busy ? null : (v) => setState(() => consent = v ?? false)),
-        if (error != null)
-          Text(error!, style: const TextStyle(color: SendohColors.error)),
-        const SizedBox(height: 24),
-        FilledButton(
-            onPressed: busy || !consent || data == null ? null : save,
-            child: Text(t('Save details'))),
-        TextButton(
-            onPressed: busy ? null : load, child: Text(t('Reload details'))),
-      ]);
-}
-
-/// A single unresolved checkout per account prevents an uncertain submission
-/// from being silently replaced by another payment after a restart.
 class PersonCheckout extends StatefulWidget {
   const PersonCheckout(
       {super.key,
@@ -323,6 +224,9 @@ class _PersonCheckoutState extends State<PersonCheckout>
   Map<String, dynamic>? quote, order, pending;
   String? slot, error, meId;
   late String method;
+  // One of the payer's verified numbers; null: their default, else sign-in number.
+  String? payerNumberId;
+  bool noVerifiedNumbers = false;
   bool busy = false,
       checking = false,
       initialized = false,
@@ -455,9 +359,12 @@ class _PersonCheckoutState extends State<PersonCheckout>
     if (widget.target == null) {
       return;
     }
-    quote = Map<String, dynamic>.from(await widget.api.request(
-        '/person-payments/quotes',
-        body: {...widget.target!, 'payer_method': method}));
+    quote = Map<String, dynamic>.from(
+        await widget.api.request('/person-payments/quotes', body: {
+      ...widget.target!,
+      'payer_method': method,
+      if (payerNumberId != null) 'payer_number_id': payerNumberId
+    }));
   }
 
   Future<void> newQuote() async {
@@ -684,6 +591,20 @@ class _PersonCheckoutState extends State<PersonCheckout>
           Text(t('Pay with'), style: SendohTextStyles.titleSmall),
           const SizedBox(height: 12),
           if (order == null && pending == null)
+            PayWithPicker(
+                api: widget.api,
+                enabled: !busy,
+                allowOther: false,
+                onEmpty: () {
+                  if (mounted) setState(() => noVerifiedNumbers = true);
+                },
+                onChanged: (id, _, network) {
+                  final changed = payerNumberId != null && payerNumberId != id;
+                  payerNumberId = id;
+                  if (network != null) method = network;
+                  if (changed) newQuote();
+                }),
+          if (order == null && pending == null && noVerifiedNumbers)
             ...['MTN', 'ORANGE'].map((m) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Semantics(
@@ -719,8 +640,8 @@ class _PersonCheckoutState extends State<PersonCheckout>
                                   style: SendohTextStyles.titleSmall)),
                         ]),
                       )),
-                ))
-          else
+                )),
+          if (order != null || pending != null)
             paymentRow(t('Method'),
                 q['payer_method'] == 'MTN' ? 'MTN MoMo' : t('Orange Money')),
         ],
