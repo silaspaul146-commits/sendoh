@@ -6,6 +6,8 @@
 /// and joining a collection is never treated as paying.
 library;
 
+import 'i18n.dart';
+
 int _int(Object? v) => (v as num?)?.toInt() ?? 0;
 int? _intOrNull(Object? v) => (v as num?)?.toInt();
 
@@ -121,7 +123,7 @@ class MemberPosition {
         remaining: remaining);
   }
 
-  /// Short organizer badge; also the roster filter value.
+  /// Short organizer badge, in English: also the roster filter value. Shown through t().
   String get badge => switch (state) {
         'INVITED' => 'Invited',
         'DECLINED' => 'Declined',
@@ -136,25 +138,29 @@ class MemberPosition {
 
   /// Organizer row: confirmed first, awaiting beside it, never summed.
   String rosterLine(String Function(Object?) money) {
-    final parts = <String>['${money(confirmed)} contributed'];
+    final parts = <String>[
+      t('{amount} contributed', {'amount': money(confirmed)})
+    ];
     if (pending > 0) {
-      parts.add('${money(pending)} awaiting confirmation');
+      parts
+          .add(t('{amount} awaiting confirmation', {'amount': money(pending)}));
     }
     if (expected != null) {
-      parts.add('${money(expected)} expected');
+      parts.add(t('{amount} expected', {'amount': money(expected)}));
     }
     return parts.join(' · ');
   }
 
   /// The member's own one-line position.
   String personalLine(String Function(Object?) money) => switch (state) {
-        'CONFIRMING' => 'Confirming your contribution',
-        'FULFILLED' => 'Your share is paid',
-        'PARTIAL' => '${money(remaining)} left',
-        'CONTRIBUTED' => '${money(confirmed)} contributed',
+        'CONFIRMING' => t('Confirming your contribution'),
+        'FULFILLED' => t('Your share is paid'),
+        'PARTIAL' => t('{amount} left', {'amount': money(remaining)}),
+        'CONTRIBUTED' =>
+          t('{amount} contributed', {'amount': money(confirmed)}),
         _ => expected != null && expected! > 0
-            ? '${money(expected)} expected'
-            : 'Any amount welcome',
+            ? t('{amount} expected', {'amount': money(expected)})
+            : t('Any amount welcome'),
       };
 }
 

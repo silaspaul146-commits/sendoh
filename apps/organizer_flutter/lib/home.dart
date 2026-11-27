@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'coordination.dart';
@@ -71,7 +72,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Your collections')),
+          appBar: AppBar(title: Text(t('Your collections'))),
           body: ListView.separated(
             padding: const EdgeInsets.all(20),
             itemCount: entries.length,
@@ -103,7 +104,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
             final invitations = invites.data ?? [];
             if (requests.hasError || invites.hasError) {
               return _SectionMessage(
-                text: 'Some updates couldn’t load.',
+                text: t('Some updates couldn’t load.'),
                 onRetry: refresh,
               );
             }
@@ -120,7 +121,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SectionTitle(title: 'Needs your attention', count: total),
+                  _SectionTitle(title: t('Needs your attention'), count: total),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const CircleAvatar(
@@ -132,14 +133,21 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                     ),
                     title: Text(
                       isRequest
-                          ? '${item['requester']['name']} requested ${coordinationMoney(item['amount'])}'
+                          ? t('{name} requested {amount}', {
+                              'name': item['requester']['name'],
+                              'amount': coordinationMoney(item['amount'])
+                            })
                           : item['collection']['name'] as String,
                       style: SendohTextStyles.bodyMedium,
                     ),
                     subtitle: Text(
                       isRequest
                           ? item['reason'] as String
-                          : '${item['collection']['organizer_name'] ?? 'Organizer'} invited you',
+                          : t('{organizer_name} invited you', {
+                              'organizer_name': item['collection']
+                                      ['organizer_name'] ??
+                                  t('Organizer')
+                            }),
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
@@ -157,12 +165,14 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                         if (pending.isNotEmpty)
                           TextButton(
                             onPressed: widget.onViewRequests,
-                            child: Text('Requests (${pending.length})'),
+                            child: Text(t('Requests ({length})',
+                                {'length': pending.length})),
                           ),
                         if (invitations.isNotEmpty)
                           TextButton(
                             onPressed: widget.onViewInvitations,
-                            child: Text('Invitations (${invitations.length})'),
+                            child: Text(t('Invitations ({length})',
+                                {'length': invitations.length})),
                           ),
                       ],
                     ),
@@ -183,9 +193,9 @@ class _CoordinationHomeState extends State<CoordinationHome> {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Sendoh',
+                    t('Sendoh'),
                     style: TextStyle(
                       color: SendohColors.teal,
                       fontSize: 26,
@@ -196,7 +206,8 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                 ),
                 if (widget.onNotifications != null)
                   IconButton(
-                    tooltip: 'Notifications (${widget.unread} unread)',
+                    tooltip: t('Notifications ({unread} unread)',
+                        {'unread': widget.unread}),
                     onPressed: widget.onNotifications,
                     icon: Badge(
                       isLabelVisible: widget.unread > 0,
@@ -213,8 +224,8 @@ class _CoordinationHomeState extends State<CoordinationHome> {
               style: SendohTextStyles.displayLarge,
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Bring your people together.',
+            Text(
+              t('Bring your people together.'),
               style: TextStyle(fontSize: 16, color: SendohColors.secondary),
             ),
             const SizedBox(height: 18),
@@ -235,25 +246,26 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _SectionTitle(
-                      title: 'Your collections',
+                      title: t('Your collections'),
                       action: entries.length > 1
                           ? TextButton(
                               onPressed: () => viewOwned(entries),
-                              child: Text('See all ${entries.length}'),
+                              child: Text(t('See all {length}',
+                                  {'length': entries.length})),
                             )
                           : null,
                     ),
                     const SizedBox(height: 8),
                     if (snapshot.hasError)
                       _SectionMessage(
-                        text: 'Your collections couldn’t load.',
+                        text: t('Your collections couldn’t load.'),
                         onRetry: refresh,
                       )
                     else if (!snapshot.hasData)
                       const _LoadingSection()
                     else if (entries.isEmpty)
-                      const _SectionMessage(
-                        text: 'Create a collection and invite your people.',
+                      _SectionMessage(
+                        text: t('Create a collection and invite your people.'),
                       )
                     else
                       CollectionDeck(
@@ -264,10 +276,10 @@ class _CoordinationHomeState extends State<CoordinationHome> {
             ),
             const SizedBox(height: 16),
             _SectionTitle(
-              title: 'You joined',
+              title: t('You joined'),
               action: TextButton(
                 onPressed: widget.onViewJoined,
-                child: const Text('View all'),
+                child: Text(t('View all')),
               ),
             ),
             FutureBuilder<List<dynamic>>(
@@ -275,7 +287,7 @@ class _CoordinationHomeState extends State<CoordinationHome> {
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return _SectionMessage(
-                    text: 'Joined collections couldn’t load.',
+                    text: t('Joined collections couldn’t load.'),
                     onRetry: refresh,
                   );
                 }
@@ -283,8 +295,8 @@ class _CoordinationHomeState extends State<CoordinationHome> {
                   return const _LoadingSection();
                 }
                 if (snapshot.data!.isEmpty) {
-                  return const Text(
-                    'Collections you join will appear here.',
+                  return Text(
+                    t('Collections you join will appear here.'),
                     style: SendohTextStyles.caption,
                   );
                 }
@@ -326,16 +338,16 @@ class _CoordinationHomeState extends State<CoordinationHome> {
 String homeGreeting(String name, DateTime now) {
   final first = name.trim().split(RegExp(r'\s+')).first;
   final part = now.hour < 12
-      ? 'Good morning'
+      ? t('Good morning')
       : now.hour < 18
-          ? 'Good afternoon'
-          : 'Good evening';
+          ? t('Good afternoon')
+          : t('Good evening');
   return first.isEmpty ? part : '$part, $first';
 }
 
-const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+final _months = [
+  t('Jan'), t('Feb'), t('Mar'), t('Apr'), t('May'), t('Jun'), //
+  t('Jul'), t('Aug'), t('Sep'), t('Oct'), t('Nov'), t('Dec')
 ];
 
 String shortDate(String? iso) {
@@ -345,10 +357,10 @@ String shortDate(String? iso) {
 
 String timeAgo(int seconds, DateTime now) {
   final diff = now.millisecondsSinceEpoch ~/ 1000 - seconds;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return '${diff ~/ 60} min ago';
-  if (diff < 86400) return '${diff ~/ 3600} h ago';
-  return '${diff ~/ 86400} d ago';
+  if (diff < 60) return t('just now');
+  if (diff < 3600) return t('{value} min ago', {'value': diff ~/ 60});
+  if (diff < 86400) return t('{value} h ago', {'value': diff ~/ 3600});
+  return t('{value} d ago', {'value': diff ~/ 86400});
 }
 
 /// Money collected for my groups this month. Not a balance Sendoh holds.
@@ -368,8 +380,9 @@ class MonthSummaryCard extends StatelessWidget {
           return Semantics(
             container: true,
             label: amount == null
-                ? 'Collected this month, loading'
-                : 'Collected this month, ${coordinationMoney(amount)}',
+                ? t('Collected this month, loading')
+                : t('Collected this month, {amount}',
+                    {'amount': coordinationMoney(amount)}),
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -382,8 +395,8 @@ class MonthSummaryCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Collected this month',
+                        Text(
+                          t('Collected this month'),
                           style:
                               TextStyle(color: Color(0xFFE6F2EF), fontSize: 14),
                         ),
@@ -403,12 +416,15 @@ class MonthSummaryCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           snapshot.hasError
-                              ? 'Couldn’t load this month'
+                              ? t('Couldn’t load this month')
                               : amount == null
                                   ? ' '
                                   : groups == 0
-                                      ? 'Nothing confirmed yet this month'
-                                      : 'Across $groups collection${groups == 1 ? '' : 's'}',
+                                      ? t('Nothing confirmed yet this month')
+                                      : groups == 1
+                                          ? t('Across 1 collection')
+                                          : t('Across {groups} collections',
+                                              {'groups': groups}),
                           style: const TextStyle(
                               color: Color(0xFFCFE3DE), fontSize: 13),
                         ),
@@ -449,11 +465,11 @@ class RecentContributions extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               _SectionTitle(
-                title: 'Recent activity',
+                title: t('Recent activity'),
                 action: onViewAll == null
                     ? null
                     : TextButton(
-                        onPressed: onViewAll, child: const Text('See all')),
+                        onPressed: onViewAll, child: Text(t('See all'))),
               ),
               for (final raw in recent.take(3))
                 Builder(builder: (context) {
@@ -462,7 +478,7 @@ class RecentContributions extends StatelessWidget {
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: PersonAvatar(name, radius: 20),
-                    title: Text('$name contributed',
+                    title: Text(t('{name} contributed', {'name': name}),
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('${r['collection_name']}'),
                     trailing: Column(
@@ -526,7 +542,7 @@ class _SectionMessage extends StatelessWidget {
                   const TextStyle(height: 1.5, color: SendohColors.secondary),
             ),
             if (onRetry != null)
-              TextButton(onPressed: onRetry, child: const Text('Try again')),
+              TextButton(onPressed: onRetry, child: Text(t('Try again'))),
           ],
         ),
       );
@@ -535,11 +551,11 @@ class _SectionMessage extends StatelessWidget {
 class _LoadingSection extends StatelessWidget {
   const _LoadingSection();
   @override
-  Widget build(BuildContext context) => const Padding(
+  Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.symmetric(vertical: 30),
         child: Center(
-          child:
-              CircularProgressIndicator(semanticsLabel: 'Loading collections'),
+          child: CircularProgressIndicator(
+              semanticsLabel: t('Loading collections')),
         ),
       );
 }
@@ -560,8 +576,8 @@ class HomeCollectionCard extends StatelessWidget {
   Future<void> copyLink(BuildContext context, String link) async {
     await Clipboard.setData(ClipboardData(text: link));
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Collection link copied')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(t('Collection link copied'))));
     }
   }
 
@@ -583,14 +599,14 @@ class HomeCollectionCard extends StatelessWidget {
     final share = data['share_url'] as String?;
     final deadline = shortDate(data['deadline_at'] as String?);
     final (String label, Color dot) = switch (data['status']) {
-      'CLOSED' => ('Closed', SendohColors.secondary),
-      'SETTLED' => ('Settled', SendohColors.teal),
-      'DRAFT' => ('Draft', SendohColors.secondary),
-      _ => ('Active', SendohColors.green),
+      'CLOSED' => (t('Closed'), SendohColors.secondary),
+      'SETTLED' => (t('Settled'), SendohColors.teal),
+      'DRAFT' => (t('Draft'), SendohColors.secondary),
+      _ => (t('Active'), SendohColors.green),
     };
     return Semantics(
       button: true,
-      label: 'Open ${data['name']}',
+      label: t('Open {name}', {'name': data['name']}),
       child: Material(
         color: SendohColors.surface,
         shape: RoundedRectangleBorder(
@@ -652,7 +668,7 @@ class HomeCollectionCard extends StatelessWidget {
                     ),
                     if (share != null)
                       IconButton(
-                        tooltip: 'Copy collection link',
+                        tooltip: t('Copy collection link'),
                         onPressed: () => copyLink(context, share),
                         icon: const Icon(Icons.link, color: SendohColors.ink),
                       ),
@@ -669,8 +685,8 @@ class HomeCollectionCard extends StatelessWidget {
                         hasTarget
                             ? 'of ${coordinationMoney(target)}${showingProviderTest(data) ? ' · Sandbox' : ''}'
                             : showingProviderTest(data)
-                                ? 'collected · Sandbox'
-                                : 'collected · No target',
+                                ? t('collected · Sandbox')
+                                : t('collected · No target'),
                         style: SendohTextStyles.bodyMedium
                             .copyWith(color: SendohColors.secondary),
                       ),
@@ -696,8 +712,9 @@ class HomeCollectionCard extends StatelessWidget {
                         minHeight: 8,
                         color: SendohColors.orange,
                         backgroundColor: const Color(0xFFE8E6E1),
-                        semanticsLabel: 'Collection progress',
-                        semanticsValue: '$percent percent',
+                        semanticsLabel: t('Collection progress'),
+                        semanticsValue:
+                            t('{percent} percent', {'percent': percent}),
                       ),
                     ),
                   ),
@@ -705,7 +722,8 @@ class HomeCollectionCard extends StatelessWidget {
                 if (totals.pending > 0) ...[
                   const SizedBox(height: 6),
                   Text(
-                      '${coordinationMoney(totals.pending)} awaiting confirmation',
+                      t('{amount} awaiting confirmation',
+                          {'amount': coordinationMoney(totals.pending)}),
                       style: SendohTextStyles.caption),
                 ],
                 const SizedBox(height: 12),
@@ -727,12 +745,13 @@ class HomeCollectionCard extends StatelessWidget {
                       ]),
                     Text(
                       contributors == 1
-                          ? '1 contributor'
-                          : '$contributors contributors',
+                          ? t('1 contributor')
+                          : t('{count} contributors', {'count': contributors}),
                       style: SendohTextStyles.caption,
                     ),
                     if (deadline.isNotEmpty)
-                      Text('Ends $deadline', style: SendohTextStyles.caption),
+                      Text(t('Ends {deadline}', {'deadline': deadline}),
+                          style: SendohTextStyles.caption),
                   ],
                 ),
               ],
@@ -756,7 +775,8 @@ class HomeJoinedCircle extends StatelessWidget {
     final round = (joinedCollection['round'] as num?)?.toInt() ?? 1;
     // "Round 2 · 5,000 FCFA expected" never hides "Round 1 · Paid".
     final status = joinedCollection['recurring'] == true && round > 1
-        ? 'Round $round · ${joinedPersonalStatus(item)}'
+        ? t('Round {round} · {status}',
+            {'round': round, 'status': joinedPersonalStatus(item)})
         : joinedPersonalStatus(item);
     final previous = item['previous_round'] as Map?;
     final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
@@ -768,14 +788,15 @@ class HomeJoinedCircle extends StatelessWidget {
     final hasTotal = CollectionTotals.fromCollection(collection).known;
     final total = displayedCollectionAmount(collection);
     final groupStatus = collection['status'] == 'CLOSED'
-        ? 'Collection closed'
+        ? t('Collection closed')
         : collection['status'] == 'SETTLED'
-            ? 'Collection settled'
+            ? t('Collection settled')
             : collection['status'] == 'CANCELLED'
-                ? 'Collection cancelled'
+                ? t('Collection cancelled')
                 : target != null && target > 0 && hasTotal
-                    ? 'Group: ${(total * 100 / target).clamp(0, 100).floor()}% collected'
-                    : 'Collection open';
+                    ? t('Group: {value}% collected',
+                        {'value': (total * 100 / target).clamp(0, 100).floor()})
+                    : t('Collection open');
     return SizedBox(
         width: width,
         child: Material(
@@ -844,8 +865,8 @@ class HomeActionBar extends StatelessWidget {
             ListTile(
               leading:
                   const Icon(Icons.alternate_email, color: SendohColors.teal),
-              title: const Text('Send to a Sendoh user'),
-              subtitle: const Text('Find them by their username'),
+              title: Text(t('Send to a Sendoh user')),
+              subtitle: Text(t('Find them by their username')),
               onTap: () {
                 Navigator.pop(sheet);
                 openPeople(context, PeopleIntent.pay);
@@ -854,8 +875,8 @@ class HomeActionBar extends StatelessWidget {
             ListTile(
               leading:
                   const Icon(Icons.qr_code_scanner, color: SendohColors.teal),
-              title: const Text('Pay someone nearby'),
-              subtitle: const Text('Scan their Near2Pay code'),
+              title: Text(t('Pay someone nearby')),
+              subtitle: Text(t('Scan their Near2Pay code')),
               onTap: () {
                 Navigator.pop(sheet);
                 openPeople(context, PeopleIntent.pay, near: true);
@@ -871,20 +892,20 @@ class HomeActionBar extends StatelessWidget {
         children: [
           _Action(
             icon: Icons.add,
-            label: 'New collection',
+            label: t('New collection'),
             onTap: onCollect,
           ),
           const SizedBox(width: 10),
           _Action(
             icon: Icons.description_outlined,
-            label: 'Request',
+            label: t('Request'),
             onTap: () => openPeople(context, PeopleIntent.request),
             planned: gateway == null,
           ),
           const SizedBox(width: 10),
           _Action(
             icon: Icons.send_outlined,
-            label: 'Send',
+            label: t('Send'),
             onTap: () => send(context),
             planned: gateway == null,
           ),
@@ -907,7 +928,9 @@ class _Action extends StatelessWidget {
   Widget build(BuildContext context) => Expanded(
         child: Semantics(
           button: true,
-          label: planned ? '$label, view availability details' : label,
+          label: planned
+              ? t('{label}, view availability details', {'label': label})
+              : label,
           child: Material(
             color: const Color(0xFFE8F0EC),
             borderRadius: BorderRadius.circular(16),
@@ -1044,15 +1067,20 @@ class _CollectionDeckState extends State<CollectionDeck>
         void move(int delta) =>
             settle((delta == 1) != rtl ? -width : width, delta: delta);
         return Semantics(
-          label: 'Collection ${index + 1} of ${widget.entries.length}',
+          label: t('Collection {value} of {length}',
+              {'value': index + 1, 'length': widget.entries.length}),
           container: true,
           explicitChildNodes: true,
-          value: '${index + 1} of ${widget.entries.length}',
+          value: t('{index} of {count}',
+              {'index': index + 1, 'count': widget.entries.length}),
           increasedValue: index < widget.entries.length - 1
-              ? '${index + 2} of ${widget.entries.length}'
+              ? t('{index} of {count}',
+                  {'index': index + 2, 'count': widget.entries.length})
               : null,
-          decreasedValue:
-              index > 0 ? '$index of ${widget.entries.length}' : null,
+          decreasedValue: index > 0
+              ? t('{index} of {count}',
+                  {'index': index, 'count': widget.entries.length})
+              : null,
           onIncrease: index < widget.entries.length - 1 ? () => move(1) : null,
           onDecrease: index > 0 ? () => move(-1) : null,
           child: GestureDetector(
@@ -1169,13 +1197,13 @@ class _CollectionDeckState extends State<CollectionDeck>
 String joinedPersonalStatus(Map<String, dynamic> item) {
   final c = Map<String, dynamic>.from(item['collection']);
   if (c['status'] == 'CLOSED') {
-    return 'Closed';
+    return t('Closed');
   }
   if (c['status'] == 'SETTLED') {
-    return 'Settled';
+    return t('Settled');
   }
   if (c['status'] == 'CANCELLED') {
-    return 'Cancelled';
+    return t('Cancelled');
   }
   return MemberPosition.fromJoined(item).personalLine(coordinationMoney);
 }
@@ -1216,16 +1244,22 @@ class RequestSummary extends StatelessWidget {
               leading: const Icon(Icons.swap_horiz, color: SendohColors.teal),
               title: Text(
                 sent.isEmpty
-                    ? 'Your money requests'
-                    : 'Waiting on $people ${people == 1 ? 'person' : 'people'}',
+                    ? t('Your money requests')
+                    : people == 1
+                        ? t('Waiting on 1 person')
+                        : t('Waiting on {people} people', {'people': people}),
                 style: SendohTextStyles.bodyMedium,
               ),
               subtitle: snapshot.hasError
-                  ? const Text('Open to retry loading requests')
+                  ? Text(t('Open to retry loading requests'))
                   : sent.isEmpty
                       ? null
                       : Text(
-                          '${coordinationMoney(total)} outstanding${(snapshot.data?.length ?? 0) >= 100 ? ' · recent requests' : ''}',
+                          (snapshot.data?.length ?? 0) >= 100
+                              ? t('{amount} outstanding · recent requests',
+                                  {'amount': coordinationMoney(total)})
+                              : t('{amount} outstanding',
+                                  {'amount': coordinationMoney(total)}),
                         ),
               trailing: const Icon(Icons.chevron_right),
               onTap: onOpen,

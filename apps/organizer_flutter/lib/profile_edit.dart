@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -37,13 +38,13 @@ class _EditProfileState extends State<EditProfile> {
       if (file == null) return;
       final bytes = await file.readAsBytes();
       if (bytes.length > 200000) {
-        throw Exception('Choose a photo under 200 KB.');
+        throw Exception(t('Choose a photo under 200 KB.'));
       }
       if (mounted) setState(() => avatar = base64Encode(bytes));
     } catch (_) {
       if (mounted) {
-        setState(() =>
-            error = 'Could not load this photo. Choose a smaller JPEG or PNG.');
+        setState(() => error =
+            t('Could not load this photo. Choose a smaller JPEG or PNG.'));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -52,7 +53,7 @@ class _EditProfileState extends State<EditProfile> {
 
   Future<void> save() async {
     if (name.text.trim().isEmpty) {
-      setState(() => error = 'Enter your full name.');
+      setState(() => error = t('Enter your full name.'));
       return;
     }
     setState(() {
@@ -74,18 +75,18 @@ class _EditProfileState extends State<EditProfile> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Your profile')),
+      appBar: AppBar(title: Text(t('Your profile'))),
       body: ListView(padding: const EdgeInsets.all(24), children: [
         TextField(
             controller: name,
             enabled: !busy,
             maxLength: 120,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Full name')),
+            decoration: InputDecoration(labelText: t('Full name'))),
         if (widget.account['username'] != null)
           ListTile(
               title: Text('@${widget.account['username']}'),
-              subtitle: const Text('Your unique Sendoh username')),
+              subtitle: Text(t('Your unique Sendoh username'))),
         const SizedBox(height: 20),
         Center(
             child: CircleAvatar(
@@ -97,17 +98,17 @@ class _EditProfileState extends State<EditProfile> {
                     : null)),
         TextButton(
             onPressed: busy ? null : photo,
-            child: const Text('Choose profile photo')),
+            child: Text(t('Choose profile photo'))),
         if (avatar != null)
           TextButton(
               onPressed: busy ? null : () => setState(() => avatar = null),
-              child: const Text('Remove photo')),
+              child: Text(t('Remove photo'))),
         if (error != null)
           Text(error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
         const SizedBox(height: 24),
         FilledButton(
             onPressed: busy ? null : save,
-            child: Text(busy ? 'Saving…' : 'Save changes')),
+            child: Text(busy ? t('Saving…') : t('Save changes'))),
       ]));
 }

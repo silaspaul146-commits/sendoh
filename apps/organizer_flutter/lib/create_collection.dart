@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,11 +38,11 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
 
   String? amount(String? value, {bool required = false}) {
     if (value == null || value.trim().isEmpty) {
-      return required ? 'Enter an amount' : null;
+      return required ? t('Enter an amount') : null;
     }
     final n = int.tryParse(value.trim());
     return n == null || n <= 0 || n > 1000000000000
-        ? 'Enter a positive whole FCFA amount'
+        ? t('Enter a positive whole FCFA amount')
         : null;
   }
 
@@ -57,7 +58,7 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
     final value = participant.text.trim();
     if (value.isEmpty) return;
     if (people.length >= 200) {
-      setState(() => error = 'You can add up to 200 participants.');
+      setState(() => error = t('You can add up to 200 participants.'));
       return;
     }
     changed();
@@ -121,9 +122,9 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
-          title: const Text('Create collection'),
+          title: Text(t('Create collection')),
           leading: IconButton(
-              tooltip: 'Back',
+              tooltip: t('Back'),
               onPressed: busy
                   ? null
                   : () {
@@ -148,38 +149,40 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Text('Step ${step + 1} of 3',
+                                Text(
+                                    t('Step {value} of 3', {'value': step + 1}),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
                                         fontSize: 12,
                                         color: SendohColors.muted)),
                                 const SizedBox(height: 28),
                                 if (step == 0) ...[
-                                  fieldLabel('Collection name'),
+                                  fieldLabel(t('Collection name')),
                                   TextFormField(
                                       controller: name,
                                       onChanged: (_) => changed(),
                                       maxLength: 120,
-                                      decoration: const InputDecoration(
-                                          hintText: 'e.g. Department Activity',
+                                      decoration: InputDecoration(
+                                          hintText:
+                                              t('e.g. Department Activity'),
                                           counterText: ''),
                                       validator: (v) =>
                                           v == null || v.trim().isEmpty
-                                              ? 'Enter a collection name'
+                                              ? t('Enter a collection name')
                                               : null),
                                   const SizedBox(height: 20),
-                                  fieldLabel('Purpose (optional)'),
+                                  fieldLabel(t('Purpose (optional)')),
                                   TextFormField(
                                       controller: description,
                                       onChanged: (_) => changed(),
                                       maxLength: 2000,
                                       maxLines: 2,
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                           hintText:
-                                              'What are you collecting for?',
+                                              t('What are you collecting for?'),
                                           counterText: '')),
                                   const SizedBox(height: 20),
-                                  fieldLabel('Target amount (optional)'),
+                                  fieldLabel(t('Target amount (optional)')),
                                   TextFormField(
                                       controller: target,
                                       onChanged: (_) => changed(),
@@ -188,18 +191,18 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                         FilteringTextInputFormatter.digitsOnly
                                       ],
                                       validator: (v) => amount(v),
-                                      decoration: const InputDecoration(
-                                          hintText: 'No target',
+                                      decoration: InputDecoration(
+                                          hintText: t('No target'),
                                           suffixText: 'FCFA')),
                                   const SizedBox(height: 20),
-                                  fieldLabel('Deadline (optional)'),
+                                  fieldLabel(t('Deadline (optional)')),
                                   OutlinedButton.icon(
                                       onPressed: pickDeadline,
                                       icon: const Icon(
                                           Icons.calendar_today_outlined,
                                           size: 18),
                                       label: Text(deadline == null
-                                          ? 'Choose a date'
+                                          ? t('Choose a date')
                                           : displayDate(DateTime.utc(
                                                   deadline!.year,
                                                   deadline!.month,
@@ -213,27 +216,26 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                               changed();
                                               setState(() => deadline = null);
                                             },
-                                            child:
-                                                const Text('Remove deadline'))),
+                                            child: Text(t('Remove deadline')))),
                                   const SizedBox(height: 20),
-                                  fieldLabel('Contribution rule'),
+                                  fieldLabel(t('Contribution rule')),
                                   DropdownButtonFormField<String>(
                                       // Compatibility with Flutter SDKs that lack initialValue.
                                       // ignore: deprecated_member_use
                                       value: mode,
                                       isExpanded: true,
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: 'ANY_AMOUNT',
-                                            child: Text('Any amount')),
+                                            child: Text(t('Any amount'))),
                                         DropdownMenuItem(
                                             value: 'EXPECTED_TOTAL',
-                                            child: Text(
-                                                'Expected total per person')),
+                                            child: Text(t(
+                                                'Expected total per person'))),
                                         DropdownMenuItem(
                                             value: 'MINIMUM_TOTAL',
                                             child: Text(
-                                                'Minimum total per person'))
+                                                t('Minimum total per person')))
                                       ],
                                       onChanged: (v) {
                                         changed();
@@ -241,7 +243,7 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                       }),
                                   if (mode != 'ANY_AMOUNT') ...[
                                     const SizedBox(height: 20),
-                                    fieldLabel('Suggested contribution'),
+                                    fieldLabel(t('Suggested contribution')),
                                     TextFormField(
                                         controller: expected,
                                         onChanged: (_) => changed(),
@@ -265,26 +267,25 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                           ? null
                                           : (v) =>
                                               setState(() => recurring = v),
-                                      title: const Text('Repeats in rounds',
+                                      title: Text(t('Repeats in rounds'),
                                           style: TextStyle(fontSize: 14)),
-                                      subtitle: const Text(
-                                          'For njangi or tontine: settle each round, then start the next with the same members.',
+                                      subtitle: Text(
+                                          t('For njangi or tontine: settle each round, then start the next with the same members.'),
                                           style: TextStyle(fontSize: 12))),
                                 ],
                                 if (step == 1) ...[
-                                  const Text('Who should contribute?',
+                                  Text(t('Who should contribute?'),
                                       style: TextStyle(
                                           fontSize: 23,
                                           fontWeight: FontWeight.w600)),
                                   const SizedBox(height: 10),
-                                  const Text(
-                                      'Add participants now, or share the collection link after creating it.',
+                                  Text(t('Add participants now, or share the collection link after creating it.'),
                                       style: TextStyle(
                                           fontSize: 13,
                                           height: 1.7,
                                           color: SendohColors.secondary)),
                                   const SizedBox(height: 24),
-                                  fieldLabel('Participant name'),
+                                  fieldLabel(t('Participant name')),
                                   TextField(
                                       controller: participant,
                                       maxLength: 120,
@@ -292,9 +293,9 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                           TextCapitalization.words,
                                       onSubmitted: (_) => addPerson(),
                                       decoration: InputDecoration(
-                                          hintText: 'Full name',
+                                          hintText: t('Full name'),
                                           suffixIcon: IconButton(
-                                              tooltip: 'Add participant',
+                                              tooltip: t('Add participant'),
                                               onPressed: addPerson,
                                               icon: const Icon(Icons.add,
                                                   color: SendohColors.teal)))),
@@ -306,12 +307,13 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                           style: const TextStyle(fontSize: 14)),
                                       subtitle: Text(
                                           mode == 'ANY_AMOUNT'
-                                              ? 'Any amount'
+                                              ? t('Any amount')
                                               : money(
                                                   int.tryParse(expected.text)),
                                           style: const TextStyle(fontSize: 12)),
                                       trailing: IconButton(
-                                          tooltip: 'Remove ${e.value}',
+                                          tooltip: t('Remove {value}',
+                                              {'value': e.value}),
                                           icon:
                                               const Icon(Icons.close, size: 19),
                                           onPressed: () {
@@ -320,12 +322,14 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                                 () => people.removeAt(e.key));
                                           }))),
                                   if (people.isEmpty)
-                                    const EmptyState(
-                                        title: 'No participants added',
-                                        message:
-                                            'You can still create a collection and share its link.'),
+                                    EmptyState(
+                                        title: t('No participants added'),
+                                        message: t(
+                                            'You can still create a collection and share its link.')),
                                   const SizedBox(height: 16),
-                                  Text('${people.length} participants',
+                                  Text(
+                                      t('{count} participants',
+                                          {'count': people.length}),
                                       style: const TextStyle(
                                           fontSize: 12,
                                           color: SendohColors.muted)),
@@ -348,15 +352,15 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                         ]),
                                         const Divider(),
                                         SummaryRow(
-                                            'Target',
+                                            t('Target'),
                                             target.text.trim().isEmpty
-                                                ? 'No target'
+                                                ? t('No target')
                                                 : money(int.parse(
                                                     target.text.trim()))),
                                         SummaryRow(
-                                            'Deadline',
+                                            t('Deadline'),
                                             deadline == null
-                                                ? 'No deadline'
+                                                ? t('No deadline')
                                                 : displayDate(DateTime.utc(
                                                         deadline!.year,
                                                         deadline!.month,
@@ -364,16 +368,16 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                                     .toIso8601String())),
                                         SummaryRow(
                                             mode == 'MINIMUM_TOTAL'
-                                                ? 'Minimum total per person'
-                                                : 'Suggested contribution',
+                                                ? t('Minimum total per person')
+                                                : t('Suggested contribution'),
                                             mode == 'ANY_AMOUNT'
-                                                ? 'Any amount'
+                                                ? t('Any amount')
                                                 : money(int.parse(
                                                     expected.text.trim()))),
-                                        SummaryRow(
-                                            'Participants', '${people.length}'),
-                                        const SummaryRow('Who can view?',
-                                            'Anyone with the link'),
+                                        SummaryRow(t('Participants'),
+                                            '${people.length}'),
+                                        SummaryRow(t('Who can view?'),
+                                            t('Anyone with the link')),
                                         if (description.text
                                             .trim()
                                             .isNotEmpty) ...[
@@ -387,11 +391,10 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                         ]
                                       ])),
                                   const SizedBox(height: 22),
-                                  const Text('You will be the organizer.',
+                                  Text(t('You will be the organizer.'),
                                       style: TextStyle(fontSize: 13)),
                                   const SizedBox(height: 10),
-                                  const Text(
-                                      'Creating a collection is free. Participant names stay private. Payments are not available yet.',
+                                  Text(t('Creating a collection is free. Participant names stay private. Payments are not available yet.'),
                                       style: TextStyle(
                                           fontSize: 12,
                                           height: 1.7,
@@ -411,7 +414,7 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                             onPressed: busy
                                                 ? null
                                                 : () => setState(() => step--),
-                                            child: const Text('Back'))),
+                                            child: Text(t('Back')))),
                                     const SizedBox(width: 12)
                                   ],
                                   Expanded(
@@ -443,10 +446,10 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                                   }
                                                 },
                                           child: Text(busy
-                                              ? 'Creating…'
+                                              ? t('Creating…')
                                               : step == 2
-                                                  ? 'Create collection'
-                                                  : 'Continue')))
+                                                  ? t('Create collection')
+                                                  : t('Continue'))))
                                 ]),
                               ])))))));
   Widget fieldLabel(String text) => Padding(

@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -7,8 +8,10 @@ class ApiException implements Exception {
   ApiException(this.status, this.message);
   final int status;
   final String message;
+
+  /// Shown to people in their language; service messages are English source text.
   @override
-  String toString() => message;
+  String toString() => t(message);
 }
 
 class SendohApi {
@@ -37,10 +40,8 @@ class SendohApi {
               : client.post(uri, headers: headers, body: jsonEncode(body)))
           .timeout(const Duration(seconds: 60));
     } on TimeoutException {
-      throw ApiException(
-          408,
-          'Sendoh did not respond within 60 seconds. Please retry shortly. '
-          'If you requested a code, wait 60 seconds before requesting another.');
+      throw ApiException(408,
+          'Sendoh did not respond within 60 seconds. Please retry shortly. If you requested a code, wait 60 seconds before requesting another.');
     } on http.ClientException {
       throw ApiException(503,
           'Cannot connect to Sendoh. Check your internet connection and retry.');

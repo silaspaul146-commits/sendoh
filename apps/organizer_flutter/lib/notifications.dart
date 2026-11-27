@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'person_payments.dart';
 import 'package:flutter/material.dart';
 import 'api.dart';
@@ -119,8 +120,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       String message;
       if (optedIn) {
         await PushService.disable(widget.api, widget.userId);
-        message =
-            'Push alerts disabled on this device. Your inbox is still available.';
+        message = t(
+            'Push alerts disabled on this device. Your inbox is still available.');
       } else {
         message = await PushService.enable(widget.api, widget.userId);
       }
@@ -136,7 +137,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update push alerts: $e')),
+          SnackBar(
+              content: Text(t('Could not update push alerts: {e}', {'e': e}))),
         );
       }
     } finally {
@@ -175,7 +177,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             builder: (_) => SettlementScreen(
                 api: widget.api,
                 collectionId: item['collection_id'],
-                collectionName: item['collection_name'] ?? 'Collection')));
+                collectionName: item['collection_name'] ?? t('Collection'))));
       } else if (item['kind'] == 'CONTRIBUTION_CONFIRMED' ||
           item['kind'] == 'CASH_FLAGGED') {
         // Organizer: open the collection, where the member's row now shows it.
@@ -198,8 +200,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             builder: (_) => ContributionCheckout(
                 api: widget.api,
                 collectionId: item['collection_id'],
-                collection: item['collection_name'] ?? 'Collection',
-                name: 'your verified profile',
+                collection: item['collection_name'] ?? t('Collection'),
+                name: t('your verified profile'),
                 existing: Map<String, dynamic>.from(payment))));
       } else if (item['kind'] == 'TEST_PAYMENT') {
         bool organizer = false;
@@ -281,10 +283,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Notifications'),
+          title: Text(t('Notifications')),
           actions: [
             IconButton(
-              tooltip: 'Refresh notifications',
+              tooltip: t('Refresh notifications'),
               onPressed: busy ? null : () => load(),
               icon: const Icon(Icons.refresh),
             ),
@@ -296,16 +298,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(22),
             children: [
-              const Text(
-                'Stay in the loop.',
+              Text(
+                t('Stay in the loop.'),
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Your invitations and collection updates, all in one place.',
+              Text(
+                t('Your invitations and collection updates, all in one place.'),
                 style: TextStyle(
                   color: SendohColors.secondary,
                   height: 1.6,
@@ -316,17 +318,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Notification preferences',
+                    Text(
+                      t('Notification preferences'),
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       pushAvailable && PushService.enabled
                           ? (optedIn
-                              ? 'Alerts are on by default, subject to your phone’s notification permission. Names and amounts stay inside the app.'
-                              : 'Alerts are off on this device. Your updates still appear here.')
-                          : 'Push is not configured yet. Your updates will still appear here.',
+                              ? t('Alerts are on by default, subject to your phone’s notification permission. Names and amounts stay inside the app.')
+                              : t('Alerts are off on this device. Your updates still appear here.'))
+                          : t('Push is not configured yet. Your updates will still appear here.'),
                       style: const TextStyle(fontSize: 13, height: 1.6),
                     ),
                     if (pushAvailable &&
@@ -337,10 +339,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         onPressed: changingPush ? null : togglePush,
                         child: Text(
                           changingPush
-                              ? 'Updating…'
+                              ? t('Updating…')
                               : optedIn
-                                  ? 'Turn alerts off'
-                                  : 'Turn alerts on',
+                                  ? t('Turn alerts off')
+                                  : t('Turn alerts on'),
                         ),
                       ),
                     ],
@@ -356,13 +358,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ),
                 TextButton(
                   onPressed: busy ? null : () => load(),
-                  child: const Text('Try again'),
+                  child: Text(t('Try again')),
                 ),
               ],
               if (!busy && error == null && rows.isEmpty)
-                const EmptyState(
-                  title: 'You’re all caught up',
-                  message: 'New invitations and responses will appear here.',
+                EmptyState(
+                  title: t('You’re all caught up'),
+                  message: t('New invitations and responses will appear here.'),
                   icon: Icons.notifications_none,
                 ),
               ...rows.map((raw) {
@@ -414,7 +416,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               if (cursor != null)
                 OutlinedButton(
                   onPressed: busy ? null : () => load(more: true),
-                  child: const Text('Load older updates'),
+                  child: Text(t('Load older updates')),
                 ),
             ],
           ),

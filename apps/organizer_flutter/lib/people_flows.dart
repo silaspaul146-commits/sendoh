@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'design.dart';
@@ -33,7 +34,8 @@ class RecipientPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
         container: true,
-        label: 'Paying $name, $identity',
+        label: t(
+            'Paying {name}, {identity}', {'name': name, 'identity': identity}),
         child: Column(children: [
           CircleAvatar(
               radius: 36,
@@ -52,7 +54,7 @@ class RecipientPreview extends StatelessWidget {
               style:
                   const TextStyle(fontSize: 16, color: SendohColors.secondary)),
           const SizedBox(height: 8),
-          const Text('Check this is the person you mean.',
+          Text(t('Check this is the person you mean.'),
               textAlign: TextAlign.center, style: SendohTextStyles.caption),
         ]),
       );
@@ -80,7 +82,8 @@ class _CannotReceiveYetState extends State<CannotReceiveYet> {
               color: SendohColors.amberSoft,
               borderRadius: BorderRadius.circular(14)),
           child: Text(
-              '${widget.name} hasn’t set where they receive money yet. Nothing has been charged. Once they add it in Sendoh, you can pay.',
+              t('{name} hasn’t set where they receive money yet. Nothing has been charged. Once they add it in Sendoh, you can pay.',
+                  {'name': widget.name}),
               style: SendohTextStyles.bodyMedium),
         ),
         const SizedBox(height: 16),
@@ -97,15 +100,15 @@ class _CannotReceiveYetState extends State<CannotReceiveYet> {
                       if (mounted) setState(() => sent = true);
                     } catch (_) {
                       if (mounted) {
-                        setState(() => error = 'Couldn’t send. Try again.');
+                        setState(() => error = t('Couldn’t send. Try again.'));
                       }
                     } finally {
                       if (mounted) setState(() => busy = false);
                     }
                   },
             child: Text(sent
-                ? 'We let ${widget.name} know'
-                : 'Let ${widget.name} know')),
+                ? t('We let {name} know', {'name': widget.name})
+                : t('Let {name} know', {'name': widget.name}))),
         if (error != null)
           Text(error!, style: const TextStyle(color: SendohColors.red)),
       ]);
@@ -187,14 +190,14 @@ class _PeopleFlowState extends State<PeopleFlow> {
   Future<void> resolve() async {
     if (identity.text.trim().isEmpty) {
       setState(() => error = widget.nearby
-          ? 'Scan or paste a Sendoh code.'
-          : 'Enter their exact Sendoh username.');
+          ? t('Scan or paste a Sendoh code.')
+          : t('Enter their exact Sendoh username.'));
       return;
     }
     final gateway = widget.gateway;
     if (gateway == null) {
-      setState(() => error =
-          'Person lookup is not connected in this build. Your details have not been sent.');
+      setState(() => error = t(
+          'Person lookup is not connected in this build. Your details have not been sent.'));
       return;
     }
     setState(() {
@@ -213,8 +216,8 @@ class _PeopleFlowState extends State<PeopleFlow> {
       });
     } catch (_) {
       if (mounted) {
-        setState(() => error =
-            'We couldn’t confirm this person. Check the details and try again.');
+        setState(() => error = t(
+            'We couldn’t confirm this person. Check the details and try again.'));
       }
     } finally {
       if (mounted) {
@@ -226,7 +229,7 @@ class _PeopleFlowState extends State<PeopleFlow> {
   Future<void> scan() async {
     final gateway = widget.gateway;
     if (gateway == null) {
-      setState(() => error = 'QR scanning is not connected in this build.');
+      setState(() => error = t('QR scanning is not connected in this build.'));
       return;
     }
     setState(() {
@@ -243,7 +246,7 @@ class _PeopleFlowState extends State<PeopleFlow> {
     } catch (_) {
       if (mounted) {
         setState(() => error =
-            'Camera unavailable. You can paste the Sendoh code instead.');
+            t('Camera unavailable. You can paste the Sendoh code instead.'));
       }
     } finally {
       if (mounted) {
@@ -285,8 +288,8 @@ class _PeopleFlowState extends State<PeopleFlow> {
       // Returning from checkout is NOT proof of success.
     } catch (_) {
       if (mounted) {
-        setState(() => error =
-            'Couldn’t open the next step. Check Activity before repeating an action.');
+        setState(() => error = t(
+            'Couldn’t open the next step. Check Activity before repeating an action.'));
       }
     } finally {
       if (mounted) {
@@ -312,15 +315,15 @@ class _PeopleFlowState extends State<PeopleFlow> {
   Widget build(BuildContext context) {
     final title = step == 0
         ? (widget.nearby
-            ? 'Meet through Sendoh'
+            ? t('Meet through Sendoh')
             : request
-                ? 'Request money'
-                : 'Pay someone')
+                ? t('Request money')
+                : t('Pay someone'))
         : step == 1
-            ? 'Confirm the person'
+            ? t('Confirm the person')
             : step == 2
-                ? (request ? 'Your request' : 'Your payment')
-                : 'Review details';
+                ? (request ? t('Your request') : t('Your payment'))
+                : t('Review details');
     return PopScope(
         canPop: step == 0 && !busy,
         onPopInvokedWithResult: (didPop, result) {
@@ -357,11 +360,10 @@ class _PeopleFlowState extends State<PeopleFlow> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (widget.gateway == null) ...[
-                            const Text('Not connected yet',
+                            Text(t('Not connected yet'),
                                 style: TextStyle(fontWeight: FontWeight.w600)),
                             const SizedBox(height: 6),
-                            const Text(
-                                'This journey needs person lookup and payment/request services before it can be used.',
+                            Text(t('This journey needs person lookup and payment/request services before it can be used.'),
                                 style: TextStyle(
                                     color: SendohColors.secondary,
                                     height: 1.5)),
@@ -370,8 +372,9 @@ class _PeopleFlowState extends State<PeopleFlow> {
                           if (step == 0) ...[
                             Text(
                                 widget.nearby
-                                    ? 'Scan their QR, confirm who they are, then pay or request.'
-                                    : 'Start with a person you know.',
+                                    ? t(
+                                        'Scan their QR, confirm who they are, then pay or request.')
+                                    : t('Start with a person you know.'),
                                 style: const TextStyle(
                                     fontSize: 22, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 24),
@@ -379,7 +382,7 @@ class _PeopleFlowState extends State<PeopleFlow> {
                               OutlinedButton.icon(
                                   onPressed: busy ? null : scan,
                                   icon: const Icon(Icons.qr_code_scanner),
-                                  label: const Text('Scan Sendoh QR')),
+                                  label: Text(t('Scan Sendoh QR'))),
                               const SizedBox(height: 20),
                             ],
                             TextFormField(
@@ -388,13 +391,13 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                 autocorrect: false,
                                 decoration: InputDecoration(
                                     labelText: widget.nearby
-                                        ? 'Sendoh code or link'
-                                        : 'Sendoh @username')),
+                                        ? t('Sendoh code or link')
+                                        : t('Sendoh @username'))),
                             const SizedBox(height: 24),
                             FilledButton(
                                 onPressed: busy ? null : resolve,
-                                child:
-                                    Text(busy ? 'Checking…' : 'Find person')),
+                                child: Text(
+                                    busy ? t('Checking…') : t('Find person'))),
                             if (!widget.nearby)
                               TextButton.icon(
                                   onPressed: busy
@@ -411,7 +414,7 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                                       gateway:
                                                           widget.gateway))),
                                   icon: const Icon(Icons.qr_code_scanner),
-                                  label: const Text('Use Near2Pay')),
+                                  label: Text(t('Use Near2Pay'))),
                           ],
                           if (step >= 1 && person != null) ...[
                             RecipientPreview(
@@ -430,24 +433,23 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                         intent = PeopleIntent.pay;
                                         step = 2;
                                       }),
-                                  child: const Text('Pay this person')),
+                                  child: Text(t('Pay this person'))),
                               OutlinedButton(
                                   onPressed: () => setState(() {
                                         intent = PeopleIntent.request;
                                         step = 2;
                                       }),
-                                  child:
-                                      const Text('Request from this person')),
+                                  child: Text(t('Request from this person'))),
                             ] else
                               FilledButton(
                                   onPressed: () => setState(() => step = 2),
-                                  child: const Text('Continue')),
+                                  child: Text(t('Continue'))),
                             TextButton(
                                 onPressed: () => setState(() {
                                       person = null;
                                       step = 0;
                                     }),
-                                child: const Text('Choose someone else')),
+                                child: Text(t('Choose someone else'))),
                           ],
                           if (step == 2) ...[
                             TextFormField(
@@ -457,12 +459,13 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                   FilteringTextInputFormatter.digitsOnly,
                                   LengthLimitingTextInputFormatter(9)
                                 ],
-                                decoration: const InputDecoration(
-                                    labelText: 'Amount (FCFA)'),
-                                validator: (v) =>
-                                    (int.tryParse(v ?? '') ?? 0) <= 0
-                                        ? 'Enter an amount greater than zero.'
-                                        : null),
+                                decoration: InputDecoration(
+                                    labelText: t('Amount (FCFA)')),
+                                validator: (v) => (int.tryParse(v ?? '') ??
+                                            0) <=
+                                        0
+                                    ? t('Enter an amount greater than zero.')
+                                    : null),
                             const SizedBox(height: 20),
                             if (request)
                               TextFormField(
@@ -470,18 +473,18 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                   maxLength: 140,
                                   decoration: InputDecoration(
                                       labelText: request
-                                          ? 'Reason'
-                                          : 'Note (optional)'),
+                                          ? t('Reason')
+                                          : t('Note (optional)')),
                                   validator: (v) =>
                                       request && (v ?? '').trim().isEmpty
-                                          ? 'Add a reason for this request.'
+                                          ? t('Add a reason for this request.')
                                           : null),
                             if (request) ...[
                               ListTile(
                                   contentPadding: EdgeInsets.zero,
-                                  title: const Text('Expiry (optional)'),
+                                  title: Text(t('Expiry (optional)')),
                                   subtitle: Text(expiry == null
-                                      ? 'No expiry'
+                                      ? t('No expiry')
                                       : '${expiry!.day}/${expiry!.month}/${expiry!.year}'),
                                   trailing:
                                       const Icon(Icons.calendar_today_outlined),
@@ -490,18 +493,18 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                 TextButton(
                                     onPressed: () =>
                                         setState(() => expiry = null),
-                                    child: const Text('Remove expiry')),
+                                    child: Text(t('Remove expiry'))),
                             ] else ...[
-                              const Text('Payment method'),
+                              Text(t('Payment method')),
                               SegmentedButton<String>(
-                                segments: const [
+                                segments: [
                                   ButtonSegment<String>(
                                     value: 'MTN MoMo',
                                     label: Text('MTN MoMo'),
                                   ),
                                   ButtonSegment<String>(
                                     value: 'Orange Money',
-                                    label: Text('Orange Money'),
+                                    label: const Text('Orange Money'),
                                   ),
                                 ],
                                 selected: {method},
@@ -523,39 +526,41 @@ class _PeopleFlowState extends State<PeopleFlow> {
                                           }
                                         }
                                       },
-                                child: const Text('Review details')),
+                                child: Text(t('Review details'))),
                           ],
                           if (step == 3) ...[
                             detail(
-                                request ? 'Request amount' : 'Payment amount',
+                                request
+                                    ? t('Request amount')
+                                    : t('Payment amount'),
                                 '${amount.text} FCFA'),
                             if (note.text.trim().isNotEmpty)
-                              detail(request ? 'Reason' : 'Note',
+                              detail(request ? t('Reason') : t('Note'),
                                   note.text.trim()),
-                            if (!request) detail('Method', method),
+                            if (!request) detail(t('Method'), method),
                             if (request)
                               detail(
-                                  'Expiry',
+                                  t('Expiry'),
                                   expiry == null
-                                      ? 'No expiry'
+                                      ? t('No expiry')
                                       : '${expiry!.day}/${expiry!.month}/${expiry!.year}'),
                             const Divider(),
                             Text(request
-                                ? 'Review the delivery details in the next step before sending.'
-                                : 'The next step shows the live quote and total before you authorise payment.'),
+                                ? t('Review the delivery details in the next step before sending.')
+                                : t('The next step shows the live quote and total before you authorise payment.')),
                             const SizedBox(height: 24),
                             FilledButton(
                                 onPressed: busy ? null : checkout,
                                 child: Text(busy
-                                    ? 'Opening…'
+                                    ? t('Opening…')
                                     : request
-                                        ? 'Continue to send review'
-                                        : 'Continue to payment quote')),
+                                        ? t('Continue to send review')
+                                        : t('Continue to payment quote'))),
                             TextButton(
                                 onPressed: busy
                                     ? null
                                     : () => setState(() => step = 2),
-                                child: const Text('Edit details')),
+                                child: Text(t('Edit details'))),
                           ],
                           if (error != null)
                             Padding(

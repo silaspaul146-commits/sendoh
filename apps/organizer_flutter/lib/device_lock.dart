@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'session_store.dart';
@@ -56,13 +57,13 @@ class _DeviceLockState extends State<DeviceLock> with WidgetsBindingObserver {
       error = null;
     });
     try {
-      final ok = await authenticateDevice('Unlock your Sendoh account');
+      final ok = await authenticateDevice(t('Unlock your Sendoh account'));
       if (mounted && ok) setState(() => locked = false);
     } catch (_) {
       if (mounted) {
         setState(
-          () => error =
-              'Could not unlock. Try again using your fingerprint or device PIN.',
+          () => error = t(
+              'Could not unlock. Try again using your fingerprint or device PIN.'),
         );
       }
     } finally {
@@ -72,42 +73,42 @@ class _DeviceLockState extends State<DeviceLock> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => Stack(
-    fit: StackFit.expand,
-    children: [
-      Offstage(offstage: locked, child: widget.child),
-      if (locked)
-        Positioned.fill(
-          child: Scaffold(
-            body: SafeArea(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.lock_outline, size: 48),
-                      const SizedBox(height: 16),
-                      const Text('Welcome back to Sendoh'),
-                      if (error != null) Text(error!),
-                      const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: checking ? null : unlock,
-                        child: const Text('Unlock'),
+        fit: StackFit.expand,
+        children: [
+          Offstage(offstage: locked, child: widget.child),
+          if (locked)
+            Positioned.fill(
+              child: Scaffold(
+                body: SafeArea(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_outline, size: 48),
+                          const SizedBox(height: 16),
+                          Text(t('Welcome back to Sendoh')),
+                          if (error != null) Text(error!),
+                          const SizedBox(height: 24),
+                          FilledButton(
+                            onPressed: checking ? null : unlock,
+                            child: Text(t('Unlock')),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Text(
+                              t('Use your fingerprint, face, or device PIN.'),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
                       ),
-                      const Padding(
-                        padding: EdgeInsets.only(top: 12),
-                        child: Text(
-                          'Use your fingerprint, face, or device PIN.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-    ],
-  );
+        ],
+      );
 }

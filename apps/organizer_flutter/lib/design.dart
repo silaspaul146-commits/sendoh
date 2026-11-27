@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
@@ -202,7 +203,7 @@ class StatusBadge extends StatelessWidget {
   final bool pending;
   @override
   Widget build(BuildContext context) {
-    final value = text.toLowerCase();
+    final value = englishOf(text).toLowerCase();
     final failed = value.contains('failed') || value == 'declined';
     final waiting = pending ||
         value.contains('partial') ||
@@ -223,7 +224,7 @@ class StatusBadge extends StatelessWidget {
                   ? SendohColors.amberSoft
                   : SendohColors.tealSoft,
           borderRadius: BorderRadius.circular(6)),
-      child: Text(text,
+      child: Text(t(text),
           style: TextStyle(
               fontSize: 10, fontWeight: FontWeight.w600, color: foreground)),
     );
@@ -284,26 +285,26 @@ class EmptyState extends StatelessWidget {
 
 String displayDate(dynamic raw) {
   if (raw == null) {
-    return 'No deadline';
+    return t('No deadline');
   }
   final date = DateTime.tryParse(raw.toString());
   if (date == null) {
-    return 'No deadline';
+    return t('No deadline');
   }
   final d = date.toUtc().add(const Duration(hours: 1));
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
+  final months = [
+    t('Jan'),
+    t('Feb'),
+    t('Mar'),
+    t('Apr'),
+    t('May'),
+    t('Jun'),
+    t('Jul'),
+    t('Aug'),
+    t('Sep'),
+    t('Oct'),
+    t('Nov'),
+    t('Dec')
   ];
   return '${d.day} ${months[d.month - 1]} ${d.year}';
 }
@@ -315,7 +316,7 @@ class MemberAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name =
-        (person['name'] ?? person['display_name'] ?? 'Member') as String;
+        (person['name'] ?? person['display_name'] ?? t('Member')) as String;
     final photo = person['avatar'];
     if (photo is String && photo.isNotEmpty) {
       try {

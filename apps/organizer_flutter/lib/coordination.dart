@@ -1,12 +1,12 @@
+import 'i18n.dart';
 import 'package:flutter/material.dart';
 import 'design.dart';
 import 'payment_state.dart';
 
 export 'payment_state.dart';
 
-String coordinationMoney(dynamic value) => value == null
-    ? 'No target'
-    : '${value.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
+String coordinationMoney(dynamic value) =>
+    value == null ? t('No target') : fcfa(value);
 
 // Totals come from the payment-state contract; legacy simulator money is never shown.
 bool showingProviderTest(Map<String, dynamic> data) {
@@ -31,7 +31,8 @@ class CollectionProgress extends StatelessWidget {
     final color = dark ? Colors.white : SendohColors.teal;
     final muted = dark ? const Color(0xFFD1E4E0) : SendohColors.secondary;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(showingProviderTest(data) ? 'Collected · Sandbox' : 'Collected',
+      Text(
+          showingProviderTest(data) ? t('Collected · Sandbox') : t('Collected'),
           style: TextStyle(color: muted, fontSize: 12)),
       const SizedBox(height: 6),
       Text(coordinationMoney(actual),
@@ -54,14 +55,17 @@ class CollectionProgress extends StatelessWidget {
         if (!compact)
           Text(
               actual >= target
-                  ? 'Target reached'
-                  : '${coordinationMoney(target - actual)} to go',
+                  ? t('Target reached')
+                  : t('{amount} to go',
+                      {'amount': coordinationMoney(target - actual)}),
               style: TextStyle(color: muted, fontSize: 12)),
       ],
       // Awaiting money is named, but the orange line stays at confirmed money.
       if (totals.pending > 0 && !compact) ...[
         const SizedBox(height: 10),
-        Text('${coordinationMoney(totals.pending)} awaiting confirmation',
+        Text(
+            t('{amount} awaiting confirmation',
+                {'amount': coordinationMoney(totals.pending)}),
             style: TextStyle(color: muted, fontSize: 12)),
       ],
     ]);
@@ -87,7 +91,10 @@ class PeoplePreview extends StatelessWidget {
                   child: Text('+${people.length - 5}',
                       style: const TextStyle(
                           fontSize: 10, color: SendohColors.teal))),
-            Text('${people.length} ${people.length == 1 ? 'person' : 'people'}',
+            Text(
+                people.length == 1
+                    ? t('1 person')
+                    : t('{count} people', {'count': people.length}),
                 style: TextStyle(
                     fontSize: 12,
                     color: dark ? Colors.white : SendohColors.secondary)),
@@ -104,7 +111,7 @@ class JoinedCollectionCard extends StatelessWidget {
     final c = Map<String, dynamic>.from(item['collection']);
     return Semantics(
         button: true,
-        label: 'Open joined collection ${c['name']}',
+        label: t('Open joined collection {name}', {'name': c['name']}),
         child: Material(
           color: SendohColors.surface,
           shape: RoundedRectangleBorder(
@@ -138,8 +145,8 @@ class JoinedCollectionCard extends StatelessWidget {
                         const SizedBox(height: 18),
                         Text(
                             item['expected_amount'] == null
-                                ? 'Contribute any amount'
-                                : 'Your expected contribution',
+                                ? t('Contribute any amount')
+                                : t('Your expected contribution'),
                             style: const TextStyle(
                                 fontSize: 12, color: SendohColors.secondary)),
                         if (item['expected_amount'] != null)
@@ -153,9 +160,9 @@ class JoinedCollectionCard extends StatelessWidget {
                             style: const TextStyle(
                                 fontSize: 12, color: SendohColors.secondary)),
                         const SizedBox(height: 18),
-                        const Row(children: [
+                        Row(children: [
                           Expanded(
-                              child: Text('Open collection',
+                              child: Text(t('Open collection'),
                                   style: TextStyle(
                                       color: SendohColors.teal,
                                       fontWeight: FontWeight.w600))),

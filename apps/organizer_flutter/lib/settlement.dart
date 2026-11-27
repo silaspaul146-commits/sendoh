@@ -4,6 +4,8 @@
 /// Did my contribution count? All figures come from the server.
 library;
 
+import 'i18n.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,7 +18,7 @@ import 'payment_state.dart';
 import 'person_payments.dart' show ReceivingDetails;
 
 String walletName(Object? method) =>
-    method == 'ORANGE' ? 'Orange Money' : 'MTN MoMo';
+    method == 'ORANGE' ? t('Orange Money') : 'MTN MoMo';
 
 /// Organizer's collection-page card: raised, split by source, and the next step.
 class SettlementSummary extends StatelessWidget {
@@ -42,20 +44,24 @@ class SettlementSummary extends StatelessWidget {
       if (recurring)
         Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text('Round ${data['round'] ?? 1}',
+            child: Text(t('Round {round}', {'round': data['round'] ?? 1}),
                 style: SendohTextStyles.caption)),
       SurfaceCard(
           color: SendohColors.teal,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${coordinationMoney(totals.raised)} raised',
+            Text(
+                t('{amount} raised',
+                    {'amount': coordinationMoney(totals.raised)}),
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.w700)),
             if (totals.target != null && totals.target! > 0) ...[
               const SizedBox(height: 4),
-              Text('Goal ${coordinationMoney(totals.target)}',
+              Text(
+                  t('Goal {amount}',
+                      {'amount': coordinationMoney(totals.target)}),
                   style:
                       const TextStyle(color: Color(0xFFE6FFFA), fontSize: 13)),
               const SizedBox(height: 12),
@@ -69,36 +75,37 @@ class SettlementSummary extends StatelessWidget {
             ],
             if (totals.pending > 0) ...[
               const SizedBox(height: 10),
-              Text('${coordinationMoney(totals.pending)} awaiting confirmation',
+              Text(
+                  t('{amount} awaiting confirmation',
+                      {'amount': coordinationMoney(totals.pending)}),
                   style:
                       const TextStyle(color: Color(0xFFE6FFFA), fontSize: 12)),
             ],
           ])),
       const SizedBox(height: 8),
-      SummaryRow('Mobile Money', coordinationMoney(totals.confirmed)),
-      SummaryRow('Cash recorded', coordinationMoney(totals.cash)),
+      SummaryRow(t('Mobile Money'), coordinationMoney(totals.confirmed)),
+      SummaryRow(t('Cash recorded'), coordinationMoney(totals.cash)),
       if (open && totals.targetReached)
-        const Padding(
+        Padding(
             padding: EdgeInsets.only(top: 4),
             child: Align(
                 alignment: Alignment.centerLeft,
-                child: StatusBadge('Target reached'))),
+                child: StatusBadge(t('Target reached')))),
       if (open)
         Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-                onPressed: onEditCash, child: const Text('Edit cash records'))),
+                onPressed: onEditCash, child: Text(t('Edit cash records')))),
       const SizedBox(height: 4),
       if (recurring && status == 'SETTLED') ...[
         FilledButton(
-            onPressed: onNextRound, child: const Text('Start next round')),
+            onPressed: onNextRound, child: Text(t('Start next round'))),
         const SizedBox(height: 8),
-        OutlinedButton(
-            onPressed: onReview, child: const Text('View settlement')),
+        OutlinedButton(onPressed: onReview, child: Text(t('View settlement'))),
       ] else
         FilledButton(
             onPressed: onReview,
-            child: Text(open ? 'Review settlement' : 'View settlement')),
+            child: Text(open ? t('Review settlement') : t('View settlement'))),
     ]);
   }
 }
@@ -143,7 +150,7 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
       final text = fields[p['id']]!.text.trim().replaceAll(',', '');
       final amount = text.isEmpty ? 0 : int.tryParse(text);
       if (amount == null || amount < 0 || amount > 1000000000) {
-        setState(() => error = 'Enter whole FCFA amounts.');
+        setState(() => error = t('Enter whole FCFA amounts.'));
         return;
       }
       if (amount != MemberPosition.fromMember(p).cash) {
@@ -155,7 +162,7 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
       final ok = await showDialog<bool>(
           context: context,
           builder: (d) => AlertDialog(
-                title: const Text('Record this cash?'),
+                title: Text(t('Record this cash?')),
                 content: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -164,17 +171,17 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
                         Text(
                             '${names[e['participant_id']]} · ${e['amount'] == 0 ? 'remove cash' : coordinationMoney(e['amount'])}'),
                       const SizedBox(height: 12),
-                      const Text(
-                          'Each member sees it as cash recorded by you, separate from Mobile Money.',
+                      Text(
+                          t('Each member sees it as cash recorded by you, separate from Mobile Money.'),
                           style: SendohTextStyles.caption),
                     ]),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(d, false),
-                      child: const Text('Edit')),
+                      child: Text(t('Edit'))),
                   TextButton(
                       onPressed: () => Navigator.pop(d, true),
-                      child: const Text('Record cash')),
+                      child: Text(t('Record cash'))),
                 ],
               ));
       if (ok != true) {
@@ -207,10 +214,10 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Cash received')),
+      appBar: AppBar(title: Text(t('Cash received'))),
       body: ListView(padding: const EdgeInsets.all(22), children: [
-        const Text(
-            'Add money members gave you in person. It stays labelled as cash you recorded, separate from Mobile Money.',
+        Text(
+            t('Add money members gave you in person. It stays labelled as cash you recorded, separate from Mobile Money.'),
             style: SendohTextStyles.bodyMedium),
         const SizedBox(height: 16),
         ...members.map((p) {
@@ -226,8 +233,15 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
                           style: const TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w500)),
                       Text(
-                          '${coordinationMoney(position.confirmed)} by Mobile Money'
-                          '${position.expected == null ? '' : ' · ${coordinationMoney(position.expected)} expected'}',
+                          t('{amount} by Mobile Money', {
+                                'amount': coordinationMoney(position.confirmed)
+                              }) +
+                              (position.expected == null
+                                  ? ''
+                                  : ' · ${t('{amount} expected', {
+                                          'amount': coordinationMoney(
+                                              position.expected)
+                                        })}'),
                           style: SendohTextStyles.caption),
                     ])),
                 const SizedBox(width: 12),
@@ -238,9 +252,10 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
                         enabled: !busy,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                            labelText: 'Cash',
+                            labelText: t('Cash'),
                             hintText: '0',
-                            semanticCounterText: 'Cash from ${p['name']}'))),
+                            semanticCounterText:
+                                t('Cash from {name}', {'name': p['name']})))),
               ]));
         }),
         if (error != null)
@@ -251,7 +266,7 @@ class _CashRecordsScreenState extends State<CashRecordsScreen> {
         const SizedBox(height: 16),
         FilledButton(
             onPressed: busy ? null : save,
-            child: Text(busy ? 'Saving…' : 'Save cash records')),
+            child: Text(busy ? t('Saving…') : t('Save cash records'))),
       ]));
 }
 
@@ -350,14 +365,14 @@ class _SettlementScreenState extends State<SettlementScreen> {
       // A conflict may mean the payout already exists: show its real state.
       await load();
       if (mounted) {
-        setState(() => error = e.message);
+        setState(() => error = t(e.message));
       }
     } catch (_) {
       // Unknown outcome: read the saved state; the same key replays safely.
       await load();
       if (mounted && settlement == null) {
-        setState(() => error =
-            'Couldn’t confirm. Try again: the same request is reused, so nothing is sent twice.');
+        setState(() => error = t(
+            'Couldn’t confirm. Try again: the same request is reused, so nothing is sent twice.'));
       }
     } finally {
       if (mounted) {
@@ -387,12 +402,12 @@ class _SettlementScreenState extends State<SettlementScreen> {
           context: context,
           builder: (sheet) => SafeArea(
                   child: ListView(shrinkWrap: true, children: [
-                const ListTile(
-                    title: Text('Who receives this round?',
+                ListTile(
+                    title: Text(t('Who receives this round?'),
                         style: SendohTextStyles.titleSmall)),
                 ListTile(
                     leading: const Icon(Icons.person_outline),
-                    title: const Text('You'),
+                    title: Text(t('You')),
                     onTap: () => Navigator.pop(sheet, '')),
                 ...members.map((m) => ListTile(
                     leading: const Icon(Icons.person_outline),
@@ -439,7 +454,7 @@ class _SettlementScreenState extends State<SettlementScreen> {
     return Scaffold(
         appBar: AppBar(
             title: Text(s == null
-                ? 'Review settlement'
+                ? t('Review settlement')
                 : '${widget.collectionName}${s['round'] != null && (overview?['recurring'] == true) ? ' · Round ${s['round']}' : ''}')),
         body: RefreshIndicator(
             onRefresh: () => load(lookup: s != null),
@@ -456,7 +471,7 @@ class _SettlementScreenState extends State<SettlementScreen> {
                         child: Text(error!,
                             style: const TextStyle(color: SendohColors.red))),
                   const SizedBox(height: 16),
-                  const Text('Sandbox · no real money moves',
+                  Text(t('Sandbox · no real money moves'),
                       textAlign: TextAlign.center,
                       style: SendohTextStyles.caption),
                 ])));
@@ -474,8 +489,8 @@ class _SettlementScreenState extends State<SettlementScreen> {
       if (quote != null) ...[
         Text(
             receiver['is_you'] == true
-                ? 'You receive'
-                : '${receiver['name']} receives',
+                ? t('You receive')
+                : t('{name} receives', {'name': receiver['name']}),
             style: SendohTextStyles.bodyMedium),
         const SizedBox(height: 4),
         Text(coordinationMoney(quote['payout_amount']),
@@ -490,39 +505,46 @@ class _SettlementScreenState extends State<SettlementScreen> {
             alignment: Alignment.centerLeft,
             child: TextButton(
                 onPressed: busy ? null : chooseBeneficiary,
-                child: const Text('Change who receives'))),
+                child: Text(t('Change who receives')))),
         const SizedBox(height: 4),
         const Divider(),
         // The arithmetic, from the backend's accounting records and fee quote.
-        SummaryRow('Group total', coordinationMoney(raised['total'])),
-        SummaryRow('Cash already with you', coordinationMoney(raised['cash'])),
-        const Text('Not sent again. No fee on cash.',
-            style: SendohTextStyles.caption),
+        SummaryRow(t('Group total'), coordinationMoney(raised['total'])),
         SummaryRow(
-            'Confirmed Mobile Money', coordinationMoney(quote['mobile_money'])),
-        SummaryRow('MeSomb fees, already deducted',
+            t('Cash already with you'), coordinationMoney(raised['cash'])),
+        Text(t('Not sent again. No fee on cash.'),
+            style: SendohTextStyles.caption),
+        SummaryRow(t('Confirmed Mobile Money'),
+            coordinationMoney(quote['mobile_money'])),
+        SummaryRow(t('MeSomb fees, already deducted'),
             '− ${coordinationMoney(num.tryParse('${quote['provider_fees']}')?.round())}'),
-        SummaryRow('Sendoh settlement fee',
+        SummaryRow(t('Sendoh settlement fee'),
             '− ${coordinationMoney(quote['sendoh_fee'])}'),
         if ((quote['payout_cost'] as num) > 0)
           SummaryRow(
-              'Payout cost', '− ${coordinationMoney(quote['payout_cost'])}'),
-        SummaryRow('Payout', coordinationMoney(quote['payout_amount']),
+              t('Payout cost'), '− ${coordinationMoney(quote['payout_cost'])}'),
+        SummaryRow(t('Payout'), coordinationMoney(quote['payout_amount']),
             bold: true),
         const Divider(),
       ] else ...[
-        Text('${coordinationMoney(raised['total'])} raised',
+        Text(
+            t('{amount} raised',
+                {'amount': coordinationMoney(raised['total'])}),
             style: SendohTextStyles.headingMedium),
-        SummaryRow('Confirmed Mobile Money',
+        SummaryRow(t('Confirmed Mobile Money'),
             coordinationMoney(raised['mobile_money'])),
-        SummaryRow('Cash already with you', coordinationMoney(raised['cash'])),
+        SummaryRow(
+            t('Cash already with you'), coordinationMoney(raised['cash'])),
       ],
       // Name who is still confirming: the final settlement waits for them.
       for (final pending in (raised['pending'] as List? ?? const []))
         Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-                'Waiting for ${pending['name']} · ${coordinationMoney(pending['amount'])} confirming',
+                t('Waiting for {name} · {amount} confirming', {
+                  'name': pending['name'],
+                  'amount': coordinationMoney(pending['amount'])
+                }),
                 style: SendohTextStyles.bodyMedium)),
       if (quote == null)
         Align(
@@ -530,8 +552,9 @@ class _SettlementScreenState extends State<SettlementScreen> {
             child: TextButton(
                 onPressed: busy ? null : chooseBeneficiary,
                 child: Text(receiver['is_you'] == true
-                    ? 'You receive this round · Change'
-                    : '${receiver['name']} receives this round · Change'))),
+                    ? t('You receive this round · Change')
+                    : t('{name} receives this round · Change',
+                        {'name': receiver['name']})))),
       if (blockers.isNotEmpty)
         Padding(
             padding: const EdgeInsets.only(top: 16),
@@ -543,13 +566,13 @@ class _SettlementScreenState extends State<SettlementScreen> {
       if (needsDetails)
         FilledButton(
             onPressed: addReceivingDetails,
-            child: const Text('Add receiving number'))
+            child: Text(t('Add receiving number')))
       else
         FilledButton(
             onPressed: busy || quote == null || blockers.isNotEmpty
                 ? null
                 : closeAndSend,
-            child: Text(busy ? 'Sending…' : 'Close and send')),
+            child: Text(busy ? t('Sending…') : t('Close and send'))),
     ];
   }
 
@@ -564,25 +587,27 @@ class _SettlementScreenState extends State<SettlementScreen> {
           Icons.check_circle_outline,
           SendohColors.green,
           receiver['is_you'] == true
-              ? 'Delivered to ${walletName(s['method'])}'
-              : 'Delivered to ${receiver['name']}',
-          '${widget.collectionName} is settled.'
+              ? t('Delivered to {method}', {'method': walletName(s['method'])})
+              : t('Delivered to {name}', {'name': receiver['name']}),
+          t('{collectionName} is settled.',
+              {'collectionName': widget.collectionName})
         ),
       'REVIEW' => (
           Icons.info_outline,
           SendohColors.red,
-          'Payout needs attention',
+          t('Payout needs attention'),
           s['review_reason'] == 'PAYOUT_FAILED_FUNDS_RETAINED'
-              ? 'MeSomb couldn’t deliver to this number. The money is held safely and nobody is charged again.'
-              : 'We’re checking this payout with MeSomb. Nothing will be sent twice.'
+              ? t('MeSomb couldn’t deliver to this number. The money is held safely and nobody is charged again.')
+              : t('We’re checking this payout with MeSomb. Nothing will be sent twice.')
         ),
       _ => (
           Icons.schedule,
           SendohColors.teal,
           receiver['is_you'] == true
-              ? 'Sending to ${walletName(s['method'])}'
-              : 'Sending to ${receiver['name']}',
-          '${widget.collectionName} is closed. We’ll notify you when it arrives.'
+              ? t('Sending to {method}', {'method': walletName(s['method'])})
+              : t('Sending to {name}', {'name': receiver['name']}),
+          t('{collectionName} is closed. We’ll notify you when it arrives.',
+              {'collectionName': widget.collectionName})
         ),
     };
     final amounts =
@@ -598,8 +623,9 @@ class _SettlementScreenState extends State<SettlementScreen> {
           Expanded(
               child: Text(
                   s['round'] != null && overview?['recurring'] == true
-                      ? 'Round ${s['round']} closed · no new contributions'
-                      : 'Collection closed · no new contributions',
+                      ? t('Round {round} closed · no new contributions',
+                          {'round': s['round']})
+                      : t('Collection closed · no new contributions'),
                   style: SendohTextStyles.bodyMedium)),
         ]),
         const SizedBox(height: 8),
@@ -611,10 +637,10 @@ class _SettlementScreenState extends State<SettlementScreen> {
           Expanded(
               child: Text(
                   delivered
-                      ? 'Payout delivered'
+                      ? t('Payout delivered')
                       : state == 'REVIEW'
-                          ? 'Payout needs attention'
-                          : 'Payout sending',
+                          ? t('Payout needs attention')
+                          : t('Payout sending'),
                   style: SendohTextStyles.bodyMedium)),
         ]),
       ])),
@@ -630,7 +656,7 @@ class _SettlementScreenState extends State<SettlementScreen> {
               fontSize: 32,
               fontWeight: FontWeight.w800,
               color: SendohColors.teal)),
-      Text('Number ending in $last3',
+      Text(t('Number ending in {last3}', {'last3': last3}),
           textAlign: TextAlign.center, style: SendohTextStyles.bodyMedium),
       const SizedBox(height: 20),
       Text(body,
@@ -638,26 +664,29 @@ class _SettlementScreenState extends State<SettlementScreen> {
       const SizedBox(height: 16),
       if (amounts.isNotEmpty) ...[
         SummaryRow(
-            'Group total',
+            t('Group total'),
             coordinationMoney(amounts['raised_total'] ??
                 ((amounts['mobile_money'] as num? ?? 0) +
                     (amounts['cash'] as num? ?? 0)))),
-        SummaryRow(
-            'Cash already with organizer', coordinationMoney(amounts['cash'])),
-        SummaryRow('Confirmed Mobile Money',
+        SummaryRow(t('Cash already with organizer'),
+            coordinationMoney(amounts['cash'])),
+        SummaryRow(t('Confirmed Mobile Money'),
             coordinationMoney(amounts['mobile_money'])),
-        SummaryRow('Fees', '− ${coordinationMoney(amounts['fees_total'])}'),
-        SummaryRow('Payout', amount, bold: true),
+        SummaryRow(t('Fees'), '− ${coordinationMoney(amounts['fees_total'])}'),
+        SummaryRow(t('Payout'), amount, bold: true),
       ],
       Text(
-          'Reference: ${(s['reference'] as String).substring(0, 8).toUpperCase()}',
+          t('Reference: {reference}', {
+            'reference':
+                (s['reference'] as String).substring(0, 8).toUpperCase()
+          }),
           textAlign: TextAlign.center,
           style: SendohTextStyles.caption),
       const SizedBox(height: 28),
       // Deliberately no second Send button: an unresolved payout is only looked up.
       OutlinedButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Back to collection')),
+          child: Text(t('Back to collection'))),
     ];
   }
 }
@@ -699,7 +728,7 @@ class _MemberShareCardState extends State<MemberShareCard> {
   Widget build(BuildContext context) {
     final p = MemberPosition.fromJoined(widget.item);
     final c = Map<String, dynamic>.from(widget.item['collection'] as Map);
-    final organizer = c['organizer_name'] ?? 'the organizer';
+    final organizer = c['organizer_name'] ?? t('the organizer');
     final handle = c['organizer_handle'] as String?;
     final fulfilled = p.state == 'FULFILLED';
     final round = (c['round'] as num?)?.toInt() ?? 1;
@@ -708,18 +737,21 @@ class _MemberShareCardState extends State<MemberShareCard> {
     return SurfaceCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (showRound)
-        Text('Round $round · Your share', style: SendohTextStyles.caption),
+        Text(t('Round {round} · Your share', {'round': round}),
+            style: SendohTextStyles.caption),
       if (fulfilled)
         Row(children: [
           const Icon(Icons.check_circle, color: SendohColors.teal, size: 22),
           const SizedBox(width: 8),
           Expanded(
-              child: Text('Your ${coordinationMoney(p.expected)} share is paid',
+              child: Text(
+                  t('Your {amount} share is paid',
+                      {'amount': coordinationMoney(p.expected)}),
                   style: SendohTextStyles.titleSmall
                       .copyWith(color: SendohColors.teal))),
         ])
       else
-        Text(p.expected == null ? 'Your contribution' : 'Your share',
+        Text(p.expected == null ? t('Your contribution') : t('Your share'),
             style: SendohTextStyles.caption),
       const SizedBox(height: 6),
       Text(coordinationMoney(p.paid),
@@ -728,21 +760,26 @@ class _MemberShareCardState extends State<MemberShareCard> {
               fontWeight: FontWeight.w800,
               color: SendohColors.teal)),
       if (!fulfilled && p.remaining != null && p.remaining! > 0)
-        Text('${coordinationMoney(p.remaining)} left',
+        Text(t('{amount} left', {'amount': coordinationMoney(p.remaining)}),
             style: SendohTextStyles.bodyMedium),
       const SizedBox(height: 8),
-      SummaryRow('Mobile Money', coordinationMoney(p.confirmed)),
+      SummaryRow(t('Mobile Money'), coordinationMoney(p.confirmed)),
       if (p.pending > 0)
-        SummaryRow('Awaiting confirmation', coordinationMoney(p.pending)),
+        SummaryRow(t('Awaiting confirmation'), coordinationMoney(p.pending)),
       if (p.cash > 0) ...[
-        SummaryRow('Cash recorded by $organizer', coordinationMoney(p.cash)),
+        SummaryRow(t('Cash recorded by {organizer}', {'organizer': organizer}),
+            coordinationMoney(p.cash)),
         Text(
-            'Cash entry wrong? Contact $organizer${handle == null ? '' : ' ($handle)'}.',
+            t('Cash entry wrong? Contact {organizer}{value}.', {
+              'organizer': organizer,
+              'value': handle == null ? '' : ' ($handle)'
+            }),
             style: SendohTextStyles.caption),
         TextButton(
             onPressed: busy || flagged ? null : flag,
-            child: Text(
-                flagged ? '$organizer has been told' : 'Flag a cash error')),
+            child: Text(flagged
+                ? t('{organizer} has been told', {'organizer': organizer})
+                : t('Flag a cash error'))),
       ],
       // An earlier round stays paid: a new share never hides it.
       if (previous != null)
@@ -753,7 +790,9 @@ class _MemberShareCardState extends State<MemberShareCard> {
       if (c['status'] == 'SETTLED')
         Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('Settlement delivered to $organizer.',
+            child: Text(
+                t('Settlement delivered to {organizer}.',
+                    {'organizer': organizer}),
                 style: SendohTextStyles.bodyMedium)),
     ]));
   }
@@ -765,10 +804,13 @@ String previousRoundLine(Map previous) {
   final paid = ((previous['confirmed'] as num?) ?? 0) +
       ((previous['cash'] as num?) ?? 0);
   return switch (previous['state']) {
-    'FULFILLED' || 'CONTRIBUTED' => 'Round $round · Paid',
-    'PARTIAL' =>
-      'Round $round · ${coordinationMoney(paid)} of ${coordinationMoney(previous['expected'])}',
-    _ => 'Round $round · Not paid',
+    'FULFILLED' || 'CONTRIBUTED' => t('Round {round} · Paid', {'round': round}),
+    'PARTIAL' => t('Round {round} · {amount} of {amount2}', {
+        'round': round,
+        'amount': coordinationMoney(paid),
+        'amount2': coordinationMoney(previous['expected'])
+      }),
+    _ => t('Round {round} · Not paid', {'round': round}),
   };
 }
 
@@ -807,7 +849,7 @@ class _NextRoundScreenState extends State<NextRoundScreen> {
   Future<void> open() async {
     final amount = int.tryParse(share.text.trim().replaceAll(',', ''));
     if (hasShare && (amount == null || amount <= 0)) {
-      setState(() => error = 'Enter each member’s share in whole FCFA.');
+      setState(() => error = t('Enter each member’s share in whole FCFA.'));
       return;
     }
     setState(() {
@@ -841,9 +883,9 @@ class _NextRoundScreenState extends State<NextRoundScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: Text('Round $next')),
+      appBar: AppBar(title: Text(t('Round {next}', {'next': next}))),
       body: ListView(padding: const EdgeInsets.all(22), children: [
-        Text('${members.length} members carry forward',
+        Text(t('{length} members carry forward', {'length': members.length}),
             style: SendohTextStyles.titleSmall),
         Text(members.map((m) => m['name']).join(', '),
             style: SendohTextStyles.caption),
@@ -853,15 +895,15 @@ class _NextRoundScreenState extends State<NextRoundScreen> {
               controller: share,
               enabled: !busy,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                  labelText: 'Each member’s share', suffixText: 'FCFA')),
+              decoration: InputDecoration(
+                  labelText: t('Each member’s share'), suffixText: 'FCFA')),
         const SizedBox(height: 16),
-        const Text('Who receives this round', style: SendohTextStyles.caption),
+        Text(t('Who receives this round'), style: SendohTextStyles.caption),
         DropdownButton<String>(
             isExpanded: true,
             value: receiver,
             items: [
-              const DropdownMenuItem(value: '', child: Text('You')),
+              DropdownMenuItem(value: '', child: Text(t('You'))),
               ...members.where((m) => m['user_id'] != null).map((m) =>
                   DropdownMenuItem(
                       value: m['id'] as String,
@@ -871,9 +913,9 @@ class _NextRoundScreenState extends State<NextRoundScreen> {
         const SizedBox(height: 8),
         ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Due date'),
+            title: Text(t('Due date')),
             subtitle: Text(due == null
-                ? 'No due date'
+                ? t('No due date')
                 : '${due!.day}/${due!.month}/${due!.year}'),
             trailing: const Icon(Icons.calendar_today_outlined),
             onTap: busy
@@ -891,7 +933,8 @@ class _NextRoundScreenState extends State<NextRoundScreen> {
                   }),
         const SizedBox(height: 8),
         Text(
-            'Everyone starts Round $next at 0 FCFA. Round ${next - 1} records and receipts stay as they are.',
+            t('Everyone starts Round {next} at 0 FCFA. Round {value} records and receipts stay as they are.',
+                {'next': next, 'value': next - 1}),
             style: SendohTextStyles.bodyMedium),
         if (error != null)
           Padding(
@@ -901,6 +944,7 @@ class _NextRoundScreenState extends State<NextRoundScreen> {
         const SizedBox(height: 20),
         FilledButton(
             onPressed: busy ? null : open,
-            child: Text(busy ? 'Opening…' : 'Open Round $next')),
+            child: Text(
+                busy ? t('Opening…') : t('Open Round {next}', {'next': next}))),
       ]));
 }

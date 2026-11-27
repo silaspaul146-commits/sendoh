@@ -2,7 +2,7 @@
     <!-- Near2Pay scans Sendoh QR codes; code entry works without it. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <application
-        android:label="sendoh_organizer"
+        android:label="Sendoh"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

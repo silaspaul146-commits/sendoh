@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'coordination.dart';
 import 'contribution_checkout.dart';
 import 'dart:convert';
@@ -8,17 +9,15 @@ import 'design.dart';
 import 'settlement.dart' show MemberShareCard;
 
 String invitationLabel(dynamic value) => switch (value) {
-      'PENDING' => 'Invited',
-      'ACCEPTED' => 'Joined',
-      'DECLINED' => 'Declined',
-      'CANCELLED' => 'Cancelled',
-      'EXPIRED' => 'Expired',
-      _ => 'Name only · unverified',
+      'PENDING' => t('Invited'),
+      'ACCEPTED' => t('Joined'),
+      'DECLINED' => t('Declined'),
+      'CANCELLED' => t('Cancelled'),
+      'EXPIRED' => t('Expired'),
+      _ => t('Name only · unverified'),
     };
 
-String _amount(dynamic value) => value == null
-    ? 'Any amount'
-    : '${value.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
+String _amount(dynamic value) => value == null ? t('Any amount') : fcfa(value);
 
 class InvitePerson extends StatefulWidget {
   const InvitePerson(
@@ -113,7 +112,7 @@ class _InvitePersonState extends State<InvitePerson> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Invite someone')),
+        appBar: AppBar(title: Text(t('Invite someone'))),
         body: Form(
             key: form,
             child: ListView(padding: const EdgeInsets.all(22), children: [
@@ -123,19 +122,19 @@ class _InvitePersonState extends State<InvitePerson> {
                   style: const TextStyle(
                       fontSize: 22, fontWeight: FontWeight.w600)),
               const SizedBox(height: 10),
-              const Text(
-                  'Choose the person by their exact Sendoh username or phone number. They decide whether to join.',
+              Text(
+                  t('Choose the person by their exact Sendoh username or phone number. They decide whether to join.'),
                   style: TextStyle(height: 1.6, color: SendohColors.secondary)),
               if (widget.participant != null) ...[
                 const SizedBox(height: 16),
                 SurfaceCard(
-                    child: Text(
-                        'Link the existing entry: ${widget.participant!['name']}')),
+                    child: Text(t('Link the existing entry: {name}',
+                        {'name': widget.participant!['name']}))),
               ],
               const SizedBox(height: 20),
               Wrap(spacing: 10, children: [
                 ChoiceChip(
-                    label: const Text('Username'),
+                    label: Text(t('Username')),
                     selected: !phone,
                     onSelected: busy
                         ? null
@@ -145,7 +144,7 @@ class _InvitePersonState extends State<InvitePerson> {
                               error = null;
                             })),
                 ChoiceChip(
-                    label: const Text('Phone number'),
+                    label: Text(t('Phone number')),
                     selected: phone,
                     onSelected: busy
                         ? null
@@ -163,7 +162,8 @@ class _InvitePersonState extends State<InvitePerson> {
                   keyboardType:
                       phone ? TextInputType.phone : TextInputType.text,
                   decoration: InputDecoration(
-                      labelText: phone ? 'Phone number' : 'Sendoh username',
+                      labelText:
+                          phone ? t('Phone number') : t('Sendoh username'),
                       hintText: phone ? '+237 6XX XXX XXX' : '@username'),
                   validator: (_) => (phone
                               ? RegExp(r'^\+237[26][0-9]{8}$')
@@ -171,16 +171,16 @@ class _InvitePersonState extends State<InvitePerson> {
                           .hasMatch(normalizedIdentity())
                       ? null
                       : (phone
-                          ? 'Enter a valid Cameroon phone number.'
-                          : 'Enter a valid Sendoh username.')),
+                          ? t('Enter a valid Cameroon phone number.')
+                          : t('Enter a valid Sendoh username.'))),
               if (phone) ...[
                 const SizedBox(height: 16),
                 TextFormField(
                     controller: name,
                     enabled: !busy,
                     maxLength: 120,
-                    decoration: const InputDecoration(
-                        labelText: 'Name for your records (optional)')),
+                    decoration: InputDecoration(
+                        labelText: t('Name for your records (optional)'))),
               ],
               if (widget.collection['mode'] != 'ANY_AMOUNT') ...[
                 const SizedBox(height: 16),
@@ -188,20 +188,20 @@ class _InvitePersonState extends State<InvitePerson> {
                     controller: amount,
                     enabled: !busy,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText: 'Expected amount (FCFA)'),
+                    decoration:
+                        InputDecoration(labelText: t('Expected amount (FCFA)')),
                     validator: (v) => v == null ||
                             v.trim().isEmpty ||
                             (int.tryParse(v.trim()) != null &&
                                 int.parse(v.trim()) > 0)
                         ? null
-                        : 'Enter a positive whole amount.'),
+                        : t('Enter a positive whole amount.')),
               ],
               const SizedBox(height: 20),
-              const SurfaceCard(
+              SurfaceCard(
                   color: SendohColors.tealSoft,
                   child: Text(
-                      'The invitation appears in their Sendoh app. A new user must verify the invited phone number first. You can let them know on WhatsApp; push alerts can notify registered members when their device allows notifications.',
+                      t('The invitation appears in their Sendoh app. A new user must verify the invited phone number first. You can let them know on WhatsApp; push alerts can notify registered members when their device allows notifications.'),
                       style: TextStyle(fontSize: 13, height: 1.6))),
               if (error != null)
                 Padding(
@@ -211,7 +211,7 @@ class _InvitePersonState extends State<InvitePerson> {
               const SizedBox(height: 24),
               FilledButton(
                   onPressed: busy ? null : submit,
-                  child: Text(busy ? 'Inviting…' : 'Send invitation')),
+                  child: Text(busy ? t('Inviting…') : t('Send invitation'))),
             ])),
       );
 }
@@ -279,9 +279,9 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
   Widget build(BuildContext context) {
     final rows = showJoined ? joined : pending;
     return Scaffold(
-      appBar: AppBar(title: const Text('Your invitations'), actions: [
+      appBar: AppBar(title: Text(t('Your invitations')), actions: [
         IconButton(
-            tooltip: 'Refresh',
+            tooltip: t('Refresh'),
             onPressed: loading ? null : refresh,
             icon: const Icon(Icons.refresh)),
       ]),
@@ -291,22 +291,23 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(22),
               children: [
-                const Text('Together starts here.',
+                Text(t('Together starts here.'),
                     style:
                         TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                const Text(
-                    'Review who invited you and choose which collections to join.',
+                Text(t('Review who invited you and choose which collections to join.'),
                     style:
                         TextStyle(height: 1.6, color: SendohColors.secondary)),
                 const SizedBox(height: 20),
                 Wrap(spacing: 10, children: [
                   ChoiceChip(
-                      label: Text('Invitations (${pending.length})'),
+                      label: Text(t('Invitations ({length})',
+                          {'length': pending.length})),
                       selected: !showJoined,
                       onSelected: (_) => setState(() => showJoined = false)),
                   ChoiceChip(
-                      label: Text('Joined (${joined.length})'),
+                      label: Text(
+                          t('Joined ({length})', {'length': joined.length})),
                       selected: showJoined,
                       onSelected: (_) => setState(() => showJoined = true)),
                 ]),
@@ -314,16 +315,15 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                 if (loading) const LinearProgressIndicator(),
                 if (error != null) ...[
                   Text(error!, style: const TextStyle(color: SendohColors.red)),
-                  TextButton(
-                      onPressed: refresh, child: const Text('Try again')),
+                  TextButton(onPressed: refresh, child: Text(t('Try again'))),
                 ] else if (!loading && rows.isEmpty)
                   EmptyState(
                       title: showJoined
-                          ? 'No joined collections yet'
-                          : 'No invitations yet',
+                          ? t('No joined collections yet')
+                          : t('No invitations yet'),
                       message: showJoined
-                          ? 'Collections you accept will appear here.'
-                          : 'Open your group’s collection link or ask the organizer for a personal invitation.',
+                          ? t('Collections you accept will appear here.')
+                          : t('Open your group’s collection link or ask the organizer for a personal invitation.'),
                       icon: Icons.mail_outline),
                 if (!loading && error == null)
                   ...rows.map((raw) {
@@ -345,14 +345,15 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                                             fontWeight: FontWeight.w600))),
                               ]),
                               const SizedBox(height: 12),
-                              Text('Organized by ${c['organizer_name']}'),
-                              SummaryRow('Your expected amount',
+                              Text(t('Organized by {organizer_name}',
+                                  {'organizer_name': c['organizer_name']})),
+                              SummaryRow(t('Your expected amount'),
                                   _amount(item['expected_amount'])),
                               OutlinedButton(
                                   onPressed: () => open(item),
                                   child: Text(showJoined
-                                      ? 'View collection'
-                                      : 'Review invitation')),
+                                      ? t('View collection')
+                                      : t('Review invitation'))),
                             ])));
                   }),
               ])),
@@ -386,8 +387,8 @@ class _InvitationDetailState extends State<InvitationDetail> {
           result['id'] != widget.invitation['id'] ||
           result['collection'] is! Map ||
           result['invitation_state'] is! String) {
-        throw const FormatException(
-            'Could not refresh this collection. Please reopen it.');
+        throw FormatException(
+            t('Could not refresh this collection. Please reopen it.'));
       }
       if (mounted) {
         setState(() {
@@ -470,7 +471,8 @@ class _InvitationDetailState extends State<InvitationDetail> {
     final pending = item['invitation_state'] == 'PENDING';
     return Scaffold(
       appBar: AppBar(
-          title: Text(pending ? 'Collection invitation' : 'Joined collection')),
+          title: Text(
+              pending ? t('Collection invitation') : t('Joined collection'))),
       body: ListView(padding: const EdgeInsets.all(22), children: [
         const Center(child: CollectionSymbol()),
         const SizedBox(height: 20),
@@ -478,7 +480,9 @@ class _InvitationDetailState extends State<InvitationDetail> {
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
-        Text('Organized by ${c['organizer_name']}',
+        Text(
+            t('Organized by {organizer_name}',
+                {'organizer_name': c['organizer_name']}),
             textAlign: TextAlign.center),
         const SizedBox(height: 20),
         Center(
@@ -498,20 +502,25 @@ class _InvitationDetailState extends State<InvitationDetail> {
         ],
         SurfaceCard(
             child: Column(children: [
-          SummaryRow(
-              'Your expected contribution', _amount(item['expected_amount'])),
-          SummaryRow('Deadline', displayDate(c['deadline_at'])),
+          SummaryRow(t('Your expected contribution'),
+              _amount(item['expected_amount'])),
+          SummaryRow(t('Deadline'), displayDate(c['deadline_at'])),
         ])),
         const SizedBox(height: 20),
         Text(
             pending
-                ? 'Accepting adds your verified Sendoh profile to this collection. It does not make a payment.'
-                : 'You’re part of this collection. Follow the group’s progress and keep your contribution receipts here. No real money moves.',
+                ? t('Accepting adds your verified Sendoh profile to this collection. It does not make a payment.')
+                : t('You’re part of this collection. Follow the group’s progress and keep your contribution receipts here. No real money moves.'),
             style: const TextStyle(height: 1.6, color: SendohColors.secondary)),
         if (pending && item['expires_at'] != null) ...[
           const SizedBox(height: 10),
           Text(
-              'Invitation expires ${displayDate(DateTime.fromMillisecondsSinceEpoch((item['expires_at'] as int) * 1000, isUtc: true).toIso8601String())}',
+              t('Invitation expires {expires_at}', {
+                'expires_at': displayDate(DateTime.fromMillisecondsSinceEpoch(
+                        (item['expires_at'] as int) * 1000,
+                        isUtc: true)
+                    .toIso8601String())
+              }),
               style: const TextStyle(fontSize: 12, color: SendohColors.muted)),
         ],
         if (error != null)
@@ -523,20 +532,20 @@ class _InvitationDetailState extends State<InvitationDetail> {
         if (item['invitation_state'] == 'ACCEPTED') ...[
           if (c['status'] == 'ACTIVE')
             FilledButton(
-                onPressed: () => payments(), child: const Text('Contribute')),
+                onPressed: () => payments(), child: Text(t('Contribute'))),
           const SizedBox(height: 12),
           OutlinedButton(
               onPressed: () => payments(history: true),
-              child: const Text('My contributions and receipts')),
+              child: Text(t('My contributions and receipts'))),
         ],
         if (pending) ...[
           FilledButton(
               onPressed: busy ? null : () => respond('accept'),
-              child: Text(busy ? 'Updating…' : 'Accept invitation')),
+              child: Text(busy ? t('Updating…') : t('Accept invitation'))),
           const SizedBox(height: 12),
           OutlinedButton(
               onPressed: busy ? null : () => respond('decline'),
-              child: const Text('Decline')),
+              child: Text(t('Decline'))),
         ],
       ]),
     );

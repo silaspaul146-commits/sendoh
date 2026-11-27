@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:math';
 import 'dart:async';
 import 'dart:convert';
@@ -190,7 +191,7 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
 
   Future<void> reviewQuote() => run(() async {
         if (!RegExp(r'^(?:\+237)?6[0-9]{8}$').hasMatch(phone.text.trim())) {
-          throw const FormatException('Enter a valid Mobile Money number.');
+          throw FormatException(t('Enter a valid Mobile Money number.'));
         }
         final q = await fetchQuote();
         if (mounted) {
@@ -221,7 +222,7 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
   void review() {
     final n = int.tryParse(amount.text);
     if (n == null || n <= 0 || n > 1000000000) {
-      setState(() => error = 'Enter a positive whole FCFA amount.');
+      setState(() => error = t('Enter a positive whole FCFA amount.'));
       return;
     }
     setState(() {
@@ -235,7 +236,7 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
           return;
         }
         if (!RegExp(r'^(?:\+237)?6[0-9]{8}$').hasMatch(phone.text.trim())) {
-          throw const FormatException('Enter a valid Mobile Money number.');
+          throw FormatException(t('Enter a valid Mobile Money number.'));
         }
         submission ??= {
           'collection_id': widget.collectionId,
@@ -306,16 +307,16 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
     return Scaffold(
       appBar: AppBar(
           title: Text([
-        'Contribute',
-        'Confirm contribution',
-        'Choose payment method',
-        'Contribution status',
-        'Payment result',
-        'Contribution record'
+        t('Contribute'),
+        t('Confirm contribution'),
+        t('Choose payment method'),
+        t('Contribution status'),
+        t('Payment result'),
+        t('Contribution record')
       ][step])),
       body: ListView(padding: const EdgeInsets.all(24), children: [
         if (step < 4) ...[
-          Text('Step ${step + 1} of 4',
+          Text(t('Step {value} of 4', {'value': step + 1}),
               style:
                   const TextStyle(fontSize: 12, color: SendohColors.secondary)),
           const SizedBox(height: 8),
@@ -325,17 +326,18 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
               backgroundColor: SendohColors.tealSoft),
           const SizedBox(height: 16),
         ],
-        const Text('Sandbox · no real money moves',
+        Text(t('Sandbox · no real money moves'),
             style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
         const SizedBox(height: 20),
         Text(payment?['collection_name'] ?? widget.collection,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        Text('Contributing as ${payment?['payer_name'] ?? widget.name}'),
+        Text(t('Contributing as {payer_name}',
+            {'payer_name': payment?['payer_name'] ?? widget.name})),
         const SizedBox(height: 24),
         if (busy) const LinearProgressIndicator(),
         if (!ready && !busy)
-          TextButton(onPressed: restore, child: const Text('Reconnect')),
+          TextButton(onPressed: restore, child: Text(t('Reconnect'))),
         if (error != null)
           Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -346,7 +348,7 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
               controller: amount,
               enabled: !busy,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Amount (FCFA)')),
+              decoration: InputDecoration(labelText: t('Amount (FCFA)'))),
           const SizedBox(height: 12),
           Wrap(
               spacing: 8,
@@ -367,10 +369,10 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
           const SizedBox(height: 16),
           FilledButton(
               onPressed: busy || !ready ? null : review,
-              child: const Text('Continue')),
+              child: Text(t('Continue'))),
         ],
         if (step == 1) ...[
-          SummaryRow('Your contribution',
+          SummaryRow(t('Your contribution'),
               coordinationMoney(int.tryParse(amount.text))),
           const SizedBox(height: 12),
           ...['MTN', 'ORANGE'].map((value) => Padding(
@@ -382,40 +384,41 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                   icon: Icon(method == value
                       ? Icons.check_circle
                       : Icons.circle_outlined),
-                  label: Text(
-                      value == 'MTN' ? 'MTN Mobile Money' : 'Orange Money')))),
+                  label: Text(value == 'MTN'
+                      ? t('MTN Mobile Money')
+                      : t('Orange Money'))))),
           TextField(
               controller: phone,
               enabled: !busy && submission == null,
               keyboardType: TextInputType.phone,
-              decoration:
-                  const InputDecoration(labelText: 'Mobile Money number')),
+              decoration: InputDecoration(labelText: t('Mobile Money number'))),
           const SizedBox(height: 16),
           FilledButton(
               onPressed: busy || !ready ? null : reviewQuote,
-              child: const Text('Review contribution')),
+              child: Text(t('Review contribution'))),
         ],
         if (step == 2) ...[
           if (quote != null) ...[
             Text(coordinationMoney(quote!['total']),
                 style: SendohTextStyles.displayLarge),
             const SizedBox(height: 8),
-            SummaryRow('Credited to',
+            SummaryRow(t('Credited to'),
                 '${quote!['credited_to']['name']} · ${quote!['credited_to']['collection']}'),
-            SummaryRow('Organizer', '${quote!['credited_to']['organizer']}'),
-            SummaryRow('Pay with',
+            SummaryRow(t('Organizer'), '${quote!['credited_to']['organizer']}'),
+            SummaryRow(t('Pay with'),
                 '${quote!['method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'} ${quote!['payer_masked']}'),
             SummaryRow(
-                'Contribution', coordinationMoney(quote!['contribution'])),
-            SummaryRow('Fees', coordinationMoney(quote!['payer_fees'])),
-            SummaryRow('Total to approve', coordinationMoney(quote!['total']),
+                t('Contribution'), coordinationMoney(quote!['contribution'])),
+            SummaryRow(t('Fees'), coordinationMoney(quote!['payer_fees'])),
+            SummaryRow(
+                t('Total to approve'), coordinationMoney(quote!['total']),
                 bold: true),
             if (quote!['fees_from'] == 'COLLECTION_PROCEEDS')
-              const Text(
-                  'MeSomb’s processing fee is taken from the collection, not added to your total.',
+              Text(
+                  t('MeSomb’s processing fee is taken from the collection, not added to your total.'),
                   style: SendohTextStyles.caption),
           ] else
-            const Text('Getting your payment details…'),
+            Text(t('Getting your payment details…')),
           const SizedBox(height: 16),
           FilledButton(
               onPressed: busy || !ready || (quote == null && submission == null)
@@ -425,10 +428,11 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                       schedule();
                     },
               child: Text(busy
-                  ? 'Saving payment…'
+                  ? t('Saving payment…')
                   : submission != null
-                      ? 'Recover contribution'
-                      : 'Approve ${coordinationMoney(quote?['total'])}')),
+                      ? t('Recover contribution')
+                      : t('Approve {amount}',
+                          {'amount': coordinationMoney(quote?['total'])}))),
         ],
         if (step == 3) ...[
           // The backend decides between approval and confirmation; never "failed" on a timeout.
@@ -436,30 +440,31 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
               liveRegion: true,
               child: Text(
                   payment!['phase'] == 'AWAITING_APPROVAL'
-                      ? 'Approve on your phone'
-                      : 'Confirming your payment',
+                      ? t('Approve on your phone')
+                      : t('Confirming your payment'),
                   style: SendohTextStyles.headingMedium)),
           const SizedBox(height: 8),
-          SummaryRow('Amount', coordinationMoney(payment!['amount'])),
+          SummaryRow(t('Amount'), coordinationMoney(payment!['amount'])),
           SummaryRow(
-              'Using',
+              t('Using'),
               '${payment!['method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'} ${payment!['payer_masked'] ?? ''}'
                   .trim()),
           Text(payment!['phase'] == 'AWAITING_APPROVAL'
-              ? 'Check your phone for the Mobile Money prompt and approve it there.'
-              : 'We’re checking with Mobile Money. Please don’t pay again. You can leave and come back; this payment will be here.'),
+              ? t('Check your phone for the Mobile Money prompt and approve it there.')
+              : t('We’re checking with Mobile Money. Please don’t pay again. You can leave and come back; this payment will be here.')),
           const SizedBox(height: 24),
           TextButton(
               onPressed: busy ? null : reload,
-              child: const Text('Refresh payment status')),
+              child: Text(t('Refresh payment status'))),
         ],
         if (step == 4) ...[
           Icon(success ? Icons.check_circle : Icons.info_outline,
               color: SendohColors.teal, size: 64),
           Text(
               success
-                  ? 'Contribution confirmed'
-                  : 'Contribution ${payment!['status'].toString().toLowerCase()}',
+                  ? t('Contribution confirmed')
+                  : t('Contribution {status}',
+                      {'status': payment!['status'].toString().toLowerCase()}),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 22)),
           const SizedBox(height: 16),
@@ -469,49 +474,53 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                 style: SendohTextStyles.titleSmall
                     .copyWith(color: SendohColors.teal)),
           Text(success
-              ? 'Your contribution counts toward ${payment?['collection_name'] ?? widget.collection}.'
-              : 'This attempt has not added to the collection total. You can try again.'),
+              ? t('Your contribution counts toward {collection_name}.', {
+                  'collection_name':
+                      payment?['collection_name'] ?? widget.collection
+                })
+              : t('This attempt has not added to the collection total. You can try again.')),
           FilledButton(
               onPressed: busy
                   ? null
                   : success
                       ? () => reload(receipt: true)
                       : restart,
-              child: Text(success ? 'View record' : 'Start a new attempt')),
+              child:
+                  Text(success ? t('View record') : t('Start a new attempt'))),
         ],
         if (step == 5) ...[
-          const Text('Sandbox contribution record',
+          Text(t('Sandbox contribution record'),
               style: TextStyle(fontWeight: FontWeight.bold)),
-          SummaryRow('Reference', payment!['reference']),
-          SummaryRow('Amount', coordinationMoney(payment!['amount'])),
+          SummaryRow(t('Reference'), payment!['reference']),
+          SummaryRow(t('Amount'), coordinationMoney(payment!['amount'])),
           SummaryRow(
-              'Method',
+              t('Method'),
               payment!['method'] == 'MTN'
-                  ? 'MTN Mobile Money'
-                  : 'Orange Money'),
+                  ? t('MTN Mobile Money')
+                  : t('Orange Money')),
           SummaryRow(
-              'Recorded',
+              t('Recorded'),
               DateTime.fromMillisecondsSinceEpoch(((payment!['updated_at'] ??
                           payment!['completed_at']) as int) *
                       1000)
                   .toLocal()
                   .toString()),
           if ((payment!['note'] as String? ?? '').isNotEmpty)
-            SummaryRow('Note', payment!['note']),
-          const Text('Sandbox record · Not proof of live payment.'),
+            SummaryRow(t('Note'), payment!['note']),
+          Text(t('Sandbox record · Not proof of live payment.')),
         ],
         if (step >= 4 && success)
           TextButton(
               onPressed: busy ? null : restart,
-              child: const Text('Make another contribution')),
+              child: Text(t('Make another contribution'))),
         if (step >= 3)
           OutlinedButton(
               onPressed: busy ? null : () => Navigator.pop(context),
-              child: const Text('View collection')),
+              child: Text(t('View collection'))),
         if (step > 0 && step < 3 && submission == null)
           TextButton(
               onPressed: busy ? null : () => setState(() => step--),
-              child: const Text('Back')),
+              child: Text(t('Back'))),
       ]),
     );
   }
@@ -569,7 +578,7 @@ class _ContributionHistoryState extends State<ContributionHistory> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => error = 'Couldn’t load contributions. Try again.');
+        setState(() => error = t('Couldn’t load contributions. Try again.'));
       }
     } finally {
       if (mounted) {
@@ -590,26 +599,26 @@ class _ContributionHistoryState extends State<ContributionHistory> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                         SummaryRow(
-                            'Status', contributionStatusLabel(p['status'])),
-                        SummaryRow('Method', methodLabel(p['method'])),
-                        SummaryRow('Reference', p['reference']),
+                            t('Status'), contributionStatusLabel(p['status'])),
+                        SummaryRow(t('Method'), methodLabel(p['method'])),
+                        SummaryRow(t('Reference'), p['reference']),
                         const SizedBox(height: 8),
-                        const Text('Sandbox record · no real money moved.',
+                        Text(t('Sandbox record · no real money moved.'),
                             style: TextStyle(
                                 fontSize: 12, color: SendohColors.secondary)),
                       ])),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'))
+                        child: Text(t('Close')))
                   ]));
     } else {
       await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => ContributionCheckout(
               api: widget.api,
               collectionId: widget.collectionId,
-              collection: p['collection_name'] ?? 'Collection',
-              name: p['payer_name'] ?? 'your verified profile',
+              collection: p['collection_name'] ?? t('Collection'),
+              name: p['payer_name'] ?? t('your verified profile'),
               existing: p)));
     }
     if (mounted) {
@@ -619,9 +628,9 @@ class _ContributionHistoryState extends State<ContributionHistory> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Contributions'), actions: [
+        appBar: AppBar(title: Text(t('Contributions')), actions: [
           IconButton(
-              tooltip: 'Refresh',
+              tooltip: t('Refresh'),
               onPressed: busy ? null : () => load(),
               icon: const Icon(Icons.refresh))
         ]),
@@ -631,7 +640,7 @@ class _ContributionHistoryState extends State<ContributionHistory> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(22),
                 children: [
-                  const Text('Sandbox · no real money moves',
+                  Text(t('Sandbox · no real money moves'),
                       style: TextStyle(
                           fontSize: 12, color: SendohColors.secondary)),
                   const SizedBox(height: 8),
@@ -640,10 +649,10 @@ class _ContributionHistoryState extends State<ContributionHistory> {
                     Text(error!),
                     TextButton(
                         onPressed: busy ? null : () => load(),
-                        child: const Text('Retry'))
+                        child: Text(t('Retry')))
                   ],
                   if (!busy && error == null && rows.isEmpty)
-                    const Text('No contributions yet.'),
+                    Text(t('No contributions yet.')),
                   ...rows.map((raw) {
                     final p = Map<String, dynamic>.from(raw);
                     return ListTile(
@@ -657,21 +666,21 @@ class _ContributionHistoryState extends State<ContributionHistory> {
                   if (cursor != null)
                     OutlinedButton(
                         onPressed: busy ? null : () => load(more: true),
-                        child: const Text('Load older contributions')),
+                        child: Text(t('Load older contributions'))),
                 ])),
       );
 }
 
 String contributionTitle(Map<String, dynamic> p) =>
-    '${p['payer_name'] ?? 'Contribution'} · ${coordinationMoney(p['amount'])}';
+    '${p['payer_name'] ?? t('Contribution')} · ${coordinationMoney(p['amount'])}';
 
 String contributionStatusLabel(Object? status) => switch (status) {
-      'PENDING' => 'Awaiting confirmation',
-      'SUCCEEDED' => 'Confirmed',
-      'FAILED' => 'Unsuccessful',
-      'REFUNDED' => 'Refunded',
-      _ => 'Unknown',
+      'PENDING' => t('Awaiting confirmation'),
+      'SUCCEEDED' => t('Confirmed'),
+      'FAILED' => t('Unsuccessful'),
+      'REFUNDED' => t('Refunded'),
+      _ => t('Unknown'),
     };
 
 String methodLabel(Object? method) =>
-    method == 'MTN' ? 'MTN Mobile Money' : 'Orange Money';
+    method == 'MTN' ? t('MTN Mobile Money') : t('Orange Money');
