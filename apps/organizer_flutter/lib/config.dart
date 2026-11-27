@@ -14,4 +14,7 @@ abstract final class SendohConfig {
     'WEB_URL',
     defaultValue: 'https://sendoh.vercel.app',
   );
+
+  /// True in the live build. Test-payment labels exist only on staging builds.
+  static const bool paymentsLive = bool.fromEnvironment('PAYMENTS_LIVE');
 }

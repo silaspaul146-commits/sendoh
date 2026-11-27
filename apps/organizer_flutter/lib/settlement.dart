@@ -5,6 +5,7 @@
 library;
 
 import 'i18n.dart';
+import 'config.dart';
 
 import 'dart:async';
 
@@ -471,9 +472,10 @@ class _SettlementScreenState extends State<SettlementScreen> {
                         child: Text(error!,
                             style: const TextStyle(color: SendohColors.red))),
                   const SizedBox(height: 16),
-                  Text(t('Sandbox · no real money moves'),
-                      textAlign: TextAlign.center,
-                      style: SendohTextStyles.caption),
+                  if (!SendohConfig.paymentsLive)
+                    Text(t('Sandbox · no real money moves'),
+                        textAlign: TextAlign.center,
+                        style: SendohTextStyles.caption),
                 ])));
   }
 

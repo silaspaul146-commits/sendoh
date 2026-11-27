@@ -510,7 +510,7 @@ class _InvitationDetailState extends State<InvitationDetail> {
         Text(
             pending
                 ? t('Accepting adds your verified Sendoh profile to this collection. It does not make a payment.')
-                : t('You’re part of this collection. Follow the group’s progress and keep your contribution receipts here. No real money moves.'),
+                : t('You’re part of this collection. Follow the group’s progress and keep your contribution receipts here.'),
             style: const TextStyle(height: 1.6, color: SendohColors.secondary)),
         if (pending && item['expires_at'] != null) ...[
           const SizedBox(height: 10),

@@ -98,7 +98,7 @@ void main() {
     expect(find.text('Accept invitation'), findsNothing);
     expect(find.text('Payment successful'), findsNothing);
     await tester.scrollUntilVisible(
-        find.textContaining('No real money moves.'), 150);
-    expect(find.textContaining('No real money moves.'), findsOneWidget);
+        find.textContaining('Follow the group’s progress'), 150);
+    expect(find.textContaining('Follow the group’s progress'), findsOneWidget);
   });
 }

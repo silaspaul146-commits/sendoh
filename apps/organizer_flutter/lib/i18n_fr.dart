@@ -247,8 +247,8 @@ const Map<String, String> frenchStrings = {
   'Create account': 'Créer un compte',
   'Create collection': 'Créer la collecte',
   'Create your profile': 'Créez votre profil',
-  'Creating a collection is free. Participant names stay private. Payments are not available yet.':
-      'Créer une collecte est gratuit. Les noms des participants restent privés. Les paiements ne sont pas encore disponibles.',
+  'Creating a collection is free. Participant names stay private.':
+      'Créer une collecte est gratuit. Les noms des participants restent privés.',
   'Creating…': 'Création…',
   'Credited to': 'Crédité à',
   'Deadline': 'Date limite',
@@ -1102,8 +1102,8 @@ const Map<String, String> frenchStrings = {
   'You’ll see who it is before anything else happens. Scanning never sends money.':
       'Vous verrez de qui il s’agit avant toute chose. Scanner n’envoie jamais d’argent.',
   'You’re all caught up': 'Vous êtes à jour',
-  'You’re part of this collection. Follow the group’s progress and keep your contribution receipts here. No real money moves.':
-      'Vous faites partie de cette collecte. Suivez la progression du groupe et gardez vos reçus ici. Aucun argent réel ne circule.',
+  'You’re part of this collection. Follow the group’s progress and keep your contribution receipts here.':
+      'Vous faites partie de cette collecte. Suivez la progression du groupe et gardez vos reçus ici.',
   'collected · No target': 'collectés · Pas d’objectif',
   'collected · Sandbox': 'collectés · Test',
   'e.g. Department Activity': 'ex. : Activité du département',

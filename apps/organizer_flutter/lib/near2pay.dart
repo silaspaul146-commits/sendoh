@@ -6,6 +6,7 @@
 library;
 
 import 'i18n.dart';
+import 'config.dart';
 
 import 'dart:async';
 
@@ -391,8 +392,9 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
         Text(note['title'] as String? ?? '',
             textAlign: TextAlign.center, style: SendohTextStyles.bodyMedium),
       const SizedBox(height: 8),
-      Text(t('Sandbox · no real money moves'),
-          textAlign: TextAlign.center, style: SendohTextStyles.caption),
+      if (!SendohConfig.paymentsLive)
+        Text(t('Sandbox · no real money moves'),
+            textAlign: TextAlign.center, style: SendohTextStyles.caption),
     ];
   }
 }

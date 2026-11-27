@@ -1,4 +1,5 @@
 import 'i18n.dart';
+import 'config.dart';
 import 'dart:math';
 import 'dart:async';
 import 'dart:convert';
@@ -326,8 +327,9 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
               backgroundColor: SendohColors.tealSoft),
           const SizedBox(height: 16),
         ],
-        Text(t('Sandbox · no real money moves'),
-            style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
+        if (!SendohConfig.paymentsLive)
+          Text(t('Sandbox · no real money moves'),
+              style: TextStyle(fontSize: 12, color: SendohColors.secondary)),
         const SizedBox(height: 20),
         Text(payment?['collection_name'] ?? widget.collection,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
@@ -507,7 +509,8 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
                   .toString()),
           if ((payment!['note'] as String? ?? '').isNotEmpty)
             SummaryRow(t('Note'), payment!['note']),
-          Text(t('Sandbox record · Not proof of live payment.')),
+          if (!SendohConfig.paymentsLive)
+            Text(t('Sandbox record · Not proof of live payment.')),
         ],
         if (step >= 4 && success)
           TextButton(
@@ -640,9 +643,10 @@ class _ContributionHistoryState extends State<ContributionHistory> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(22),
                 children: [
-                  Text(t('Sandbox · no real money moves'),
-                      style: TextStyle(
-                          fontSize: 12, color: SendohColors.secondary)),
+                  if (!SendohConfig.paymentsLive)
+                    Text(t('Sandbox · no real money moves'),
+                        style: TextStyle(
+                            fontSize: 12, color: SendohColors.secondary)),
                   const SizedBox(height: 8),
                   if (busy) const LinearProgressIndicator(),
                   if (error != null) ...[
