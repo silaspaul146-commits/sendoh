@@ -36,7 +36,10 @@ def test_create_replay_and_private_public_views(client):
     assert public['target_amount'] is None
     assert client.get('/api/v1/collections/'+data['id'],headers=headers('bob')).status_code==404
     assert client.get('/api/v1/collections/'+data['id']).status_code==401
-    assert len(client.get('/api/v1/me/activity',headers=headers()).json())==1
+    activity=client.get('/api/v1/me/activity',headers=headers()).json()
+    assert len(activity)==1
+    # Activity names its collection, so the app can show it under each line.
+    assert activity[0]['collection_name']==data['name']
 
 def test_conflicting_key_is_rejected(client):
     client.post('/api/v1/collections',json={'name':'A'},headers=headers())

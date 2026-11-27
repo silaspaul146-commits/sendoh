@@ -322,368 +322,368 @@ class _OnboardingState extends State<Onboarding> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) => (restoring || hasSavedSession) &&
-          step == 0
-      ? Scaffold(
-          body: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SendohBrand(vertical: true),
-                    const SizedBox(height: 24),
-                    Text(
-                      t('Welcome back'),
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
+  bool get usernameValid => RegExp(r'^[a-z][a-z0-9_]{2,23}$')
+      .hasMatch(username.text.trim().toLowerCase());
+
+  bool get profileReady =>
+      name.text.trim().isNotEmpty && usernameValid && oldEnough;
+
+  /// +237 6XX XX XX XX, for reading back the number a code went to.
+  String get prettyPhone {
+    final d = phone.text.replaceAll(RegExp(r'\D'), '');
+    if (d.length != 9) return phoneNumber;
+    return '+237 ${d.substring(0, 3)} ${d.substring(3, 5)} '
+        '${d.substring(5, 7)} ${d.substring(7)}';
+  }
+
+  void back() => setState(() {
+        step = step == 3 ? 0 : step - 1;
+        testCode = null;
+        error = null;
+      });
+
+  Widget welcomeBack() => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SendohBrand(vertical: true),
+                  const SizedBox(height: 24),
+                  Text(
+                    t('Welcome back'),
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    restoring
+                        ? t('Opening your account…')
+                        : (error ?? t('Unlock to continue where you left off.')),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  if (restoring)
+                    const CircularProgressIndicator()
+                  else
+                    FilledButton(
+                      onPressed: () {
+                        if (verificationRequired) {
+                          setState(() {
+                            step = 1;
+                            error = null;
+                            verificationRequired = false;
+                          });
+                          return;
+                        }
+                        setState(() {
+                          restoring = true;
+                          error = null;
+                        });
+                        restore();
+                      },
+                      child: Text(
+                        verificationRequired
+                            ? t('Verify my phone number')
+                            : t('Continue to my account'),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      restoring
-                          ? t('Opening your account…')
-                          : (error ??
-                              t('Unlock to continue where you left off.')),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    if (restoring)
-                      const CircularProgressIndicator()
-                    else
-                      FilledButton(
-                        onPressed: () {
-                          if (verificationRequired) {
-                            setState(() {
-                              step = 1;
-                              error = null;
-                              verificationRequired = false;
-                            });
-                            return;
-                          }
+                  if (!restoring)
+                    TextButton(
+                      onPressed: () async {
+                        await SessionStore.clear();
+                        if (mounted) {
                           setState(() {
-                            restoring = true;
+                            hasSavedSession = false;
+                            deviceUnlocked = false;
                             error = null;
                           });
-                          restore();
-                        },
-                        child: Text(
-                          verificationRequired
-                              ? t('Verify my phone number')
-                              : t('Continue to my account'),
-                        ),
-                      ),
-                    if (!restoring)
-                      TextButton(
-                        onPressed: () async {
-                          await SessionStore.clear();
-                          if (mounted) {
-                            setState(() {
-                              hasSavedSession = false;
-                              deviceUnlocked = false;
-                              error = null;
-                            });
-                          }
-                        },
-                        child: Text(t('Use another account')),
-                      ),
-                  ],
-                ),
+                        }
+                      },
+                      child: Text(t('Use another account')),
+                    ),
+                ],
               ),
             ),
           ),
-        )
-      : Scaffold(
-          appBar: AppBar(
-            // Steps carry their own heading and "Step n of 4".
-            leading: step > 0 && step < 4
-                ? IconButton(
-                    onPressed: busy
-                        ? null
-                        : () => setState(() {
-                              step = step == 3 ? 0 : step - 1;
-                              testCode = null;
-                              error = null;
-                            }),
-                    icon: const Icon(Icons.arrow_back),
-                  )
-                : null,
-            actions: [
-              if (kDebugMode && step < 2)
-                IconButton(
-                  tooltip: t('Development connection'),
-                  onPressed: busy ? null : settings,
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-            ],
+        ),
+      );
+
+  Widget? developmentTools() => !kDebugMode
+      ? null
+      : Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Wrap(alignment: WrapAlignment.center, children: [
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DevelopmentSession(),
+                        ),
+                      ),
+              child: Text(t('Use existing development token')),
+            ),
+            TextButton(
+              onPressed: busy ? null : settings,
+              child: Text(t('Development connection')),
+            ),
+          ]),
+        );
+
+  Widget phoneStep() => StepFrame(
+        title: t('Your phone number'),
+        lead: t('We’ll text you a code to sign in.'),
+        footer: const TermsNote(),
+        action: FilledButton(
+          onPressed: busy || phone.text.length != 9 ? null : sendCode,
+          child: Text(busy ? t('Please wait…') : t('Send code')),
+        ),
+        children: [
+          FieldLabel(t('Phone number')),
+          PhoneField(
+            controller: phone,
+            enabled: !busy,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
           ),
-          body: SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: LayoutBuilder(
-                  builder: (context, constraints) => SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: (constraints.maxHeight - 40)
-                            .clamp(0.0, double.infinity)
-                            .toDouble(),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (step == 2 && delivery == 'staging-push')
-                            Text(
-                              t('Testing code requested for your previously signed-in Sendoh device. Check its notifications; staging logs remain available if push is delayed.'),
-                            ),
-                          if (step == 0) ...[
-                            if (restoring) const LinearProgressIndicator(),
-                            if (error != null) Text(error!),
-                            if (hasSavedSession && !restoring)
-                              TextButton(
-                                onPressed: () {
-                                  setState(() => restoring = true);
-                                  restore();
-                                },
-                                child: Text(t('Unlock / retry saved session')),
-                              ),
-                            WelcomeStep(
-                              busy: busy || restoring,
-                              onStart: () => setState(() => step = 1),
-                              onSignIn: () => setState(() => step = 1),
-                            ),
-                            if (kDebugMode) ...[
-                              const SizedBox(height: 24),
-                              TextButton(
-                                onPressed: busy
-                                    ? null
-                                    : () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute<void>(
-                                            builder: (_) =>
-                                                const DevelopmentSession(),
-                                          ),
-                                        ),
-                                child:
-                                    Text(t('Use existing development token')),
-                              ),
-                            ],
-                          ] else if (step == 1)
-                            StepFrame(
-                              step: 1,
-                              title: t('What’s your phone number?'),
-                              lead: t(
-                                  'We’ll text you a 6-digit code. Your number is only how you sign in: people find you by your name and @username, never by your number.'),
-                              footer: const TermsNote(),
-                              action: FilledButton(
-                                onPressed: busy ? null : sendCode,
-                                child: Text(busy
-                                    ? t('Please wait…')
-                                    : t('Text me a code')),
-                              ),
-                              children: [
-                                TextField(
-                                  controller: phone,
-                                  enabled: !busy,
-                                  keyboardType: TextInputType.phone,
-                                  onChanged: (_) => setState(() {}),
-                                  autofillHints: const [
-                                    AutofillHints.telephoneNumberNational,
-                                  ],
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(9),
-                                  ],
-                                  decoration: InputDecoration(
-                                    labelText: t('Phone number'),
-                                    prefixText: '+237  ',
-                                    hintText: '670 12 34 56',
-                                  ),
-                                ),
-                                NetworkHint(digits: phone.text),
-                                if (error != null) errorText(),
-                              ],
-                            )
-                          else if (step == 2)
-                            StepFrame(
-                              step: 2,
-                              title: t('Enter the code we texted you'),
-                              lead: t('Sent by SMS to {phoneNumber}.',
-                                  {'phoneNumber': phoneNumber}),
-                              footer: Text(
-                                t('Sendoh will never ask for this code by phone or WhatsApp. Don’t share it.'),
-                                style: SendohTextStyles.caption,
-                              ),
-                              action: FilledButton(
-                                onPressed: busy ? null : verify,
-                                child: Text(
-                                    busy ? t('Please wait…') : t('Verify')),
-                              ),
-                              children: [
-                                OtpBoxes(controller: code, enabled: !busy),
-                                if (testCode != null)
-                                  TestCodeHint(
-                                    code: testCode!,
-                                    onUse: () =>
-                                        setState(() => code.text = testCode!),
-                                  ),
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    TextButton(
-                                      onPressed:
-                                          busy || seconds > 0 ? null : sendCode,
-                                      child: Text(
-                                        seconds > 0
-                                            ? t(
-                                                'Send a new code in 0:{seconds}',
-                                                {
-                                                    'seconds': seconds
-                                                        .toString()
-                                                        .padLeft(2, '0')
-                                                  })
-                                            : t('Send a new code'),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () => setState(() {
-                                                step = 1;
-                                                testCode = null;
-                                              }),
-                                      child: Text(t('Wrong number?')),
-                                    ),
-                                  ],
-                                ),
-                                if (kDebugMode &&
-                                    delivery == 'local-development')
-                                  ExpansionTile(
-                                    title: Text(t('Local development code')),
-                                    children: [
-                                      SelectableText(developmentOtpCommand),
-                                      TextButton(
-                                        onPressed: () => Clipboard.setData(
-                                          ClipboardData(
-                                              text: developmentOtpCommand),
-                                        ),
-                                        child: Text(t('Copy commands')),
-                                      ),
-                                    ],
-                                  ),
-                                if (error != null) errorText(),
-                              ],
-                            )
-                          else if (step == 3)
-                            StepFrame(
-                              step: 3,
-                              title: t('Who are you?'),
-                              lead: t(
-                                  'This is how friends recognise you when you ask, pay or collect.'),
-                              action: FilledButton(
-                                onPressed: busy ? null : saveProfile,
-                                child: Text(
-                                    busy ? t('Please wait…') : t('Continue')),
-                              ),
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 36,
-                                      backgroundColor: SendohColors.tealSoft,
-                                      backgroundImage: avatar == null
-                                          ? null
-                                          : MemoryImage(base64Decode(avatar!)),
-                                      child: avatar == null
-                                          ? const Icon(Icons.person_outline,
-                                              size: 34,
-                                              color: SendohColors.teal)
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Flexible(
-                                      child: OutlinedButton(
-                                        onPressed: busy
-                                            ? null
-                                            : avatar == null
-                                                ? pickPhoto
-                                                : () => setState(
-                                                    () => avatar = null),
-                                        child: Text(avatar == null
-                                            ? t('Add a photo (optional)')
-                                            : t('Remove photo')),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-                                TextField(
-                                  controller: name,
-                                  enabled: !busy,
-                                  textCapitalization: TextCapitalization.words,
-                                  autofillHints: const [AutofillHints.name],
-                                  maxLength: 120,
-                                  decoration: InputDecoration(
-                                      labelText: t('Your name')),
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: username,
-                                  enabled: !busy,
-                                  autocorrect: false,
-                                  enableSuggestions: false,
-                                  maxLength: 24,
-                                  decoration: InputDecoration(
-                                    labelText: t('Your @username'),
-                                    prefixText: '@',
-                                    helperText:
-                                        t('Friends will use this to find you.'),
-                                  ),
-                                ),
-                                CheckboxListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  controlAffinity:
-                                      ListTileControlAffinity.leading,
-                                  value: oldEnough,
-                                  onChanged: busy
-                                      ? null
-                                      : (v) =>
-                                          setState(() => oldEnough = v == true),
-                                  title: Text(
-                                    t('I’m 12 or older. If I’m under 18, I use Sendoh with a parent or guardian’s permission.'),
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                ),
-                                if (error != null) errorText(),
-                              ],
-                            )
-                          else
-                            WalletStep(
-                              busy: busy,
-                              signInMasked: signInMasked,
-                              network: signInNetwork,
-                              useSignIn: useSignInNumber,
-                              onToggle: (v) =>
-                                  setState(() => useSignInNumber = v),
-                              added: addedNumbers,
-                              onAdd: addAnotherNumber,
-                              onDone: () => finishWallet(skip: false),
-                              onSkip: () => finishWallet(skip: true),
-                            ),
-                        ],
-                      ),
+          if (error != null) errorText(),
+        ],
+      );
+
+  Widget codeStep() => StepFrame(
+        title: t('Enter the code'),
+        lead: t('Sent to {phoneNumber}', {'phoneNumber': prettyPhone}),
+        action: FilledButton(
+          onPressed: busy ? null : verify,
+          child: Text(busy ? t('Please wait…') : t('Verify')),
+        ),
+        children: [
+          OtpBoxes(controller: code, enabled: !busy),
+          if (testCode != null)
+            TestCodeHint(
+              code: testCode!,
+              onUse: () => setState(() => code.text = testCode!),
+            ),
+          const SizedBox(height: 12),
+          Row(children: [
+            TextButton(
+              onPressed: busy || seconds > 0 ? null : sendCode,
+              child: Text(
+                seconds > 0
+                    ? t('Resend in 0:{seconds}',
+                        {'seconds': seconds.toString().padLeft(2, '0')})
+                    : t('Resend code'),
+              ),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => setState(() {
+                        step = 1;
+                        testCode = null;
+                        error = null;
+                      }),
+              child: Text(t('Change number')),
+            ),
+          ]),
+          if (delivery == 'staging-push')
+            Text(t('Check your other signed-in device for the code.'),
+                style: SendohTextStyles.caption),
+          if (kDebugMode && delivery == 'local-development')
+            ExpansionTile(
+              title: Text(t('Local development code')),
+              children: [
+                SelectableText(developmentOtpCommand),
+                TextButton(
+                  onPressed: () => Clipboard.setData(
+                    ClipboardData(text: developmentOtpCommand),
+                  ),
+                  child: Text(t('Copy commands')),
+                ),
+              ],
+            ),
+          if (error != null) errorText(),
+        ],
+      );
+
+  Widget profileStep() => StepFrame(
+        title: t('Your profile'),
+        action: FilledButton(
+          onPressed: busy || !profileReady ? null : saveProfile,
+          child: Text(busy ? t('Please wait…') : t('Continue')),
+        ),
+        children: [
+          Row(children: [
+            Semantics(
+              button: true,
+              label: t('Add photo'),
+              child: GestureDetector(
+                onTap: busy ? null : pickPhoto,
+                child: Stack(children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: SendohColors.tealSoft,
+                    backgroundImage: avatar == null
+                        ? null
+                        : MemoryImage(base64Decode(avatar!)),
+                    child: avatar == null
+                        ? const Icon(Icons.person_outline,
+                            size: 38, color: SendohColors.ink)
+                        : null,
+                  ),
+                  const Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: SendohColors.teal,
+                      child: Icon(Icons.photo_camera_outlined,
+                          size: 15, color: Colors.white),
                     ),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : avatar == null
+                      ? pickPhoto
+                      : () => setState(() => avatar = null),
+              child: Text(avatar == null ? t('Add photo') : t('Remove photo'),
+                  style: const TextStyle(
+                      fontSize: 16,
+                      decoration: TextDecoration.underline,
+                      decorationColor: SendohColors.teal)),
+            ),
+            if (avatar == null)
+              Text(t('Optional'),
+                  style: const TextStyle(color: SendohColors.secondary)),
+          ]),
+          const SizedBox(height: 28),
+          FieldLabel(t('Name')),
+          TextField(
+            controller: name,
+            enabled: !busy,
+            textCapitalization: TextCapitalization.words,
+            autofillHints: const [AutofillHints.name],
+            inputFormatters: [LengthLimitingTextInputFormatter(120)],
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 20),
+          FieldLabel(t('Username')),
+          TextField(
+            controller: username,
+            enabled: !busy,
+            autocorrect: false,
+            enableSuggestions: false,
+            inputFormatters: [LengthLimitingTextInputFormatter(24)],
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              prefixText: '@',
+              errorText: username.text.isNotEmpty && !usernameValid
+                  ? t('3 to 24 letters, numbers or _, starting with a letter')
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 16),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: busy ? null : () => setState(() => oldEnough = !oldEnough),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Checkbox(
+                value: oldEnough,
+                onChanged:
+                    busy ? null : (v) => setState(() => oldEnough = v == true),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    t('I’m at least 12 and, if under 18, have a parent or guardian’s permission.'),
+                    style: const TextStyle(fontSize: 15, height: 1.4),
                   ),
                 ),
               ),
+            ]),
+          ),
+          if (error != null) errorText(),
+        ],
+      );
+
+  Widget currentStep() => switch (step) {
+        1 => phoneStep(),
+        2 => codeStep(),
+        3 => profileStep(),
+        _ => WalletStep(
+            busy: busy,
+            signInMasked: signInMasked,
+            network: signInNetwork,
+            useSignIn: useSignInNumber,
+            onToggle: (v) => setState(() => useSignInNumber = v),
+            added: addedNumbers,
+            onAdd: addAnotherNumber,
+            onDone: () => finishWallet(skip: false),
+            onSkip: () => finishWallet(skip: true),
+          ),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    if ((restoring || hasSavedSession) && step == 0) return welcomeBack();
+    if (step == 0) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: WelcomeStep(
+                busy: busy,
+                onStart: () => setState(() => step = 1),
+                onSignIn: () => setState(() => step = 1),
+                notice: error == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(error!, textAlign: TextAlign.center),
+                      ),
+                extra: developmentTools(),
+              ),
             ),
           ),
-        );
+        ),
+      );
+    }
+    return Scaffold(
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(children: [
+              StepHeader(
+                step: step,
+                onBack: step < 4 && !busy ? back : null,
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  children: [currentStep()],
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class OtpBoxes extends StatefulWidget {

@@ -24,7 +24,8 @@ import 'money_requests.dart';
 import 'settlement.dart';
 import 'near2pay.dart';
 import 'account.dart';
-import 'money_numbers.dart';
+import 'settings_ui.dart';
+import 'activity_ui.dart';
 
 final apiProvider =
     Provider<SendohApi>((ref) => throw StateError(t('Session required')));
@@ -361,20 +362,31 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
         appBar: tab == 0
             ? null
             : AppBar(
-                title: Text(tab == 1
-                    ? t('Collections')
-                    : tab == 2
-                        ? t('Activity')
-                        : t('Profile')),
+                centerTitle: false,
+                toolbarHeight: 76,
+                titleSpacing: 20,
+                title: Text(
+                    tab == 1
+                        ? t('Collections')
+                        : tab == 2
+                            ? t('Activity')
+                            : t('Profile'),
+                    style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: SendohColors.ink)),
                 actions: [
                   IconButton(
                       tooltip: t('Notifications ({unread} unread)',
                           {'unread': unread}),
                       onPressed: openNotifications,
                       icon: Badge(
+                          smallSize: 9,
                           isLabelVisible: unread > 0,
-                          backgroundColor: SendohColors.orange,
-                          child: const Icon(Icons.notifications_outlined)))
+                          backgroundColor: SendohColors.teal,
+                          child: const Icon(Icons.notifications_outlined,
+                              size: 28))),
+                  const SizedBox(width: 8),
                 ],
               ),
         bottomNavigationBar: NavigationBar(
@@ -543,37 +555,6 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
           radius: radius,
           backgroundImage:
               MemoryImage(base64Decode(account['avatar'] as String)));
-  Widget sectionLabel(String text) => Padding(
-      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
-      child: Text(text,
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-              color: SendohColors.secondary)));
-
-  Future<void> toggleDeviceUnlock() async {
-    try {
-      final ok = await authenticateDevice(
-          t('Confirm device unlock settings for Sendoh'));
-      if (!ok) return;
-      final enabled = !await SessionStore.locked();
-      await SessionStore.setLocked(enabled);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(enabled
-                ? t('Device unlock enabled.')
-                : t('Device unlock disabled.'))));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                t('Set up a screen lock on this device, then try again.'))));
-      }
-    }
-  }
-
   Future<void> signOut() async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -591,89 +572,66 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
     if (mounted) navigator.pop();
   }
 
-  /// Settings, as approved: you first, then how you pay and get paid, then the account.
+  /// Profile, as approved: you on the teal card, then Payments, Account, Help.
   Widget profile() {
     final api = ref.read(apiProvider);
+    final navigator = Navigator.of(context);
     return ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
         children: [
-          Text(t('Settings'),
-              style:
-                  const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 14),
-          SurfaceCard(
-              child: Row(children: [
-            accountAvatar(28),
-            const SizedBox(width: 14),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(displayName,
-                      style: const TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w700)),
-                  if (account['username'] != null)
-                    Text('@${account['username']}',
-                        style: const TextStyle(color: SendohColors.secondary)),
-                ])),
-            TextButton(
-                onPressed: () async {
-                  final updated = await Navigator.of(context)
-                      .push<Map<String, dynamic>>(MaterialPageRoute(
-                          builder: (_) =>
-                              EditProfile(api: api, account: account)));
-                  if (mounted && updated != null) {
-                    setState(() => account = updated);
-                  }
-                },
-                child: Text(t('Edit'))),
-          ])),
-          MoneyNumbersSection(api: api),
-          sectionLabel(t('ACCOUNT')),
-          SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: Column(children: [
-                SignInNumberTile(api: api),
-                const Divider(height: 1),
-                const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: LanguageChoice()),
-                const Divider(height: 1),
-                ListTile(
-                    leading: const Icon(Icons.fingerprint),
-                    title: Text(t('Device unlock')),
-                    subtitle: Text(
-                        t('Use biometrics or your device PIN when returning.')),
-                    onTap: toggleDeviceUnlock),
-                const Divider(height: 1),
-                ListTile(
-                    leading: const Icon(Icons.receipt_long_outlined),
-                    title: Text(t('Person payments')),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                            builder: (_) => PersonPaymentHistory(api: api)))),
-              ])),
-          const SizedBox(height: 8),
-          const AboutLinks(),
-          const SizedBox(height: 16),
-          OutlinedButton(onPressed: signOut, child: Text(t('Sign out'))),
-          const SizedBox(height: 8),
-          TextButton(
-              style: TextButton.styleFrom(foregroundColor: SendohColors.red),
-              onPressed: () {
-                final navigator = Navigator.of(context);
-                navigator.push(MaterialPageRoute<void>(
-                    builder: (_) => DeleteAccountScreen(
+          ProfileHeaderCard(
+              avatar: accountAvatar(34),
+              name: displayName,
+              username: account['username'] as String?,
+              onEdit: () async {
+                final updated =
+                    await showEditProfile(context, api: api, account: account);
+                if (mounted && updated != null) {
+                  setState(() => account = {...account, ...updated});
+                }
+              }),
+          SettingsSection(title: t('Payments'), children: [
+            SettingsRow(
+                icon: Icons.phone_android,
+                title: t('Mobile money numbers'),
+                onTap: () => navigator.push(MaterialPageRoute<void>(
+                    builder: (_) => MoneyNumbersScreen(api: api)))),
+            SettingsRow(
+                icon: Icons.request_page_outlined,
+                title: t('Money requests'),
+                onTap: () => navigator.push(MaterialPageRoute<void>(
+                    builder: (_) => MoneyRequestInbox(
+                        api: api, userId: account['id'] as String? ?? '')))),
+            SettingsRow(
+                icon: Icons.swap_horiz,
+                title: t('Person payments'),
+                onTap: () => navigator.push(MaterialPageRoute<void>(
+                    builder: (_) => PersonPaymentHistory(api: api)))),
+          ]),
+          SettingsSection(title: t('Account'), children: [
+            SignInNumberRow(api: api),
+            const DeviceUnlockRow(),
+            const LanguageRow(),
+          ]),
+          SettingsSection(children: [
+            SettingsRow(
+                icon: Icons.help_outline,
+                title: t('Help & legal'),
+                onTap: () => navigator.push(MaterialPageRoute<void>(
+                    builder: (_) => HelpLegalScreen(
                         api: api,
                         onDeleted: () async {
                           await PushService.detach(deleteToken: true);
                           await SessionStore.clear();
                           navigator.popUntil((route) => route.isFirst);
-                        })));
-              },
-              child: Text(t('Delete account'))),
+                        })))),
+          ]),
+          const SizedBox(height: 20),
+          TextButton(
+              style: TextButton.styleFrom(
+                  foregroundColor: SendohColors.secondary),
+              onPressed: signOut,
+              child: Text(t('Sign out'))),
         ]);
   }
 }
@@ -737,251 +695,6 @@ class CollectionCard extends StatelessWidget {
                       ]),
                     ]))),
       );
-}
-
-class ActivityView extends ConsumerStatefulWidget {
-  const ActivityView({super.key});
-  @override
-  ConsumerState<ActivityView> createState() => _ActivityViewState();
-}
-
-class _ActivityViewState extends ConsumerState<ActivityView> {
-  late Future<dynamic> activity;
-
-  /// Person payments sent and received, each reopening its own receipt.
-  late Future<dynamic> payments;
-
-  /// Settlements this organizer closed, each reopening its round's receipt.
-  late Future<dynamic> settlements;
-  @override
-  void initState() {
-    super.initState();
-    load();
-    PushService.updates.addListener(onUpdate);
-  }
-
-  void load() {
-    final api = ref.read(apiProvider);
-    activity = api.request('/me/activity');
-    payments = api
-        .request('/person-payments/activity')
-        .catchError((_) => <String, dynamic>{'items': <dynamic>[]});
-    settlements = api
-        .request('/me/settlements')
-        .catchError((_) => <String, dynamic>{'items': <dynamic>[]});
-  }
-
-  void onUpdate() {
-    if (mounted) {
-      setState(load);
-    }
-  }
-
-  Future<void> refresh() async {
-    onUpdate();
-    await Future.wait([activity, payments, settlements]);
-  }
-
-  Widget settlementsSection() => FutureBuilder<dynamic>(
-        future: settlements,
-        builder: (context, snapshot) {
-          final items = snapshot.data is Map
-              ? ((snapshot.data as Map)['items'] as List? ?? const [])
-              : const [];
-          if (items.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(t('Settlements'), style: SendohTextStyles.titleSmall),
-                const SizedBox(height: 8),
-                for (final raw in items)
-                  Builder(builder: (context) {
-                    final s = Map<String, dynamic>.from(raw as Map);
-                    final status = switch (s['state']) {
-                      'DELIVERED' => t('Payout delivered'),
-                      'REVIEW' => t('Payout needs attention'),
-                      _ => t('Payout sending'),
-                    };
-                    return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: SurfaceCard(
-                            padding: EdgeInsets.zero,
-                            child: ListTile(
-                                leading: const CircleAvatar(
-                                    backgroundColor: SendohColors.tealSoft,
-                                    child: Icon(
-                                        Icons.account_balance_wallet_outlined,
-                                        color: SendohColors.teal,
-                                        size: 20)),
-                                title: Text(
-                                    t('{collection_name} · Round {round}', {
-                                      'collection_name': s['collection_name'],
-                                      'round': s['round']
-                                    }),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600)),
-                                subtitle: Text(
-                                    '$status · ${money(s['payout_amount'])}'),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () async {
-                                  await Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                          builder: (_) => SettlementScreen(
-                                              api: ref.read(apiProvider),
-                                              collectionId:
-                                                  s['collection_id'] as String,
-                                              collectionName:
-                                                  s['collection_name']
-                                                      as String,
-                                              round: (s['round'] as num)
-                                                  .toInt())));
-                                  onUpdate();
-                                })));
-                  }),
-                const SizedBox(height: 12),
-              ]);
-        },
-      );
-
-  Widget paymentsSection() => FutureBuilder<dynamic>(
-        future: payments,
-        builder: (context, snapshot) {
-          final items = snapshot.data is Map
-              ? ((snapshot.data as Map)['items'] as List? ?? const [])
-              : const [];
-          if (items.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(t('Payments'), style: SendohTextStyles.titleSmall),
-                const SizedBox(height: 8),
-                for (final raw in items)
-                  Builder(builder: (context) {
-                    final item = Map<String, dynamic>.from(raw as Map);
-                    final line = personActivityLine(item);
-                    final sent = item['direction'] == 'SENT';
-                    return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: SurfaceCard(
-                            padding: EdgeInsets.zero,
-                            child: ListTile(
-                                leading: CircleAvatar(
-                                    backgroundColor: SendohColors.tealSoft,
-                                    child: Icon(
-                                        sent
-                                            ? Icons.north_east
-                                            : Icons.south_west,
-                                        color: SendohColors.teal,
-                                        size: 20)),
-                                title: Text(line.title,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600)),
-                                subtitle: Text(line.status),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () async {
-                                  await Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                          builder: (_) => PersonCheckout(
-                                              api: ref.read(apiProvider),
-                                              orderId: item['id'] as String)));
-                                  onUpdate();
-                                })));
-                  }),
-                const SizedBox(height: 12),
-              ]);
-        },
-      );
-
-  @override
-  void dispose() {
-    PushService.updates.removeListener(onUpdate);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<dynamic>(
-      future: activity,
-      builder: (context, snapshot) {
-        final entries = snapshot.hasData ? snapshot.data as List : <dynamic>[];
-        return RefreshIndicator(
-            onRefresh: refresh,
-            child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(22),
-                children: [
-                  Text(t('Your group, in the loop.'),
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: SendohColors.teal)),
-                  const SizedBox(height: 8),
-                  Text(t('Payments you sent or received, and updates from collections you organize.'),
-                      style: TextStyle(
-                          height: 1.6, color: SendohColors.secondary)),
-                  const SizedBox(height: 24),
-                  paymentsSection(),
-                  settlementsSection(),
-                  if (snapshot.connectionState == ConnectionState.waiting)
-                    const LinearProgressIndicator(),
-                  if (snapshot.hasError) ...[
-                    Text(t(
-                        'Couldn’t load activity. Your records are still saved.')),
-                    TextButton(
-                        onPressed: onUpdate, child: Text(t('Try again'))),
-                  ] else if (snapshot.hasData && entries.isEmpty)
-                    EmptyState(
-                        title: t('No collection updates yet'),
-                        message: t(
-                            'Create a collection and invite your group. Its updates will appear here.'),
-                        icon: Icons.history),
-                  if (!snapshot.hasError)
-                    ...entries.map((raw) {
-                      final e = Map<String, dynamic>.from(raw);
-                      final test = (e['message'] as String).startsWith('TEST:');
-                      return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: SurfaceCard(
-                              child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                CircleAvatar(
-                                    radius: 19,
-                                    backgroundColor: test
-                                        ? SendohColors.amberSoft
-                                        : SendohColors.tealSoft,
-                                    child: Icon(
-                                        test
-                                            ? Icons.receipt_long_outlined
-                                            : Icons.groups_outlined,
-                                        size: 20,
-                                        color: test
-                                            ? SendohColors.amber
-                                            : SendohColors.teal)),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                      Text(e['message'] as String,
-                                          style: const TextStyle(
-                                              fontSize: 14,
-                                              height: 1.5,
-                                              fontWeight: FontWeight.w500)),
-                                      const SizedBox(height: 6),
-                                      Text(displayDate(e['created_at']),
-                                          style: const TextStyle(
-                                              fontSize: 12,
-                                              color: SendohColors.muted))
-                                    ])),
-                              ])));
-                    }),
-                ]));
-      });
 }
 
 Future<void> copyCollectionLink(BuildContext context, String link) async {

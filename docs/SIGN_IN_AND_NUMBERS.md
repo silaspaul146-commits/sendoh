@@ -4,13 +4,15 @@ Sendoh knows you as you: your name and @username. The phone number you sign in w
 
 ## Getting in (app)
 
-1. **Welcome:** what Sendoh is for (individually, in person, in groups), then *Get started* or *Sign in*. The language can be chosen here.
-2. **Your number:** "Text me a code". The network (MTN or Orange) is shown from the prefix.
-3. **SMS code:** six boxes, resend after 60 seconds, "Wrong number?".
-4. **Who you are:** name, @username, optional photo, and "I'm 12 or older" (with the parent or guardian note for under-18s).
-5. **How you pay and get paid:** the sign-in number is offered as an already verified Mobile Money number; add another (an Orange number, or a parent's MoMo); or skip.
+Each screen holds one idea and as little text as possible.
 
-## Mobile Money numbers (Settings)
+1. **Welcome:** the Sendoh mark, "Organize money. Together.", the group picture, *Create account* and *I already have an account*. A small switch at the top changes the language.
+2. **Your phone number** (1 of 4): +237 field; the MTN or Orange mark appears once the prefix is known. *Send code* waits for nine digits. Terms and privacy sit in one line underneath.
+3. **Enter the code** (2 of 4): six boxes, *Resend code* after 60 seconds, *Change number*.
+4. **Your profile** (3 of 4): optional photo, name, @username, and one tick: "I'm at least 12 and, if under 18, have a parent or guardian's permission." *Continue* waits for all three.
+5. **Mobile money** (4 of 4): the sign-in number, already verified, ticked to pay and receive; *Add another number*; or *Skip for now*.
+
+## Mobile Money numbers (Profile → Mobile money numbers)
 
 - Up to **3 numbers**, MTN MoMo or Orange Money, chosen from the prefix (changeable).
 - Each number is **verified by an SMS code sent to it**. If it's a parent's phone, the parent reading out the code is their consent. The sign-in number needs no second code.
@@ -21,7 +23,7 @@ Sendoh knows you as you: your name and @username. The phone number you sign in w
 
 ## Changing the sign-in number
 
-Settings → Sign-in number → Change. A code goes to the new number; the change applies only after it is entered. A number already used to sign in to another account is refused.
+Profile → Sign-in number. A code goes to the new number; the change applies only after it is entered. A number already used to sign in to another account is refused.
 
 ## Where SMS is used
 

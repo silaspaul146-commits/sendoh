@@ -1229,6 +1229,8 @@ class RequestSummary extends StatelessWidget {
             0,
             (sum, r) => sum + (r['amount'] as num).toInt(),
           );
+          // Only when someone still owes you: Home is busy enough already.
+          if (sent.isEmpty) return const SizedBox.shrink();
           return Padding(
             padding: const EdgeInsets.only(top: 12),
             child: ListTile(
@@ -1243,18 +1245,12 @@ class RequestSummary extends StatelessWidget {
               tileColor: SendohColors.surface,
               leading: const Icon(Icons.swap_horiz, color: SendohColors.teal),
               title: Text(
-                sent.isEmpty
-                    ? t('Your money requests')
-                    : people == 1
+                people == 1
                         ? t('Waiting on 1 person')
                         : t('Waiting on {people} people', {'people': people}),
                 style: SendohTextStyles.bodyMedium,
               ),
-              subtitle: snapshot.hasError
-                  ? Text(t('Open to retry loading requests'))
-                  : sent.isEmpty
-                      ? null
-                      : Text(
+              subtitle: Text(
                           (snapshot.data?.length ?? 0) >= 100
                               ? t('{amount} outstanding · recent requests',
                                   {'amount': coordinationMoney(total)})

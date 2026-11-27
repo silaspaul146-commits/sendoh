@@ -9,6 +9,7 @@ import 'package:sendoh_organizer/coordination.dart';
 import 'package:sendoh_organizer/design.dart';
 import 'package:sendoh_organizer/i18n.dart';
 import 'package:sendoh_organizer/i18n_fr.dart';
+import 'package:sendoh_organizer/settings_ui.dart';
 import 'package:sendoh_organizer/settlement.dart';
 
 /// Literal English passed to t('...') anywhere in the app.
@@ -96,14 +97,19 @@ void main() {
     expect(find.text('Tour 1 · Payé'), findsOneWidget);
   });
 
-  testWidgets('choosing French in Profile changes the switch', (tester) async {
+  testWidgets('choosing French in Profile changes the language row',
+      (tester) async {
     await tester.pumpWidget(MaterialApp(
-        theme: sendohTheme(), home: const Scaffold(body: LanguageChoice())));
+        theme: sendohTheme(), home: const Scaffold(body: LanguageRow())));
     expect(find.text('Language'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    await tester.tap(find.text('Language'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Français'));
     await tester.pumpAndSettle();
     expect(appLanguage.value, AppLanguage.fr);
     expect(find.text('Langue'), findsOneWidget);
+    expect(find.text('Français'), findsOneWidget);
   });
 
   test('the new-round message carries the link and the share', () {
@@ -160,7 +166,11 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(app(const Scaffold(
         body: SingleChildScrollView(
-            child: Column(children: [LanguageChoice(), AboutLinks()])))));
+            child: Column(children: [
+      LanguageRow(),
+      DeviceUnlockRow(),
+      SettingsRow(icon: Icons.help_outline, title: 'Aide et mentions légales'),
+    ])))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(app(Scaffold(

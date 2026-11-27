@@ -153,7 +153,10 @@ def create_app(database_url=None):
 
     @app.get('/api/v1/me/activity')
     def activity(user=Depends(actor), db=Depends(database)):
-        return [dict(id=a.id, message=a.message, created_at=a.created_at.isoformat()) for a in db.scalars(select(Activity).where(Activity.organizer_id==user.id).order_by(Activity.created_at.desc()))]
+        rows = db.execute(select(Activity, Collection.name).join(Collection, Collection.id == Activity.collection_id)
+                          .where(Activity.organizer_id == user.id).order_by(Activity.created_at.desc())).all()
+        return [dict(id=a.id, message=a.message, collection_name=name, created_at=a.created_at.isoformat())
+                for a, name in rows]
     app.include_router(router(database, actor, bearer, settings, sender))
     app.include_router(invitation_router(database, actor, web_url))
     app.include_router(collection_reminders_router(database, actor))
