@@ -20,6 +20,7 @@ from .collection_reminders import router as collection_reminders_router
 from .settlement import router as settlement_router
 from .near import router as near_router
 from .home import router as home_router
+from .account import router as account_router
 from .push import configured_sender, lifespan_for
 from .payments import router as payment_router, enabled as test_payments_enabled
 from .people import router as people_router
@@ -165,6 +166,7 @@ def create_app(database_url=None):
     app.include_router(settlement_router(database, actor, sessions, mesomb_config))
     app.include_router(near_router(database, actor))
     app.include_router(home_router(database, actor))
+    app.include_router(account_router(database, actor))
     app.include_router(payout_probe_router(sessions, mesomb_config, settings.environment))
     return app
 

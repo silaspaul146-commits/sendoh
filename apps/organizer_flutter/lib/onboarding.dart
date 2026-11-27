@@ -1,3 +1,5 @@
+import 'i18n.dart';
+import 'account.dart' show LanguageToggle;
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -34,8 +36,7 @@ class _OnboardingState extends State<Onboarding> {
   SendohApi? signedIn;
   Timer? timer;
   String get phoneNumber => '+237${phone.text.replaceAll(RegExp(r'\s'), '')}';
-  String get developmentOtpCommand =>
-      '\$env:SENDOH_ENV="development"\n'
+  String get developmentOtpCommand => '\$env:SENDOH_ENV="development"\n'
       '.\\.venv\\Scripts\\python.exe -m app.dev_otp $challenge';
   SendohApi get publicApi =>
       SendohApi(url.text.trim().replaceAll(RegExp(r'/+$'), ''), '');
@@ -55,11 +56,11 @@ class _OnboardingState extends State<Onboarding> {
       if (saved['url'] != SendohConfig.apiBaseUrl) {
         throw ApiException(
           409,
-          'This saved account belongs to another server. Sign out before switching servers.',
+          t('This saved account belongs to another server. Sign out before switching servers.'),
         );
       }
       if (!deviceUnlocked && await SessionStore.locked()) {
-        final ok = await authenticateDevice('Unlock your Sendoh account');
+        final ok = await authenticateDevice(t('Unlock your Sendoh account'));
         if (!ok) return;
         deviceUnlocked = true;
       }
@@ -75,15 +76,15 @@ class _OnboardingState extends State<Onboarding> {
         setState(() {
           verificationRequired = e.status == 401;
           error = verificationRequired
-              ? 'Your session has expired. Verify your phone number to securely reopen your account.'
-              : e.message;
+              ? t('Your session has expired. Verify your phone number to securely reopen your account.')
+              : t(e.message);
         });
       }
     } catch (_) {
       if (mounted) {
         setState(
-          () => error =
-              'Cannot reach Sendoh yet. Your account is saved. Check your connection and retry.',
+          () => error = t(
+              'Cannot reach Sendoh yet. Your account is saved. Check your connection and retry.'),
         );
       }
     } finally {
@@ -106,19 +107,19 @@ class _OnboardingState extends State<Onboarding> {
   }
 
   Future<void> pickPhoto() => run(() async {
-    final photo = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 75,
-    );
-    if (photo == null) return;
-    final bytes = await photo.readAsBytes();
-    if (bytes.length > 200000) {
-      throw Exception('Choose a smaller photo (under 200 KB).');
-    }
-    if (mounted) setState(() => avatar = base64Encode(bytes));
-  });
+        final photo = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 75,
+        );
+        if (photo == null) return;
+        final bytes = await photo.readAsBytes();
+        if (bytes.length > 200000) {
+          throw Exception(t('Choose a smaller photo (under 200 KB).'));
+        }
+        if (mounted) setState(() => avatar = base64Encode(bytes));
+      });
 
   @override
   void dispose() {
@@ -146,31 +147,31 @@ class _OnboardingState extends State<Onboarding> {
   }
 
   Future<void> sendCode() => run(() async {
-    if (!RegExp(r'^\+237[26][0-9]{8}$').hasMatch(phoneNumber)) {
-      throw Exception('Enter a valid 9-digit Cameroon phone number.');
-    }
-    final result = await publicApi.request(
-      '/auth/code',
-      body: {'phone': phoneNumber},
-    );
-    if (!mounted) return;
-    setState(() {
-      challenge = result['challenge_id'] as String;
-      delivery = result['delivery'] as String?;
-      step = 2;
-      seconds = result['resend_after'] as int;
-      code.clear();
-    });
-    timer?.cancel();
-    timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted || seconds <= 1) {
-        t.cancel();
-        if (mounted) setState(() => seconds = 0);
-      } else {
-        setState(() => seconds--);
-      }
-    });
-  });
+        if (!RegExp(r'^\+237[26][0-9]{8}$').hasMatch(phoneNumber)) {
+          throw Exception(t('Enter a valid 9-digit Cameroon phone number.'));
+        }
+        final result = await publicApi.request(
+          '/auth/code',
+          body: {'phone': phoneNumber},
+        );
+        if (!mounted) return;
+        setState(() {
+          challenge = result['challenge_id'] as String;
+          delivery = result['delivery'] as String?;
+          step = 2;
+          seconds = result['resend_after'] as int;
+          code.clear();
+        });
+        timer?.cancel();
+        timer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (!mounted || seconds <= 1) {
+            t.cancel();
+            if (mounted) setState(() => seconds = 0);
+          } else {
+            setState(() => seconds--);
+          }
+        });
+      });
 
   Future<void> enter(SendohApi api, Map<String, dynamic> user) async {
     await Navigator.of(context).push(
@@ -197,50 +198,51 @@ class _OnboardingState extends State<Onboarding> {
   }
 
   Future<void> verify() => run(() async {
-    if (code.text.length != 6) throw Exception('Enter all 6 digits.');
-    final result = await publicApi.request(
-      '/auth/verify',
-      body: {
-        'phone': phoneNumber,
-        'challenge_id': challenge,
-        'code': code.text,
-      },
-    );
-    if (!mounted) return;
-    timer?.cancel();
-    signedIn = SendohApi(publicApi.baseUrl, result['access_token'] as String)
-      ..refreshToken = result['refresh_token'] as String;
-    await SessionStore.save(signedIn!.baseUrl, signedIn!.refreshToken!);
-    if (!mounted) return;
-    await continueWithProfile(Map<String, dynamic>.from(result['user']));
-  });
+        if (code.text.length != 6) throw Exception(t('Enter all 6 digits.'));
+        final result = await publicApi.request(
+          '/auth/verify',
+          body: {
+            'phone': phoneNumber,
+            'challenge_id': challenge,
+            'code': code.text,
+          },
+        );
+        if (!mounted) return;
+        timer?.cancel();
+        signedIn =
+            SendohApi(publicApi.baseUrl, result['access_token'] as String)
+              ..refreshToken = result['refresh_token'] as String;
+        await SessionStore.save(signedIn!.baseUrl, signedIn!.refreshToken!);
+        if (!mounted) return;
+        await continueWithProfile(Map<String, dynamic>.from(result['user']));
+      });
 
   Future<void> saveProfile() => run(() async {
-    if (name.text.trim().isEmpty) {
-      throw Exception('Please enter your name.');
-    }
-    final handle = username.text.trim().toLowerCase();
-    if (!RegExp(r'^[a-z][a-z0-9_]{2,23}$').hasMatch(handle)) {
-      throw Exception(
-        'Use 3–24 letters, numbers or underscores, starting with a letter.',
-      );
-    }
-    final result = await signedIn!.request(
-      '/me/profile',
-      body: {
-        'display_name': name.text.trim(),
-        'username': handle,
-        'avatar': avatar,
-      },
-    );
-    if (mounted) await enter(signedIn!, Map<String, dynamic>.from(result));
-  });
+        if (name.text.trim().isEmpty) {
+          throw Exception(t('Please enter your name.'));
+        }
+        final handle = username.text.trim().toLowerCase();
+        if (!RegExp(r'^[a-z][a-z0-9_]{2,23}$').hasMatch(handle)) {
+          throw Exception(
+            t('Use 3–24 letters, numbers or underscores, starting with a letter.'),
+          );
+        }
+        final result = await signedIn!.request(
+          '/me/profile',
+          body: {
+            'display_name': name.text.trim(),
+            'username': handle,
+            'avatar': avatar,
+          },
+        );
+        if (mounted) await enter(signedIn!, Map<String, dynamic>.from(result));
+      });
 
   Future<void> settings() async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Development connection'),
+        title: Text(t('Development connection')),
         content: TextField(
           controller: url,
           keyboardType: TextInputType.url,
@@ -249,7 +251,7 @@ class _OnboardingState extends State<Onboarding> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Done'),
+            child: Text(t('Done')),
           ),
         ],
       ),
@@ -257,8 +259,8 @@ class _OnboardingState extends State<Onboarding> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      (restoring || hasSavedSession) && step == 0
+  Widget build(BuildContext context) => (restoring || hasSavedSession) &&
+          step == 0
       ? Scaffold(
           body: SafeArea(
             child: Center(
@@ -269,8 +271,8 @@ class _OnboardingState extends State<Onboarding> {
                   children: [
                     const SendohBrand(vertical: true),
                     const SizedBox(height: 24),
-                    const Text(
-                      'Welcome back',
+                    Text(
+                      t('Welcome back'),
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
@@ -279,8 +281,9 @@ class _OnboardingState extends State<Onboarding> {
                     const SizedBox(height: 12),
                     Text(
                       restoring
-                          ? 'Opening your account…'
-                          : (error ?? 'Unlock to continue where you left off.'),
+                          ? t('Opening your account…')
+                          : (error ??
+                              t('Unlock to continue where you left off.')),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -305,8 +308,8 @@ class _OnboardingState extends State<Onboarding> {
                         },
                         child: Text(
                           verificationRequired
-                              ? 'Verify my phone number'
-                              : 'Continue to my account',
+                              ? t('Verify my phone number')
+                              : t('Continue to my account'),
                         ),
                       ),
                     if (!restoring)
@@ -321,7 +324,7 @@ class _OnboardingState extends State<Onboarding> {
                             });
                           }
                         },
-                        child: const Text('Use another account'),
+                        child: Text(t('Use another account')),
                       ),
                   ],
                 ),
@@ -336,9 +339,9 @@ class _OnboardingState extends State<Onboarding> {
                 : Text(
                     [
                       '',
-                      'Your phone number',
-                      'Verification',
-                      'Your profile',
+                      t('Your phone number'),
+                      t('Verification'),
+                      t('Your profile'),
                     ][step],
                   ),
             leading: step > 0
@@ -346,16 +349,16 @@ class _OnboardingState extends State<Onboarding> {
                     onPressed: busy
                         ? null
                         : () => setState(() {
-                            step = step == 3 ? 0 : step - 1;
-                            error = null;
-                          }),
+                              step = step == 3 ? 0 : step - 1;
+                              error = null;
+                            }),
                     icon: const Icon(Icons.arrow_back),
                   )
                 : null,
             actions: [
               if (kDebugMode && step < 2)
                 IconButton(
-                  tooltip: 'Development connection',
+                  tooltip: t('Development connection'),
                   onPressed: busy ? null : settings,
                   icon: const Icon(Icons.settings_outlined),
                 ),
@@ -378,8 +381,8 @@ class _OnboardingState extends State<Onboarding> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (step == 2 && delivery == 'staging-push')
-                            const Text(
-                              'Testing code requested for your previously signed-in Sendoh device. Check its notifications; staging logs remain available if push is delayed.',
+                            Text(
+                              t('Testing code requested for your previously signed-in Sendoh device. Check its notifications; staging logs remain available if push is delayed.'),
                             ),
                           if (step == 0) ...[
                             if (restoring) const LinearProgressIndicator(),
@@ -390,15 +393,19 @@ class _OnboardingState extends State<Onboarding> {
                                   setState(() => restoring = true);
                                   restore();
                                 },
-                                child: const Text(
-                                  'Unlock / retry saved session',
+                                child: Text(
+                                  t('Unlock / retry saved session'),
                                 ),
                               ),
+                            // Choose the language before anything else is asked.
+                            const Align(
+                                alignment: Alignment.centerRight,
+                                child: LanguageToggle()),
                             const SizedBox(height: 12),
                             const SendohBrand(vertical: true),
                             const SizedBox(height: 12),
-                            const Text(
-                              'Organize money. Together.',
+                            Text(
+                              t('Organize money. Together.'),
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 15,
@@ -407,7 +414,7 @@ class _OnboardingState extends State<Onboarding> {
                             ),
                             const SizedBox(height: 28),
                             Semantics(
-                              label: 'Three people celebrating together',
+                              label: t('Three people celebrating together'),
                               image: true,
                               child: SizedBox(
                                 height: 232,
@@ -423,14 +430,14 @@ class _OnboardingState extends State<Onboarding> {
                               onPressed: busy || restoring
                                   ? null
                                   : () => setState(() => step = 1),
-                              child: const Text('Create account'),
+                              child: Text(t('Create account')),
                             ),
                             const SizedBox(height: 12),
                             OutlinedButton(
                               onPressed: busy || restoring
                                   ? null
                                   : () => setState(() => step = 1),
-                              child: const Text('I already have an account'),
+                              child: Text(t('I already have an account')),
                             ),
                             if (kDebugMode) ...[
                               const SizedBox(height: 24),
@@ -438,18 +445,18 @@ class _OnboardingState extends State<Onboarding> {
                                 onPressed: busy
                                     ? null
                                     : () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute<void>(
-                                          builder: (_) =>
-                                              const DevelopmentSession(),
+                                          context,
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                const DevelopmentSession(),
+                                          ),
                                         ),
-                                      ),
-                                child: const Text(
-                                  'Use existing development token',
+                                child: Text(
+                                  t('Use existing development token'),
                                 ),
                               ),
-                              const Text(
-                                'Local development tools are enabled',
+                              Text(
+                                t('Local development tools are enabled'),
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontSize: 12),
                               ),
@@ -458,20 +465,23 @@ class _OnboardingState extends State<Onboarding> {
                             Text(
                               [
                                 '',
-                                'Enter your phone number',
-                                'Verify your number',
-                                'Create your profile',
+                                t('Enter your phone number'),
+                                t('Verify your number'),
+                                t('Create your profile'),
                               ][step],
-                              style: Theme.of(context).textTheme.headlineSmall
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
                                   ?.copyWith(fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 16),
                             Text(
                               step == 1
-                                  ? 'We’ll use a code to verify your number.'
+                                  ? t('We’ll use a code to verify your number.')
                                   : step == 2
-                                  ? 'Enter the 6-digit verification code for $phoneNumber'
-                                  : 'How should we call you?',
+                                      ? t('Enter the 6-digit verification code for {phoneNumber}',
+                                          {'phoneNumber': phoneNumber})
+                                      : t('How should we call you?'),
                             ),
                             const SizedBox(height: 28),
                             if (step == 1)
@@ -486,8 +496,8 @@ class _OnboardingState extends State<Onboarding> {
                                   FilteringTextInputFormatter.digitsOnly,
                                   LengthLimitingTextInputFormatter(9),
                                 ],
-                                decoration: const InputDecoration(
-                                  labelText: 'Phone number',
+                                decoration: InputDecoration(
+                                  labelText: t('Phone number'),
                                   prefixText: '+237  ',
                                   hintText: '670 12 34 56',
                                 ),
@@ -496,18 +506,20 @@ class _OnboardingState extends State<Onboarding> {
                               OtpBoxes(controller: code, enabled: !busy),
                               const SizedBox(height: 12),
                               TextButton(
-                                onPressed: busy || seconds > 0
-                                    ? null
-                                    : sendCode,
+                                onPressed:
+                                    busy || seconds > 0 ? null : sendCode,
                                 child: Text(
                                   seconds > 0
-                                      ? 'Resend code in 00:${seconds.toString().padLeft(2, '0')}'
-                                      : 'Resend code',
+                                      ? t('Resend code in 00:{value}', {
+                                          'value':
+                                              seconds.toString().padLeft(2, '0')
+                                        })
+                                      : t('Resend code'),
                                 ),
                               ),
                               if (kDebugMode && delivery == 'local-development')
                                 ExpansionTile(
-                                  title: const Text('Local development code'),
+                                  title: Text(t('Local development code')),
                                   childrenPadding: const EdgeInsets.fromLTRB(
                                     16,
                                     0,
@@ -515,8 +527,8 @@ class _OnboardingState extends State<Onboarding> {
                                     14,
                                   ),
                                   children: [
-                                    const Text(
-                                      'From services/backend in PowerShell, run:',
+                                    Text(
+                                      t('From services/backend in PowerShell, run:'),
                                     ),
                                     const SizedBox(height: 10),
                                     SelectableText(developmentOtpCommand),
@@ -526,7 +538,7 @@ class _OnboardingState extends State<Onboarding> {
                                           text: developmentOtpCommand,
                                         ),
                                       ),
-                                      child: const Text('Copy commands'),
+                                      child: Text(t('Copy commands')),
                                     ),
                                   ],
                                 ),
@@ -548,8 +560,8 @@ class _OnboardingState extends State<Onboarding> {
                               ),
                               TextButton(
                                 onPressed: busy ? null : pickPhoto,
-                                child: const Text(
-                                  'Add profile photo (optional)',
+                                child: Text(
+                                  t('Add profile photo (optional)'),
                                 ),
                               ),
                               if (avatar != null)
@@ -557,7 +569,7 @@ class _OnboardingState extends State<Onboarding> {
                                   onPressed: busy
                                       ? null
                                       : () => setState(() => avatar = null),
-                                  child: const Text('Remove photo'),
+                                  child: Text(t('Remove photo')),
                                 ),
                               TextField(
                                 controller: name,
@@ -565,8 +577,8 @@ class _OnboardingState extends State<Onboarding> {
                                 textCapitalization: TextCapitalization.words,
                                 autofillHints: const [AutofillHints.name],
                                 maxLength: 120,
-                                decoration: const InputDecoration(
-                                  labelText: 'Full name',
+                                decoration: InputDecoration(
+                                  labelText: t('Full name'),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -576,15 +588,15 @@ class _OnboardingState extends State<Onboarding> {
                                 autocorrect: false,
                                 enableSuggestions: false,
                                 maxLength: 24,
-                                decoration: const InputDecoration(
-                                  labelText: 'Unique username',
+                                decoration: InputDecoration(
+                                  labelText: t('Unique username'),
                                   prefixText: '@',
                                   helperText:
-                                      'Friends will use this to find you.',
+                                      t('Friends will use this to find you.'),
                                 ),
                               ),
-                              const Text(
-                                'Your phone number stays private. Your name and photo help people recognize you.',
+                              Text(
+                                t('Your phone number stays private. Your name and photo help people recognize you.'),
                               ),
                             ],
                             if (error != null)
@@ -604,18 +616,18 @@ class _OnboardingState extends State<Onboarding> {
                               onPressed: busy
                                   ? null
                                   : step == 1
-                                  ? sendCode
-                                  : step == 2
-                                  ? verify
-                                  : saveProfile,
+                                      ? sendCode
+                                      : step == 2
+                                          ? verify
+                                          : saveProfile,
                               child: Text(
                                 busy
-                                    ? 'Please wait…'
+                                    ? t('Please wait…')
                                     : step == 1
-                                    ? 'Send code'
-                                    : step == 2
-                                    ? 'Verify'
-                                    : 'Continue',
+                                        ? t('Send code')
+                                        : step == 2
+                                            ? t('Verify')
+                                            : t('Continue'),
                               ),
                             ),
                           ],
@@ -714,38 +726,38 @@ class _OtpBoxesState extends State<OtpBoxes> {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '6-digit verification code',
-    textField: true,
-    child: Row(
-      children: List.generate(
-        6,
-        (index) => Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: index == 5 ? 0 : 8),
-            child: TextField(
-              key: ValueKey('otp-$index'),
-              controller: digits[index],
-              focusNode: nodes[index],
-              enabled: widget.enabled,
-              autofocus: index == 0,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-              autofillHints: index == 0
-                  ? const [AutofillHints.oneTimeCode]
-                  : null,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
-              decoration: const InputDecoration(
-                contentPadding: EdgeInsets.symmetric(vertical: 15),
+        label: t('6-digit verification code'),
+        textField: true,
+        child: Row(
+          children: List.generate(
+            6,
+            (index) => Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: index == 5 ? 0 : 8),
+                child: TextField(
+                  key: ValueKey('otp-$index'),
+                  controller: digits[index],
+                  focusNode: nodes[index],
+                  enabled: widget.enabled,
+                  autofocus: index == 0,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w600),
+                  autofillHints:
+                      index == 0 ? const [AutofillHints.oneTimeCode] : null,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  decoration: const InputDecoration(
+                    contentPadding: EdgeInsets.symmetric(vertical: 15),
+                  ),
+                  onChanged: (value) => _changed(index, value),
+                ),
               ),
-              onChanged: (value) => _changed(index, value),
             ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }

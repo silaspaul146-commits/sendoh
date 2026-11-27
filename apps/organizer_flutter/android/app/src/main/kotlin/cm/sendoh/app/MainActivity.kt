@@ -1,4 +1,4 @@
-package com.example.sendoh_organizer
+package cm.sendoh.app
 
 import io.flutter.embedding.android.FlutterActivity
 

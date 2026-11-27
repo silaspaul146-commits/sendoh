@@ -1,4 +1,6 @@
+'use client';
 import type {ReactNode} from 'react';
+import {LanguageSwitch,useT} from './lang';
 export function Icon({name='arrow',size=20}:{name?:string,size?:number}) {
  const paths:Record<string,ReactNode>={
   arrow:<><path d="m12 5-7 7 7 7M5 12h14"/></>, people:<><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6m2 5a5 5 0 0 1 3 5"/></>,
@@ -12,8 +14,17 @@ export function Icon({name='arrow',size=20}:{name?:string,size?:number}) {
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]??paths.info}</svg>;
 }
 export function Brand(){return <div className="brand" aria-label="Sendoh"><img src="/sendoh-mark.svg" alt="" width="21" height="32"/><span>SENDOH</span></div>}
-export function GuestChrome({children}:{children:ReactNode}){return <div className="guest-page"><div className="site-brand"><a href="/" aria-label="Sendoh home"><Brand/></a><p>Organize money. Together.</p></div><main className="guest-main" id="main">{children}</main><footer className="site-footer"><a href="/">About Sendoh</a><span>·</span><span>Organize money. Together.</span></footer></div>}
+export function GuestChrome({children}:{children:ReactNode}){
+ const {t}=useT();
+ return <div className="guest-page"><div className="site-brand"><a href="/" aria-label={t('Sendoh home')}><Brand/></a><p>{t('Organize money. Together.')}</p><LanguageSwitch/></div><main className="guest-main" id="main">{children}</main><SiteFooter/></div>;
+}
+/** The same small footer everywhere: what Sendoh is, and the pages people look for. */
+export function SiteFooter(){
+ const {t}=useT();
+ return <footer className="site-footer"><a href="/">{t('About Sendoh')}</a><span>·</span><a href="/support">{t('Help')}</a><span>·</span><a href="/privacy">{t('Privacy')}</a><span>·</span><a href="/terms">{t('Terms')}</a></footer>;
+}
 export function CollectionIcon(){return <span className="collection-icon"><Icon name="people"/></span>}
+/** English formatting; screens use money from useT() for the reader's language. */
 export const money=(n:number)=>`${new Intl.NumberFormat('en').format(n)} FCFA`;
 export function Row({label,children,strong=false}:{label:string,children:ReactNode,strong?:boolean}){return <div className={`summary-row ${strong?'strong':''}`}><span>{label}</span><span>{children}</span></div>}
 export function PaymentLogo({method}:{method:'MTN'|'ORANGE'}){return <span className={`provider-logo ${method.toLowerCase()}`} aria-hidden="true">{method==='MTN'?<span>MTN</span>:<><span>Orange</span><small>Money</small></>}</span>}

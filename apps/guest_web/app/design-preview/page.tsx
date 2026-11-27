@@ -1,6 +1,8 @@
 import {notFound} from 'next/navigation';
 import ContributionFlow from '../c/[token]/contribution-flow';
-import {Brand,Icon,money,Row} from '../components';
+import {Brand,Icon,Row} from '../components';
+import {formatMoney} from '../i18n';
+const money=(n:number)=>formatMoney('en',n);
 export const dynamic='force-dynamic';
 const sample={name:'Department Activity',description:'End of semester department activity contribution.',organizer_name:'Kboy',currency:'XAF',target_amount:100000,collected_amount:76500,expected_amount:3000,mode:'EXPECTED_TOTAL',deadline_at:'2026-10-30T22:59:00Z',status:'ACTIVE'};
 const states:Record<string,{title:string;icon:string;className:string;text:string}>={

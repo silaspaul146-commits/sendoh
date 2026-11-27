@@ -5,6 +5,8 @@
 /// the payer has seen who, how much and the fees, and approved.
 library;
 
+import 'i18n.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -70,7 +72,7 @@ class _TextPromptState extends State<TextPrompt> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(t('Cancel'))),
           TextButton(
               onPressed: () => Navigator.pop(context, field.text.trim()),
               child: Text(widget.action)),
@@ -212,19 +214,19 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
     final value = await showDialog<String>(
         context: context,
         builder: (_) => TextPrompt(
-            title: 'Requested amount',
-            action: 'Save',
+            title: t('Requested amount'),
+            action: t('Save'),
             initial: amount?.toString() ?? '',
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
                 suffixText: 'FCFA',
-                helperText: 'Leave empty to let them enter it')));
+                helperText: t('Leave empty to let them enter it'))));
     if (value == null) {
       return;
     }
     final parsed = int.tryParse(value.replaceAll(',', ''));
     if (value.isNotEmpty && (parsed == null || parsed <= 0)) {
-      setState(() => error = 'Enter a whole FCFA amount.');
+      setState(() => error = t('Enter a whole FCFA amount.'));
       return;
     }
     amount = value.isEmpty ? null : parsed;
@@ -241,7 +243,8 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
   Widget build(BuildContext context) {
     final r = received;
     return Scaffold(
-        appBar: AppBar(title: Text(r == null ? 'Get paid nearby' : 'Sendoh')),
+        appBar:
+            AppBar(title: Text(r == null ? t('Get paid nearby') : t('Sendoh'))),
         body: ListView(padding: const EdgeInsets.all(22), children: [
           if (r != null)
             ..._received(r)
@@ -251,13 +254,15 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
                   child: Column(children: [
                 Text(
                     forCollection
-                        ? 'Contribute to ${widget.collectionName}'
+                        ? t('Contribute to {collectionName}',
+                            {'collectionName': widget.collectionName})
                         : '${me!['display_name']}',
                     textAlign: TextAlign.center,
                     style: SendohTextStyles.headingMedium),
                 Text(
                     forCollection
-                        ? 'Organized by ${me!['display_name']}'
+                        ? t('Organized by {display_name}',
+                            {'display_name': me!['display_name']})
                         : '@${me!['username']}',
                     style: SendohTextStyles.caption),
               ])),
@@ -268,11 +273,11 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Choose where you receive money first',
+                        Text(t('Choose where you receive money first'),
                             style: TextStyle(fontWeight: FontWeight.w600)),
                         TextButton(
                             onPressed: setUpReceiving,
-                            child: const Text('Set receiving details')),
+                            child: Text(t('Set receiving details'))),
                       ])),
             if (code != null) ...[
               Center(
@@ -282,7 +287,7 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16)),
                       child: Semantics(
-                          label: 'QR code to pay you',
+                          label: t('QR code to pay you'),
                           child: QrImageView(
                               data: code!['qr'] as String,
                               size: 220,
@@ -302,28 +307,31 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
                           color: SendohColors.teal))),
               Center(
                   child: Text(
-                      'Code refreshes in ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}',
+                      t('Code refreshes in {value}:{value2}', {
+                        'value': secondsLeft ~/ 60,
+                        'value2': (secondsLeft % 60).toString().padLeft(2, '0')
+                      }),
                       style: SendohTextStyles.caption)),
               const SizedBox(height: 16),
               const Divider(),
               Row(children: [
-                const Expanded(
-                    child: Text('Requested amount',
+                Expanded(
+                    child: Text(t('Requested amount'),
                         style: SendohTextStyles.bodyMedium)),
                 Text(
                     amount == null
-                        ? 'They enter it'
+                        ? t('They enter it')
                         : coordinationMoney(amount),
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                 IconButton(
-                    tooltip: 'Edit requested amount',
+                    tooltip: t('Edit requested amount'),
                     onPressed: editAmount,
                     icon: const Icon(Icons.edit_outlined,
                         color: SendohColors.teal)),
               ]),
               const SizedBox(height: 8),
-              const Text(
-                  'Scanning only shows them who you are. They see the fees and approve the payment on their phone.',
+              Text(
+                  t('Scanning only shows them who you are. They see the fees and approve the payment on their phone.'),
                   style: SendohTextStyles.caption),
             ],
           ],
@@ -349,7 +357,7 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
               backgroundColor: SendohColors.tealSoft,
               child: Icon(Icons.check, size: 48, color: SendohColors.teal))),
       const SizedBox(height: 16),
-      Text(forCollection ? 'Contribution received' : 'Payment received',
+      Text(forCollection ? t('Contribution received') : t('Payment received'),
           textAlign: TextAlign.center, style: SendohTextStyles.headingMedium),
       const SizedBox(height: 8),
       if (amounts != null) ...[
@@ -359,28 +367,31 @@ class _NearReceiveScreenState extends State<NearReceiveScreen> {
                 fontSize: 36,
                 fontWeight: FontWeight.w800,
                 color: SendohColors.ink)),
-        Text('From ${order!['payer']?['name'] ?? 'Sendoh user'}',
-            textAlign: TextAlign.center, style: SendohTextStyles.bodyMedium),
+        Text(
+            t('From {name}',
+                {'name': order!['payer']?['name'] ?? t('Sendoh user')}),
+            textAlign: TextAlign.center,
+            style: SendohTextStyles.bodyMedium),
         const SizedBox(height: 16),
         const Divider(),
         SummaryRow(
-            'Received on',
+            t('Received on'),
             order['quote']['receiving_method'] == 'ORANGE'
-                ? 'Orange Money'
+                ? t('Orange Money')
                 : 'MTN MoMo'),
-        SummaryRow(
-            'Reference', (order['id'] as String).substring(0, 8).toUpperCase()),
+        SummaryRow(t('Reference'),
+            (order['id'] as String).substring(0, 8).toUpperCase()),
         const SizedBox(height: 20),
         OutlinedButton(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) =>
                     PersonCheckout(api: widget.api, orderId: order['id']))),
-            child: const Text('View receipt')),
+            child: Text(t('View receipt'))),
       ] else
         Text(note['title'] as String? ?? '',
             textAlign: TextAlign.center, style: SendohTextStyles.bodyMedium),
       const SizedBox(height: 8),
-      const Text('Sandbox · no real money moves',
+      Text(t('Sandbox · no real money moves'),
           textAlign: TextAlign.center, style: SendohTextStyles.caption),
     ];
   }
@@ -422,13 +433,13 @@ class _NearScanScreenState extends State<NearScanScreen> {
     if (e is ApiException) {
       return switch (e.status) {
         404 =>
-          'This code has expired or is not valid. Ask them to show a new one. Nothing was paid.',
+          t('This code has expired or is not valid. Ask them to show a new one. Nothing was paid.'),
         429 =>
-          'Too many codes tried. Wait a few minutes, or find them by username.',
-        _ => e.message,
+          t('Too many codes tried. Wait a few minutes, or find them by username.'),
+        _ => t(e.message),
       };
     }
-    return 'Couldn’t check the code. Check your connection and try again.';
+    return t('Couldn’t check the code. Check your connection and try again.');
   }
 
   Future<void> handle(String raw) async {
@@ -481,9 +492,9 @@ class _NearScanScreenState extends State<NearScanScreen> {
   Future<void> typeCode() async {
     final value = await showDialog<String>(
         context: context,
-        builder: (_) => const TextPrompt(
-            title: 'Enter their code',
-            action: 'Find person',
+        builder: (_) => TextPrompt(
+            title: t('Enter their code'),
+            action: t('Find person'),
             capitalization: TextCapitalization.characters,
             style: TextStyle(
                 fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 4),
@@ -499,7 +510,7 @@ class _NearScanScreenState extends State<NearScanScreen> {
       appBar: AppBar(
           backgroundColor: SendohColors.ink,
           foregroundColor: Colors.white,
-          title: const Text('Pay nearby')),
+          title: Text(t('Pay nearby'))),
       body: SafeArea(
           child: Padding(
               padding: const EdgeInsets.all(22),
@@ -520,13 +531,14 @@ class _NearScanScreenState extends State<NearScanScreen> {
                                     : MobileScanner(
                                         controller: camera,
                                         errorBuilder: (context, e, child) =>
-                                            const ColoredBox(
+                                            ColoredBox(
                                                 color: Color(0xFF1E4545),
                                                 child: Padding(
                                                     padding: EdgeInsets.all(20),
                                                     child: Center(
                                                         child: Text(
-                                                            'Camera access is off. Allow the camera in your phone settings, or enter their code.',
+                                                            t(
+                                                                'Camera access is off. Allow the camera in your phone settings, or enter their code.'),
                                                             textAlign: TextAlign
                                                                 .center,
                                                             style: TextStyle(
@@ -543,14 +555,14 @@ class _NearScanScreenState extends State<NearScanScreen> {
                                             handle(raw);
                                           }
                                         }))))),
-                const Text('Scan their Sendoh code',
+                Text(t('Scan their Sendoh code'),
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
-                const Text(
-                    'You’ll see who it is before anything else happens. Scanning never sends money.',
+                Text(
+                    t('You’ll see who it is before anything else happens. Scanning never sends money.'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFFCFE3E0), fontSize: 13)),
                 if (busy)
@@ -574,13 +586,13 @@ class _NearScanScreenState extends State<NearScanScreen> {
                         side: const BorderSide(color: Colors.white),
                         minimumSize: const Size.fromHeight(50)),
                     onPressed: busy ? null : typeCode,
-                    child: const Text('Enter code instead')),
+                    child: Text(t('Enter code instead'))),
                 TextButton(
                     onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                             builder: (_) =>
                                 NearReceiveScreen(api: widget.api))),
-                    child: const Text('Show my code',
+                    child: Text(t('Show my code'),
                         style: TextStyle(
                             color: Color(0xFFE6FFFA),
                             fontWeight: FontWeight.w600))),
@@ -612,7 +624,8 @@ class _NearAmountScreenState extends State<NearAmountScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: Text('Pay ${widget.person['name']}')),
+      appBar:
+          AppBar(title: Text(t('Pay {name}', {'name': widget.person['name']}))),
       body: ListView(padding: const EdgeInsets.all(22), children: [
         RecipientPreview(
             name: widget.person['name'] as String,
@@ -625,7 +638,7 @@ class _NearAmountScreenState extends State<NearAmountScreen> {
                   body: {'recipient_id': widget.person['id']})),
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Wrong person? Scan again')),
+              child: Text(t('Wrong person? Scan again'))),
         ] else ...[
           TextField(
               controller: field,
@@ -633,24 +646,26 @@ class _NearAmountScreenState extends State<NearAmountScreen> {
               keyboardType: TextInputType.number,
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
               decoration: InputDecoration(
-                  labelText: 'Amount', suffixText: 'FCFA', errorText: error)),
+                  labelText: t('Amount'),
+                  suffixText: 'FCFA',
+                  errorText: error)),
           const SizedBox(height: 8),
-          const Text('You’ll see fees and approve on the next screen.',
+          Text(t('You’ll see fees and approve on the next screen.'),
               style: SendohTextStyles.caption),
           const SizedBox(height: 24),
           FilledButton(
               onPressed: () {
                 final n = int.tryParse(field.text.trim().replaceAll(',', ''));
                 if (n == null || n <= 0 || n > 1000000000) {
-                  setState(() => error = 'Enter a whole FCFA amount.');
+                  setState(() => error = t('Enter a whole FCFA amount.'));
                   return;
                 }
                 Navigator.pop(context, n);
               },
-              child: const Text('Review payment')),
+              child: Text(t('Review payment'))),
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Wrong person? Scan again')),
+              child: Text(t('Wrong person? Scan again'))),
         ],
       ]));
 }
@@ -696,7 +711,7 @@ class _NearContributeScreenState extends State<NearContributeScreen> {
               api: widget.api,
               collectionId: collection['id'] as String,
               collection: collection['name'] as String,
-              name: 'your verified profile',
+              name: t('your verified profile'),
               expected: (widget.result['amount'] as num?)?.toInt() ??
                   (collection['expected_amount'] as num?)?.toInt())));
     } catch (e) {
@@ -714,23 +729,26 @@ class _NearContributeScreenState extends State<NearContributeScreen> {
   Widget build(BuildContext context) {
     final amount = (widget.result['amount'] as num?)?.toInt();
     return Scaffold(
-        appBar: AppBar(title: Text('Contribute to ${collection['name']}')),
+        appBar: AppBar(
+            title:
+                Text(t('Contribute to {name}', {'name': collection['name']}))),
         body: ListView(padding: const EdgeInsets.all(22), children: [
           const Center(child: CollectionSymbol()),
           const SizedBox(height: 16),
-          Text('Contribute to ${collection['name']}',
+          Text(t('Contribute to {name}', {'name': collection['name']}),
               textAlign: TextAlign.center,
               style: SendohTextStyles.headingMedium),
-          Text('Organized by ${organizer['name']}',
+          Text(t('Organized by {name}', {'name': organizer['name']}),
               textAlign: TextAlign.center, style: SendohTextStyles.caption),
           const SizedBox(height: 24),
           if (amount != null)
-            SummaryRow('Suggested contribution', coordinationMoney(amount)),
+            SummaryRow(t('Suggested contribution'), coordinationMoney(amount)),
           const SizedBox(height: 8),
           Text(
               membership == 'ACCEPTED'
-                  ? 'This counts toward your own share in this collection.'
-                  : 'You’ll join ${collection['name']} first. Joining doesn’t make a payment.',
+                  ? t('This counts toward your own share in this collection.')
+                  : t('You’ll join {name} first. Joining doesn’t make a payment.',
+                      {'name': collection['name']}),
               style: SendohTextStyles.bodyMedium),
           if (error != null)
             Padding(
@@ -741,11 +759,11 @@ class _NearContributeScreenState extends State<NearContributeScreen> {
           FilledButton(
               onPressed: busy ? null : contribute,
               child: Text(membership == 'ACCEPTED'
-                  ? 'Continue to contribute'
-                  : 'Join and contribute')),
+                  ? t('Continue to contribute')
+                  : t('Join and contribute'))),
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Wrong collection? Scan again')),
+              child: Text(t('Wrong collection? Scan again'))),
         ]));
   }
 }

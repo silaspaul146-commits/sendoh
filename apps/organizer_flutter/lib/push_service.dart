@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -141,7 +142,7 @@ class PushService {
     if (defaultTargetPlatform == TargetPlatform.iOS &&
         await FirebaseMessaging.instance.getAPNSToken() == null) {
       throw StateError(
-          'Apple push registration is not ready. Please try again shortly.');
+          t('Apple push registration is not ready. Please try again shortly.'));
     }
     final token = await FirebaseMessaging.instance.getToken();
     if (generation != _generation) {
@@ -149,7 +150,7 @@ class PushService {
     }
     if (token == null) {
       throw StateError(
-          'Push token is not ready. Check connectivity and try again.');
+          t('Push token is not ready. Check connectivity and try again.'));
     }
     await api.request('/me/push-devices/register', body: {
       'token': token,
@@ -162,21 +163,24 @@ class PushService {
   static Future<String> enable(SendohApi api, String user) async {
     await initialize();
     if (!ready) {
-      return 'Push alerts are not configured in this build. Your inbox still works.';
+      return t(
+          'Push alerts are not configured in this build. Your inbox still works.');
     }
     await _store.write(key: 'sendoh_push_permission_asked', value: 'true');
     final permission = await FirebaseMessaging.instance
         .requestPermission(alert: true, badge: true, sound: true);
     if (permission.authorizationStatus != AuthorizationStatus.authorized &&
         permission.authorizationStatus != AuthorizationStatus.provisional) {
-      return 'Notifications are not allowed. You can enable them in your phone settings.';
+      return t(
+          'Notifications are not allowed. You can enable them in your phone settings.');
     }
     await _store.write(key: 'sendoh_push_$user', value: 'true');
     // A network failure is not an opt-out. Retry registration on resume.
     if (!await attach(api, user)) {
-      throw StateError('Push registration was interrupted. Please try again.');
+      throw StateError(
+          t('Push registration was interrupted. Please try again.'));
     }
-    return 'Push alerts enabled for this device.';
+    return t('Push alerts enabled for this device.');
   }
 
   static Future<void> disable(SendohApi api, String user) async {

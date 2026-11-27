@@ -53,3 +53,8 @@ test('approval and confirmation are different moments, decided by the backend',(
  assert.match(pendingCopy({phase:'CONFIRMING',created_at:990},'MTN MoMo',now).body,/don’t pay again/);
  assert.match(pendingCopy({phase:'AWAITING_APPROVAL',created_at:0},'MTN MoMo',now).body,/longer than usual/);
 });
+test('payments group by round, newest round first',()=>{
+ const {byRound}=loaded.exports;
+ const groups=byRound([{id:'a',round:2},{id:'b',round:1},{id:'c',round:2},{id:'d'}]);
+ assert.deepEqual(groups.map(g=>[g.round,g.items.map(i=>i.id)]),[[2,['a','c']],[1,['b','d']]]);
+});

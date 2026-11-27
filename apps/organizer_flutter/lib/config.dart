@@ -8,4 +8,10 @@ abstract final class SendohConfig {
     'API_URL',
     defaultValue: 'https://sendoh.onrender.com',
   );
+
+  /// Public website: help, privacy, terms and web account deletion.
+  static const String webBaseUrl = String.fromEnvironment(
+    'WEB_URL',
+    defaultValue: 'https://sendoh.vercel.app',
+  );
 }

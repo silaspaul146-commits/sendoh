@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -16,39 +17,46 @@ String requestHeadline(Map<String, dynamic> r) {
   switch (r['status']) {
     case 'PAID':
       return mine
-          ? 'Paid · delivered to $requester'
-          : 'Paid · you received $amount';
+          ? t('Paid · delivered to {requester}', {'requester': requester})
+          : t('Paid · you received {amount}', {'amount': amount});
     case 'PAYMENT_REVIEW':
-      return 'Payment needs attention · nobody pays again';
+      return t('Payment needs attention · nobody pays again');
     case 'DECLINED':
-      return mine ? 'You declined this request' : '$payer declined';
+      return mine
+          ? t('You declined this request')
+          : t('{payer} declined', {'payer': payer});
     case 'CANCELLED':
       return mine
-          ? '$requester cancelled this request'
-          : 'You cancelled this request';
+          ? t('{requester} cancelled this request', {'requester': requester})
+          : t('You cancelled this request');
     case 'EXPIRED':
-      return 'This request expired';
+      return t('This request expired');
     case 'PROCESSING':
       return r['payment_phase'] == 'DELIVERING'
           ? (mine
-              ? 'You paid · delivering to $requester'
-              : '$payer paid · on its way to you')
-          : (mine ? 'Confirming your payment' : '$payer is paying');
+              ? t('You paid · delivering to {requester}',
+                  {'requester': requester})
+              : t('{payer} paid · on its way to you', {'payer': payer}))
+          : (mine
+              ? t('Confirming your payment')
+              : t('{payer} is paying', {'payer': payer}));
   }
-  return mine ? '$requester is waiting for your payment' : 'Waiting for $payer';
+  return mine
+      ? t('{requester} is waiting for your payment', {'requester': requester})
+      : t('Waiting for {payer}', {'payer': payer});
 }
 
 String requestStatus(dynamic value) =>
-    const {
-      'PENDING': 'Awaiting payment',
-      'PROCESSING': 'Payment in progress',
-      'PAYMENT_REVIEW': 'Payment under review',
-      'PAID': 'Paid',
-      'DECLINED': 'Declined',
-      'CANCELLED': 'Cancelled',
-      'EXPIRED': 'Expired',
+    {
+      'PENDING': t('Awaiting payment'),
+      'PROCESSING': t('Payment in progress'),
+      'PAYMENT_REVIEW': t('Payment under review'),
+      'PAID': t('Paid'),
+      'DECLINED': t('Declined'),
+      'CANCELLED': t('Cancelled'),
+      'EXPIRED': t('Expired'),
     }[value] ??
-    'Checking status';
+    t('Checking status');
 
 class ApiPeopleGateway implements PeopleFlowGateway {
   ApiPeopleGateway(this.api, this.userId);
@@ -75,13 +83,12 @@ class ApiPeopleGateway implements PeopleFlowGateway {
     await showDialog<void>(
         context: context,
         builder: (c) => AlertDialog(
-                title: const Text('QR scanning is not connected yet'),
-                content: const Text(
-                    'Use the person’s Sendoh username to pay or request.'),
+                title: Text(t('QR scanning is not connected yet')),
+                content: Text(
+                    t('Use the person’s Sendoh username to pay or request.')),
                 actions: [
                   TextButton(
-                      onPressed: () => Navigator.pop(c),
-                      child: const Text('Done'))
+                      onPressed: () => Navigator.pop(c), child: Text(t('Done')))
                 ]));
     return null;
   }
@@ -195,7 +202,7 @@ class _RequestSendState extends State<RequestSend> {
         };
       }
     } catch (_) {
-      error = 'Couldn’t restore the request. Please try again.';
+      error = t('Couldn’t restore the request. Please try again.');
     }
     if (mounted) {
       setState(() => busy = false);
@@ -224,15 +231,17 @@ class _RequestSendState extends State<RequestSend> {
       if (e is ApiException && [403, 404, 422, 429].contains(e.status)) {
         await storage.delete(key: storageKey);
         if (mounted) {
-          setState(() => error =
-              'Request was not sent. Go back to correct the details or try later. $e');
+          setState(() => error = t(
+              'Request was not sent. Go back to correct the details or try later. {e}',
+              {'e': e}));
         }
         return;
       }
       if (mounted) {
         setState(() => error = result == null
-            ? 'The result could not be confirmed. Retry this saved request; do not create another. $e'
-            : 'Request saved. Local cleanup needs a retry; reopening will check the same request.');
+            ? t('The result could not be confirmed. Retry this saved request; do not create another. {e}',
+                {'e': e})
+            : t('Request saved. Local cleanup needs a retry; reopening will check the same request.'));
       }
     } finally {
       if (mounted) {
@@ -244,12 +253,15 @@ class _RequestSendState extends State<RequestSend> {
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
-          title: Text(result == null ? 'Review and send' : 'Request saved')),
+          title:
+              Text(result == null ? t('Review and send') : t('Request saved'))),
       body: SafeArea(
           child: ListView(padding: const EdgeInsets.all(24), children: [
         if (busy) const LinearProgressIndicator(),
         if (envelope != null && result == null) ...[
-          Text('Request from ${envelope!['name'] ?? 'this person'}',
+          Text(
+              t('Request from {name}',
+                  {'name': envelope!['name'] ?? t('this person')}),
               style:
                   const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
           const SizedBox(height: 24),
@@ -258,11 +270,15 @@ class _RequestSendState extends State<RequestSend> {
                   const TextStyle(fontSize: 30, fontWeight: FontWeight.w600)),
           Text(envelope!['body']['reason']),
           Text(envelope!['body']['expires_at'] == null
-              ? 'No expiry'
-              : 'Expires: ${DateTime.fromMillisecondsSinceEpoch((envelope!['body']['expires_at'] as int) * 1000).toLocal()}'),
+              ? t('No expiry')
+              : t('Expires: {body}', {
+                  'body': DateTime.fromMillisecondsSinceEpoch(
+                          (envelope!['body']['expires_at'] as int) * 1000)
+                      .toLocal()
+                })),
           const SizedBox(height: 24),
-          const Text(
-              'Sending a request does not charge anyone. If an earlier submission was interrupted, this continues that same request.'),
+          Text(t(
+              'Sending a request does not charge anyone. If an earlier submission was interrupted, this continues that same request.')),
           const SizedBox(height: 24),
           if (receivingReady == false) ...[
             SurfaceCard(
@@ -270,35 +286,34 @@ class _RequestSendState extends State<RequestSend> {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Choose where you receive money first',
+                      Text(t('Choose where you receive money first'),
                           style: TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      const Text(
-                          'Then the person you ask can pay you straight away.'),
+                      Text(t(
+                          'Then the person you ask can pay you straight away.')),
                       TextButton(
                           onPressed: setUpReceiving,
-                          child: const Text('Set receiving details')),
+                          child: Text(t('Set receiving details'))),
                     ])),
             const SizedBox(height: 16),
           ],
           FilledButton(
               onPressed: busy || receivingReady != true ? null : send,
-              child: const Text('Send or check request')),
+              child: Text(t('Send or check request'))),
         ],
-        if (!busy && envelope == null)
-          const Text('No saved request to resume.'),
+        if (!busy && envelope == null) Text(t('No saved request to resume.')),
         if (result != null) ...[
           const Icon(Icons.check_circle_outline, size: 40),
           const SizedBox(height: 16),
           Text(requestStatus(result!['status'])),
-          const Text('Your request has been sent. Track the response here.'),
+          Text(t('Your request has been sent. Track the response here.')),
           TextButton(
               onPressed: () => Navigator.pushReplacement(
                   context,
                   MaterialPageRoute<void>(
                       builder: (_) => MoneyRequestDetail(
                           api: widget.api, id: result!['id']))),
-              child: const Text('View request')),
+              child: Text(t('View request'))),
         ],
         if (error != null)
           Text(error!, style: const TextStyle(color: SendohColors.red)),
@@ -327,9 +342,9 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Money requests'), actions: [
+      appBar: AppBar(title: Text(t('Money requests')), actions: [
         IconButton(
-            tooltip: 'Refresh',
+            tooltip: t('Refresh'),
             onPressed: () => setState(load),
             icon: const Icon(Icons.refresh))
       ]),
@@ -345,23 +360,23 @@ class _MoneyRequestInboxState extends State<MoneyRequestInbox> {
                 setState(load);
               }
             },
-            child: const Text('Resume an interrupted request')),
+            child: Text(t('Resume an interrupted request'))),
         FutureBuilder<dynamic>(
             future: data,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Text(
-                    'Requests could not load. Use Refresh to try again.');
+                return Text(
+                    t('Requests could not load. Use Refresh to try again.'));
               }
               if (!snapshot.hasData) {
                 return const LinearProgressIndicator();
               }
               final rows = snapshot.data['items'] as List;
               if (rows.isEmpty) {
-                return const Text('No money requests yet.');
+                return Text(t('No money requests yet.'));
               }
               return Column(children: [
-                const Text('Latest 100 requests · sent and received'),
+                Text(t('Latest 100 requests · sent and received')),
                 ...rows.map((r) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
@@ -429,15 +444,15 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
         context: context,
         builder: (c) => AlertDialog(
                 title: Text(action == 'CANCEL'
-                    ? 'Cancel request?'
-                    : 'Decline request?'),
+                    ? t('Cancel request?')
+                    : t('Decline request?')),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(c, false),
-                      child: const Text('Keep request')),
+                      child: Text(t('Keep request'))),
                   TextButton(
                       onPressed: () => Navigator.pop(c, true),
-                      child: const Text('Confirm'))
+                      child: Text(t('Confirm')))
                 ]));
     if (!mounted || yes != true) {
       return;
@@ -465,9 +480,9 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Money request'), actions: [
+      appBar: AppBar(title: Text(t('Money request')), actions: [
         IconButton(
-            tooltip: 'Refresh',
+            tooltip: t('Refresh'),
             onPressed: busy ? null : load,
             icon: const Icon(Icons.refresh))
       ]),
@@ -484,14 +499,17 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
             Expanded(
                 child: Text(
                     data!['direction'] == 'RECEIVED'
-                        ? '${data!['requester']['name']} asked you for'
-                        : 'You asked ${data!['recipient']['name']} for',
+                        ? t('{name} asked you for',
+                            {'name': data!['requester']['name']})
+                        : t('You asked {name} for',
+                            {'name': data!['recipient']['name']}),
                     style: SendohTextStyles.titleSmall)),
           ]),
           const SizedBox(height: 16),
           Text(personMoney(data!['amount']),
               style: SendohTextStyles.displayLarge),
-          Text('For ${data!['reason']}', style: SendohTextStyles.bodyMedium),
+          Text(t('For {reason}', {'reason': data!['reason']}),
+              style: SendohTextStyles.bodyMedium),
           const SizedBox(height: 20),
           Semantics(
               liveRegion: true,
@@ -511,11 +529,14 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
                   }
                 },
                 child: Text(data!['status'] == 'PAID'
-                    ? 'View receipt'
-                    : 'View payment')),
+                    ? t('View receipt')
+                    : t('View payment'))),
           if (data!['expires_at'] != null)
-            Text(
-                'Expires: ${DateTime.fromMillisecondsSinceEpoch((data!['expires_at'] as int) * 1000).toLocal()}'),
+            Text(t('Expires: {expires_at}', {
+              'expires_at': DateTime.fromMillisecondsSinceEpoch(
+                      (data!['expires_at'] as int) * 1000)
+                  .toLocal()
+            })),
           const SizedBox(height: 24),
           if (data!['status'] == 'PENDING') ...[
             if (data!['direction'] == 'RECEIVED')
@@ -533,12 +554,12 @@ class _MoneyRequestDetailState extends State<MoneyRequestDetail> {
                             load();
                           }
                         },
-                  child: const Text('Review payment')),
+                  child: Text(t('Review payment'))),
             OutlinedButton(
                 onPressed: busy ? null : respond,
                 child: Text(data!['direction'] == 'SENT'
-                    ? 'Cancel request'
-                    : 'Decline request')),
+                    ? t('Cancel request')
+                    : t('Decline request'))),
           ],
         ],
         if (error != null)

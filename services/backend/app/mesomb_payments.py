@@ -104,7 +104,7 @@ def masked_phone(phone):
 def view(p):
     return dict(id=p.id, reference=p.id, mode='SANDBOX', provider='MESOMB', phase=phase(p),
                 payer_masked=masked_phone(p.payer_phone),
-                purpose='COLLECTION_CONTRIBUTION', collection_id=p.collection_id,
+                purpose='COLLECTION_CONTRIBUTION', collection_id=p.collection_id, round=p.round,
                 participant_id=p.participant_id, payer_id=p.payer_id,
                 beneficiary_id=p.beneficiary_id, amount=p.amount, currency='XAF',
                 method=p.method, status=p.status, provider_status=p.provider_status,

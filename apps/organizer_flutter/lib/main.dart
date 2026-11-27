@@ -1,7 +1,9 @@
+import 'i18n.dart';
 import 'person_payments.dart';
 import 'home.dart';
 import 'coordination.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'session_store.dart';
@@ -21,21 +23,53 @@ import 'push_service.dart';
 import 'money_requests.dart';
 import 'settlement.dart';
 import 'near2pay.dart';
+import 'account.dart';
 
 final apiProvider =
-    Provider<SendohApi>((ref) => throw StateError('Session required'));
+    Provider<SendohApi>((ref) => throw StateError(t('Session required')));
 final sendohNavigator = GlobalKey<NavigatorState>();
-void main() => runApp(const ProviderScope(child: SendohApp()));
-String money(dynamic n) => n == null
-    ? 'No target'
-    : '${n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} FCFA';
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await loadLanguage();
+  runApp(const ProviderScope(child: SendohApp()));
+}
 
-class SendohApp extends StatelessWidget {
+String money(dynamic n) => n == null ? t('No target') : fcfa(n);
+
+class SendohApp extends StatefulWidget {
   const SendohApp({super.key});
+  @override
+  State<SendohApp> createState() => _SendohAppState();
+}
+
+class _SendohAppState extends State<SendohApp> {
+  @override
+  void initState() {
+    super.initState();
+    appLanguage.addListener(_languageChanged);
+  }
+
+  @override
+  void dispose() {
+    appLanguage.removeListener(_languageChanged);
+    super.dispose();
+  }
+
+  // Every open screen re-reads its words in place: no restart, no lost step.
+  void _languageChanged() {
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) rebuildAll(context);
+    });
+  }
+
   @override
   Widget build(BuildContext context) => MaterialApp(
       title: 'Sendoh',
       navigatorKey: sendohNavigator,
+      locale: Locale(appLanguage.value.name),
+      supportedLocales: const [Locale('en'), Locale('fr')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (context, child) => DeviceLock(
           child: child!,
           onSignIn: () =>
@@ -92,9 +126,9 @@ class _DevelopmentSessionState extends State<DevelopmentSession> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Development connection')),
+      appBar: AppBar(title: Text(t('Development connection'))),
       body: ListView(padding: const EdgeInsets.all(24), children: [
-        const Text('Use your original token to open existing collections.'),
+        Text(t('Use your original token to open existing collections.')),
         const SizedBox(height: 24),
         TextField(
             controller: url,
@@ -103,7 +137,7 @@ class _DevelopmentSessionState extends State<DevelopmentSession> {
         TextField(
             controller: token,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'Development token')),
+            decoration: InputDecoration(labelText: t('Development token'))),
         if (error != null)
           Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -112,7 +146,7 @@ class _DevelopmentSessionState extends State<DevelopmentSession> {
         const SizedBox(height: 24),
         FilledButton(
             onPressed: busy ? null : connect,
-            child: Text(busy ? 'Connecting…' : 'Open organizer app'))
+            child: Text(busy ? t('Connecting…') : t('Open organizer app')))
       ]));
 }
 
@@ -327,13 +361,14 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
             ? null
             : AppBar(
                 title: Text(tab == 1
-                    ? 'Collections'
+                    ? t('Collections')
                     : tab == 2
-                        ? 'Activity'
-                        : 'Profile'),
+                        ? t('Activity')
+                        : t('Profile')),
                 actions: [
                   IconButton(
-                      tooltip: 'Notifications ($unread unread)',
+                      tooltip: t('Notifications ({unread} unread)',
+                          {'unread': unread}),
                       onPressed: openNotifications,
                       icon: Badge(
                           isLabelVisible: unread > 0,
@@ -344,19 +379,19 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
         bottomNavigationBar: NavigationBar(
             selectedIndex: tab,
             onDestinationSelected: (v) => setState(() => tab = v),
-            destinations: const [
+            destinations: [
               NavigationDestination(
                   icon: Icon(Icons.home_outlined),
                   selectedIcon: Icon(Icons.home),
-                  label: 'Home'),
+                  label: t('Home')),
               NavigationDestination(
-                  icon: Icon(Icons.groups_outlined), label: 'Collections'),
+                  icon: Icon(Icons.groups_outlined), label: t('Collections')),
               NavigationDestination(
-                  icon: Icon(Icons.history), label: 'Activity'),
+                  icon: Icon(Icons.history), label: t('Activity')),
               NavigationDestination(
                   icon: Icon(Icons.person_outline),
                   selectedIcon: Icon(Icons.person),
-                  label: 'Profile')
+                  label: t('Profile'))
             ]),
         body: tab == 3
             ? profile()
@@ -460,7 +495,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
             padding: const EdgeInsets.all(20),
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              const Text('You organise', style: SendohTextStyles.headingMedium),
+              Text(t('You organise'), style: SendohTextStyles.headingMedium),
               const SizedBox(height: 16),
               FutureBuilder<List<dynamic>>(
                   future: items,
@@ -468,14 +503,13 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                     if (snapshot.hasError) {
                       return TextButton(
                           onPressed: reload,
-                          child:
-                              const Text('Couldn’t load collections. Retry'));
+                          child: Text(t('Couldn’t load collections. Retry')));
                     }
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (snapshot.data!.isEmpty) {
-                      return const Text('Your collections will appear here.');
+                      return Text(t('Your collections will appear here.'));
                     }
                     return Column(children: [
                       for (final raw in snapshot.data!)
@@ -490,7 +524,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
               const SizedBox(height: 12),
               ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Joined collections and invitations'),
+                  title: Text(t('Joined collections and invitations')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
                     await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -527,10 +561,10 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                 setState(() => account = updated);
               }
             },
-            child: const Text('Edit profile')),
+            child: Text(t('Edit profile'))),
         ListTile(
             leading: const Icon(Icons.account_balance_outlined),
-            title: const Text('Receiving details'),
+            title: Text(t('Receiving details')),
             onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(
@@ -538,7 +572,7 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                         ReceivingDetails(api: ref.read(apiProvider))))),
         ListTile(
             leading: const Icon(Icons.receipt_long_outlined),
-            title: const Text('Person payments'),
+            title: Text(t('Person payments')),
             onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(
@@ -546,13 +580,13 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                         PersonPaymentHistory(api: ref.read(apiProvider))))),
         ListTile(
             leading: const Icon(Icons.fingerprint),
-            title: const Text('Device unlock'),
+            title: Text(t('Device unlock')),
             subtitle:
-                const Text('Use biometrics or your device PIN when returning.'),
+                Text(t('Use biometrics or your device PIN when returning.')),
             onTap: () async {
               try {
                 final ok = await authenticateDevice(
-                    'Confirm device unlock settings for Sendoh');
+                    t('Confirm device unlock settings for Sendoh'));
                 if (!ok) {
                   return;
                 }
@@ -563,8 +597,8 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                     SnackBar(
                       content: Text(
                         enabled
-                            ? 'Device unlock enabled.'
-                            : 'Device unlock disabled.',
+                            ? t('Device unlock enabled.')
+                            : t('Device unlock disabled.'),
                       ),
                     ),
                   );
@@ -572,22 +606,26 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
               } catch (_) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text(
-                        'Set up a screen lock on this device, then try again.',
+                        t('Set up a screen lock on this device, then try again.'),
                       ),
                     ),
                   );
                 }
               }
             }),
+        const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LanguageChoice()),
+        const AboutLinks(),
         SurfaceCard(
             child: Column(children: [
-          const SummaryRow('Account', 'Sendoh member'),
+          SummaryRow(t('Account'), t('Sendoh member')),
           ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.history),
-              title: const Text('Activity', style: TextStyle(fontSize: 14)),
+              title: Text(t('Activity'), style: TextStyle(fontSize: 14)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => setState(() => tab = 2))
         ])),
@@ -600,9 +638,9 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                 await ref.read(apiProvider).request('/auth/logout', body: {});
               } catch (_) {
                 if (mounted) {
-                  messenger.showSnackBar(const SnackBar(
-                      content: Text(
-                          'Could not reach server. Your session will expire automatically.')));
+                  messenger.showSnackBar(SnackBar(
+                      content: Text(t(
+                          'Could not reach server. Your session will expire automatically.'))));
                 }
               }
               await PushService.detach(deleteToken: true);
@@ -611,7 +649,22 @@ class _ShellState extends ConsumerState<Shell> with WidgetsBindingObserver {
                 navigator.pop();
               }
             },
-            child: const Text('Sign out'))
+            child: Text(t('Sign out'))),
+        const SizedBox(height: 8),
+        TextButton(
+            style: TextButton.styleFrom(foregroundColor: SendohColors.red),
+            onPressed: () {
+              final navigator = Navigator.of(context);
+              navigator.push(MaterialPageRoute<void>(
+                  builder: (_) => DeleteAccountScreen(
+                      api: ref.read(apiProvider),
+                      onDeleted: () async {
+                        await PushService.detach(deleteToken: true);
+                        await SessionStore.clear();
+                        navigator.popUntil((route) => route.isFirst);
+                      })));
+            },
+            child: Text(t('Delete account')))
       ]);
 }
 
@@ -731,15 +784,15 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
           return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Settlements', style: SendohTextStyles.titleSmall),
+                Text(t('Settlements'), style: SendohTextStyles.titleSmall),
                 const SizedBox(height: 8),
                 for (final raw in items)
                   Builder(builder: (context) {
                     final s = Map<String, dynamic>.from(raw as Map);
                     final status = switch (s['state']) {
-                      'DELIVERED' => 'Payout delivered',
-                      'REVIEW' => 'Payout needs attention',
-                      _ => 'Payout sending',
+                      'DELIVERED' => t('Payout delivered'),
+                      'REVIEW' => t('Payout needs attention'),
+                      _ => t('Payout sending'),
                     };
                     return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -753,7 +806,10 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                                         color: SendohColors.teal,
                                         size: 20)),
                                 title: Text(
-                                    '${s['collection_name']} · Round ${s['round']}',
+                                    t('{collection_name} · Round {round}', {
+                                      'collection_name': s['collection_name'],
+                                      'round': s['round']
+                                    }),
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w600)),
                                 subtitle: Text(
@@ -791,7 +847,7 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
           return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Payments', style: SendohTextStyles.titleSmall),
+                Text(t('Payments'), style: SendohTextStyles.titleSmall),
                 const SizedBox(height: 8),
                 for (final raw in items)
                   Builder(builder: (context) {
@@ -847,14 +903,13 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(22),
                 children: [
-                  const Text('Your group, in the loop.',
+                  Text(t('Your group, in the loop.'),
                       style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
                           color: SendohColors.teal)),
                   const SizedBox(height: 8),
-                  const Text(
-                      'Payments you sent or received, and updates from collections you organize.',
+                  Text(t('Payments you sent or received, and updates from collections you organize.'),
                       style: TextStyle(
                           height: 1.6, color: SendohColors.secondary)),
                   const SizedBox(height: 24),
@@ -863,15 +918,15 @@ class _ActivityViewState extends ConsumerState<ActivityView> {
                   if (snapshot.connectionState == ConnectionState.waiting)
                     const LinearProgressIndicator(),
                   if (snapshot.hasError) ...[
-                    const Text(
-                        'Couldn’t load activity. Your records are still saved.'),
+                    Text(t(
+                        'Couldn’t load activity. Your records are still saved.')),
                     TextButton(
-                        onPressed: onUpdate, child: const Text('Try again')),
+                        onPressed: onUpdate, child: Text(t('Try again'))),
                   ] else if (snapshot.hasData && entries.isEmpty)
-                    const EmptyState(
-                        title: 'No collection updates yet',
-                        message:
-                            'Create a collection and invite your group. Its updates will appear here.',
+                    EmptyState(
+                        title: t('No collection updates yet'),
+                        message: t(
+                            'Create a collection and invite your group. Its updates will appear here.'),
                         icon: Icons.history),
                   if (!snapshot.hasError)
                     ...entries.map((raw) {
@@ -923,7 +978,7 @@ Future<void> copyCollectionLink(BuildContext context, String link) async {
   await Clipboard.setData(ClipboardData(text: link));
   if (context.mounted) {
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Collection link copied')));
+        .showSnackBar(SnackBar(content: Text(t('Collection link copied'))));
   }
 }
 
@@ -945,11 +1000,11 @@ class CollectionCreated extends StatelessWidget {
                     backgroundColor: SendohColors.teal,
                     child: Icon(Icons.check, color: Colors.white, size: 40))),
             const SizedBox(height: 24),
-            const Text('Collection created!',
+            Text(t('Collection created!'),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
             const SizedBox(height: 10),
-            const Text('Now invite people to contribute.',
+            Text(t('Now invite people to contribute.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: SendohColors.secondary)),
             const SizedBox(height: 30),
@@ -964,13 +1019,13 @@ class CollectionCreated extends StatelessWidget {
                             fontSize: 15, fontWeight: FontWeight.w600)))
               ]),
               const SizedBox(height: 12),
-              SummaryRow('Target', money(data['target_amount'])),
-              SummaryRow('Deadline', displayDate(data['deadline_at'])),
+              SummaryRow(t('Target'), money(data['target_amount'])),
+              SummaryRow(t('Deadline'), displayDate(data['deadline_at'])),
               SummaryRow(
-                  'Participants', '${(data['participants'] as List).length}')
+                  t('Participants'), '${(data['participants'] as List).length}')
             ])),
             const SizedBox(height: 24),
-            const Text('One link for everyone',
+            Text(t('One link for everyone'),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
@@ -982,7 +1037,7 @@ class CollectionCreated extends StatelessWidget {
                           style: const TextStyle(
                               fontSize: 12, color: SendohColors.teal))),
                   IconButton(
-                      tooltip: 'Copy collection link',
+                      tooltip: t('Copy collection link'),
                       onPressed: () =>
                           copyCollectionLink(context, data['share_url']),
                       icon: const Icon(Icons.copy_outlined, size: 19))
@@ -991,17 +1046,16 @@ class CollectionCreated extends StatelessWidget {
             FilledButton.icon(
                 onPressed: () => copyCollectionLink(context, data['share_url']),
                 icon: const Icon(Icons.link, size: 18),
-                label: const Text('Copy collection link')),
+                label: Text(t('Copy collection link'))),
             const SizedBox(height: 12),
             OutlinedButton(
                 onPressed: () => Navigator.of(context).pushReplacement(
                     MaterialPageRoute<void>(
                         builder: (_) =>
                             CollectionDetail(data: data, api: api))),
-                child: const Text('View collection')),
+                child: Text(t('View collection'))),
             const SizedBox(height: 18),
-            const Text(
-                'Share the copied link in WhatsApp or any messaging app.',
+            Text(t('Share the copied link in WhatsApp or any messaging app.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 12, height: 1.6, color: SendohColors.muted))
@@ -1019,7 +1073,7 @@ class CollectionDetail extends StatefulWidget {
 class _CollectionDetailState extends State<CollectionDetail> {
   late Map<String, dynamic> data;
   int tab = 1;
-  String filter = 'All';
+  String filter = 'All'; // English key; chips show t(filter)
   bool busy = false;
   String? error;
   @override
@@ -1079,7 +1133,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => error = 'Couldn’t refresh this collection.');
+        setState(() => error = t('Couldn’t refresh this collection.'));
       }
     } finally {
       if (mounted) {
@@ -1095,7 +1149,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 api: widget.api,
                 collectionId: data['id'],
                 collection: data['name'],
-                name: 'your verified profile',
+                name: t('your verified profile'),
                 expected: data['expected_amount'] as int?)
             : ContributionHistory(
                 api: widget.api, collectionId: data['id'], organizer: true)));
@@ -1120,6 +1174,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
         builder: (_) => NextRoundScreen(api: widget.api, data: data)));
     if (mounted && opened == true) {
       await refresh();
+      // Guests on the web get no notification: the organizer's message is how they hear.
+      if (mounted) await shareNewRound(context, data);
     }
   }
 
@@ -1147,25 +1203,26 @@ class _CollectionDetailState extends State<CollectionDetail> {
       }
       final count = (preview['eligible_count'] as num).toInt();
       if (count == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'No reminders needed. Members already reminded can be reminded again after 24 hours.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(t(
+                'No reminders needed. Members already reminded can be reminded again after 24 hours.'))));
         return;
       }
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialog) => AlertDialog(
-                title:
-                    Text('Remind $count ${count == 1 ? 'person' : 'people'}?'),
-                content: const Text(
-                    'Adds a Sendoh update for joined members with an outstanding contribution.'),
+                title: Text(count == 1
+                    ? t('Remind 1 person?')
+                    : t('Remind {count} people?', {'count': count})),
+                content: Text(t(
+                    'Adds a Sendoh update for joined members with an outstanding contribution.')),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialog, false),
-                      child: const Text('Cancel')),
+                      child: Text(t('Cancel'))),
                   TextButton(
                       onPressed: () => Navigator.pop(dialog, true),
-                      child: const Text('Send reminders')),
+                      child: Text(t('Send reminders'))),
                 ],
               ));
       if (!mounted || confirmed != true) {
@@ -1179,12 +1236,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
       final sent = (result['reminded_count'] as num).toInt();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(sent == 0
-              ? 'Everyone is up to date.'
-              : 'Reminder added to $sent ${sent == 1 ? 'inbox' : 'inboxes'}.')));
+              ? t('Everyone is up to date.')
+              : (sent == 1
+                  ? t('Reminder added to 1 inbox.')
+                  : t('Reminder added to {sent} inboxes.', {'sent': sent})))));
     } catch (_) {
       if (mounted) {
-        setState(() => error =
-            'Couldn’t confirm reminders. Try again; recent reminders won’t be repeated.');
+        setState(() => error = t(
+            'Couldn’t confirm reminders. Try again; recent reminders won’t be repeated.'));
       }
     } finally {
       if (mounted) {
@@ -1200,9 +1259,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
     if (!mounted || changed != true) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:
-            Text('Invitation saved. They can review it in their Sendoh app.')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            t('Invitation saved. They can review it in their Sendoh app.'))));
     await refresh();
   }
 
@@ -1210,16 +1269,17 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialog) => AlertDialog(
-                title: const Text('Cancel invitation?'),
-                content: Text(
-                    '${person['name']} will no longer be able to accept this invitation.'),
+                title: Text(t('Cancel invitation?')),
+                content: Text(t(
+                    '{name} will no longer be able to accept this invitation.',
+                    {'name': person['name']})),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialog, false),
-                      child: const Text('Keep invitation')),
+                      child: Text(t('Keep invitation'))),
                   TextButton(
                       onPressed: () => Navigator.pop(dialog, true),
-                      child: const Text('Cancel invitation')),
+                      child: Text(t('Cancel invitation'))),
                 ]));
     if (!mounted || confirmed != true) {
       return;
@@ -1253,17 +1313,17 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final chosen = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (dialog) => SimpleDialog(
-                title: Text('Who is ${placeholder['name']}?'),
+                title: Text(t('Who is {name}?', {'name': placeholder['name']})),
                 children: [
-                  const Padding(
+                  Padding(
                       padding: EdgeInsets.all(16),
-                      child: Text(
-                          'Choose the correct joined profile. This replaces the manual name and keeps its expected amount.')),
+                      child: Text(t(
+                          'Choose the correct joined profile. This replaces the manual name and keeps its expected amount.'))),
                   if (members.isEmpty)
-                    const Padding(
+                    Padding(
                         padding: EdgeInsets.all(16),
-                        child: Text(
-                            'Ask them to join using the collection link first.')),
+                        child: Text(t(
+                            'Ask them to join using the collection link first.'))),
                   ...members.map((p) => SimpleDialogOption(
                       onPressed: () =>
                           Navigator.pop(dialog, Map<String, dynamic>.from(p)),
@@ -1305,36 +1365,37 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 fontSize: 21, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 20),
                         SummaryRow(
-                            'Expected',
+                            t('Expected'),
                             p['expected_amount'] == null
-                                ? 'Any amount'
+                                ? t('Any amount')
                                 : money(p['expected_amount'])),
-                        SummaryRow('Contributed',
+                        SummaryRow(t('Contributed'),
                             money(p['sandbox_paid_amount'] ?? 0)),
                         if (memberPendingAmount(p) > 0)
-                          SummaryRow('Awaiting confirmation',
+                          SummaryRow(t('Awaiting confirmation'),
                               money(memberPendingAmount(p))),
                         if (p['expected_amount'] != null)
                           SummaryRow(
-                              'Remaining',
+                              t('Remaining'),
                               money(((p['expected_amount'] as int) -
                                       ((p['sandbox_paid_amount'] ?? 0) as int))
                                   .clamp(0, 1000000000000))),
-                        SummaryRow('Membership',
+                        SummaryRow(t('Membership'),
                             invitationLabel(p['invitation_state'])),
                         if (p['invitation_state'] == 'UNVERIFIED') ...[
-                          const Text(
-                              'Manual name only. This is not a verified account.',
+                          Text(
+                              t('Manual name only. This is not a verified account.'),
                               textAlign: TextAlign.center),
                           TextButton(
                               onPressed: () {
                                 Navigator.pop(sheet);
                                 linkManual(p);
                               },
-                              child: const Text('Link to a joined member')),
+                              child: Text(t('Link to a joined member'))),
                         ],
                         if (p['username'] != null)
-                          SummaryRow('Verified profile', '@${p['username']}'),
+                          SummaryRow(
+                              t('Verified profile'), '@${p['username']}'),
                         Center(
                             child: StatusBadge(collectionMemberPaymentStatus(p),
                                 pending: collectionMemberPaymentStatus(p) !=
@@ -1351,7 +1412,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                       Navigator.pop(sheet);
                                       invitePerson(p);
                                     },
-                              child: const Text('Invite this person')),
+                              child: Text(t('Invite this person'))),
                         ],
                         if (p['invitation_state'] == 'PENDING') ...[
                           TextButton(
@@ -1363,9 +1424,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                       text: link['url'] as String));
                                   if (sheet.mounted) {
                                     ScaffoldMessenger.of(sheet).showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                'Personal invitation link copied')));
+                                        SnackBar(
+                                            content: Text(t(
+                                                'Personal invitation link copied'))));
                                   }
                                 } catch (e) {
                                   if (sheet.mounted) {
@@ -1374,8 +1435,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                   }
                                 }
                               },
-                              child:
-                                  const Text('Copy personal invitation link')),
+                              child: Text(t('Copy personal invitation link'))),
                           const SizedBox(height: 20),
                           OutlinedButton(
                               onPressed: busy
@@ -1384,7 +1444,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                       Navigator.pop(sheet);
                                       cancelInvitation(p);
                                     },
-                              child: const Text('Cancel invitation')),
+                              child: Text(t('Cancel invitation'))),
                         ],
                       ])))));
   @override
@@ -1409,11 +1469,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
         appBar: AppBar(title: Text(data['name']), actions: [
           if (data['status'] == 'ACTIVE')
             IconButton(
-                tooltip: 'Invite someone',
+                tooltip: t('Invite someone'),
                 onPressed: busy ? null : () => invitePerson(),
                 icon: const Icon(Icons.person_add_outlined)),
           IconButton(
-              tooltip: 'Refresh',
+              tooltip: t('Refresh'),
               onPressed: busy ? null : refresh,
               icon: const Icon(Icons.refresh, size: 21))
         ]),
@@ -1429,26 +1489,30 @@ class _CollectionDetailState extends State<CollectionDetail> {
                       onEditCash: busy ? null : editCash,
                       onNextRound: busy ? null : startNextRound),
                   const SizedBox(height: 16),
-                  Text('$paidCount paid · $outstandingCount outstanding',
+                  Text(
+                      t('{paidCount} paid · {outstandingCount} outstanding', {
+                        'paidCount': paidCount,
+                        'outstandingCount': outstandingCount
+                      }),
                       style: SendohTextStyles.bodyMedium),
                   const SizedBox(height: 12),
                   Row(children: [
                     CoordinationAction(
                         icon: Icons.share_outlined,
-                        label: 'Copy link',
+                        label: t('Copy link'),
                         onTap: data['share_url'] == null
                             ? null
                             : () =>
                                 copyCollectionLink(context, data['share_url'])),
                     CoordinationAction(
                         icon: Icons.person_add_outlined,
-                        label: 'Invite',
+                        label: t('Invite'),
                         onTap: busy || data['status'] != 'ACTIVE'
                             ? null
                             : () => invitePerson()),
                     CoordinationAction(
                         icon: Icons.qr_code_2,
-                        label: 'Nearby',
+                        label: t('Nearby'),
                         onTap: busy || data['status'] != 'ACTIVE'
                             ? null
                             : () => Navigator.of(context).push(
@@ -1459,12 +1523,12 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                         collectionName: data['name'])))),
                     CoordinationAction(
                         icon: Icons.receipt_long_outlined,
-                        label: 'Receipts',
+                        label: t('Receipts'),
                         onTap: busy ? null : () => openPayments()),
                   ]),
                   const SizedBox(height: 16),
                   Row(
-                      children: ['Overview', 'People']
+                      children: [t('Overview'), t('People')]
                           .asMap()
                           .entries
                           .map((e) => Expanded(
@@ -1500,20 +1564,20 @@ class _CollectionDetailState extends State<CollectionDetail> {
                               color: SendohColors.secondary)),
                       const SizedBox(height: 18)
                     ],
-                    SummaryRow('Deadline', displayDate(data['deadline_at'])),
+                    SummaryRow(t('Deadline'), displayDate(data['deadline_at'])),
                     SummaryRow(
-                        'Contribution',
+                        t('Contribution'),
                         data['expected_amount'] == null
-                            ? 'Any amount'
+                            ? t('Any amount')
                             : money(data['expected_amount'])),
-                    SummaryRow('Payment environment', 'Sandbox'),
+                    SummaryRow(t('Payment environment'), t('Sandbox')),
                     const SizedBox(height: 20),
                     if (data['status'] == 'ACTIVE')
                       FilledButton(
                           onPressed: busy
                               ? null
                               : () => openPayments(contribute: true),
-                          child: const Text('Contribute')),
+                          child: Text(t('Contribute'))),
                   ] else ...[
                     SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -1528,7 +1592,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 .map((v) => Padding(
                                     padding: const EdgeInsets.only(right: 8),
                                     child: ChoiceChip(
-                                        label: Text(v,
+                                        label: Text(t(v),
                                             style:
                                                 const TextStyle(fontSize: 12)),
                                         selected: filter == v,
@@ -1537,10 +1601,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
                                 .toList())),
                     const SizedBox(height: 16),
                     if (visiblePeople.isEmpty)
-                      const EmptyState(
-                          title: 'No matching contributions',
+                      EmptyState(
+                          title: t('No matching contributions'),
                           message:
-                              'Participant contributions will appear here.')
+                              t('Participant contributions will appear here.'))
                     else
                       ...visiblePeople.map((raw) {
                         final p = Map<String, dynamic>.from(raw);
@@ -1564,14 +1628,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     if (outstandingCount > 0)
                       FilledButton(
                           onPressed: busy ? null : remindMembers,
-                          child: const Text('Remind outstanding members')),
+                          child: Text(t('Remind outstanding members'))),
                     const SizedBox(height: 8),
                     OutlinedButton(
                         onPressed: data['share_url'] == null
                             ? null
                             : () =>
                                 copyCollectionLink(context, data['share_url']),
-                        child: const Text('Copy collection link')),
+                        child: Text(t('Copy collection link'))),
                   ],
                   if (error != null)
                     Text(error!,

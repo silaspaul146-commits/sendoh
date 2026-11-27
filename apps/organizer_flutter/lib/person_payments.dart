@@ -1,3 +1,4 @@
+import 'i18n.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -7,24 +8,24 @@ import 'api.dart';
 import 'design.dart';
 
 String paymentStatus(dynamic value) =>
-    const {
-      'READY': 'Awaiting confirmation',
-      'COLLECTING': 'Confirming payment',
-      'FUNDED': 'Preparing delivery',
-      'DELIVERING': 'Delivering payment',
-      'SUCCEEDED': 'Confirmed',
-      'FAILED': 'Not completed',
-      'REVIEW': 'Under review',
-      'PENDING': 'Awaiting confirmation',
-      'NOT_STARTED': 'Not started',
-      'REFUNDED': 'Reversed',
-      'CANCELLED': 'Cancelled',
-      'EXPIRED': 'Expired',
+    {
+      'READY': t('Awaiting confirmation'),
+      'COLLECTING': t('Confirming payment'),
+      'FUNDED': t('Preparing delivery'),
+      'DELIVERING': t('Delivering payment'),
+      'SUCCEEDED': t('Confirmed'),
+      'FAILED': t('Not completed'),
+      'REVIEW': t('Under review'),
+      'PENDING': t('Awaiting confirmation'),
+      'NOT_STARTED': t('Not started'),
+      'REFUNDED': t('Reversed'),
+      'CANCELLED': t('Cancelled'),
+      'EXPIRED': t('Expired'),
     }[value] ??
-    'Checking status';
+    t('Checking status');
 
 String walletLabel(dynamic method) =>
-    method == 'ORANGE' ? 'Orange Money' : 'MTN MoMo';
+    method == 'ORANGE' ? t('Orange Money') : 'MTN MoMo';
 
 /// One line per moment, from the reader's side. Only DELIVERED says "received".
 ({String title, String body}) personPaymentCopy(
@@ -35,61 +36,70 @@ String walletLabel(dynamic method) =>
     required String amount}) {
   if (recipient) {
     return switch (phase) {
-      'DELIVERED' => (title: 'You received $amount', body: 'From $payer.'),
+      'DELIVERED' => (
+          title: t('You received {amount}', {'amount': amount}),
+          body: t('From {payer}.', {'payer': payer})
+        ),
       'DELIVERING' => (
-          title: '$payer paid · on its way to you',
-          body:
-              'It isn’t in your Mobile Money yet. We’ll tell you when it arrives.'
+          title: t('{payer} paid · on its way to you', {'payer': payer}),
+          body: t(
+              'It isn’t in your Mobile Money yet. We’ll tell you when it arrives.')
         ),
       'REVIEW_FUNDS_HELD' => (
-          title: 'Delivery needs attention',
-          body: '$payer’s payment is held safely. Nobody pays again.'
+          title: t('Delivery needs attention'),
+          body: t('{payer}’s payment is held safely. Nobody pays again.',
+              {'payer': payer})
         ),
       'FAILED' => (
-          title: '$payer’s payment didn’t go through',
-          body: 'Nothing was taken or delivered.'
+          title: t('{payer}’s payment didn’t go through', {'payer': payer}),
+          body: t('Nothing was taken or delivered.')
         ),
       _ => (
-          title: '$payer is paying',
-          body: 'We’ll tell you when it reaches you.'
+          title: t('{payer} is paying', {'payer': payer}),
+          body: t('We’ll tell you when it reaches you.')
         ),
     };
   }
   return switch (phase) {
     'AWAITING_APPROVAL' => (
-        title: 'Approve on your phone',
-        body:
-            'Check your Mobile Money phone for the prompt and approve it there.'
+        title: t('Approve on your phone'),
+        body: t(
+            'Check your Mobile Money phone for the prompt and approve it there.')
       ),
     'CONFIRMING' => (
-        title: 'Confirming your payment',
-        body: 'We’re checking with Mobile Money. Please don’t pay again.'
+        title: t('Confirming your payment'),
+        body: t('We’re checking with Mobile Money. Please don’t pay again.')
       ),
     'DELIVERING' => (
-        title: 'Paid · delivering to $payee',
-        body:
-            'We collected your payment. Delivery to $payee is still being confirmed. Please don’t pay again.'
+        title: t('Paid · delivering to {payee}', {'payee': payee}),
+        body: t(
+            'We collected your payment. Delivery to {payee} is still being confirmed. Please don’t pay again.',
+            {'payee': payee})
       ),
     'DELIVERED' => (
-        title: 'Delivered to $payee',
-        body: '$payee received $amount.'
+        title: t('Delivered to {payee}', {'payee': payee}),
+        body:
+            t('{payee} received {amount}.', {'payee': payee, 'amount': amount})
       ),
     'REVIEW_FUNDS_HELD' => (
-        title: 'Delivery needs attention',
-        body:
-            'Your payment was collected and is held safely. Please don’t pay again.'
+        title: t('Delivery needs attention'),
+        body: t(
+            'Your payment was collected and is held safely. Please don’t pay again.')
       ),
     'REVIEW' => (
-        title: 'We’re checking this payment',
-        body: 'Please don’t pay again.'
+        title: t('We’re checking this payment'),
+        body: t('Please don’t pay again.')
       ),
     'FAILED' => (
-        title: 'Payment not completed',
-        body: 'Nothing was delivered. You can try again.'
+        title: t('Payment not completed'),
+        body: t('Nothing was delivered. You can try again.')
       ),
-    'CANCELLED' => (title: 'Payment cancelled', body: 'Nothing was charged.'),
-    'EXPIRED' => (title: 'Quote expired', body: 'Review a new quote.'),
-    _ => (title: 'Review payment', body: ''),
+    'CANCELLED' => (
+        title: t('Payment cancelled'),
+        body: t('Nothing was charged.')
+      ),
+    'EXPIRED' => (title: t('Quote expired'), body: t('Review a new quote.')),
+    _ => (title: t('Review payment'), body: ''),
   };
 }
 
@@ -101,21 +111,22 @@ String walletLabel(dynamic method) =>
   final other = sent
       ? '${quote['recipient']['name']}'
       : '${item['payer']?['name'] ?? 'Someone'}';
-  final title = sent ? 'You sent $amount to $other' : '$other sent you $amount';
+  final title = sent
+      ? t('You sent {amount} to {other}', {'amount': amount, 'other': other})
+      : t('{other} sent you {amount}', {'other': other, 'amount': amount});
   final status = switch (item['phase']) {
-    'DELIVERED' => sent ? 'Delivered' : 'Received',
-    'DELIVERING' => sent ? 'Paid · delivering' : 'On its way to you',
-    'REVIEW_FUNDS_HELD' => 'Needs attention · held safely',
-    'REVIEW' => 'Being checked',
-    'FAILED' => 'Not completed',
-    _ => sent ? 'Confirming your payment' : 'Being paid',
+    'DELIVERED' => sent ? t('Delivered') : t('Received'),
+    'DELIVERING' => sent ? t('Paid · delivering') : t('On its way to you'),
+    'REVIEW_FUNDS_HELD' => t('Needs attention · held safely'),
+    'REVIEW' => t('Being checked'),
+    'FAILED' => t('Not completed'),
+    _ => sent ? t('Confirming your payment') : t('Being paid'),
   };
   return (title: title, status: status);
 }
 
 String personMoney(dynamic value) {
-  final s = '${value ?? 0}';
-  return '${s.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} FCFA';
+  return fcfa(value ?? 0);
 }
 
 Widget paymentRow(String label, String value) => Padding(
@@ -137,7 +148,7 @@ Widget paymentRow(String label, String value) => Padding(
     }));
 
 Widget paymentPage(String title, List<Widget> children) => Scaffold(
-    appBar: AppBar(title: const Text('Sendoh')),
+    appBar: AppBar(title: Text(t('Sendoh'))),
     body: SafeArea(
         child: Align(
             alignment: Alignment.topCenter,
@@ -243,21 +254,21 @@ class _ReceivingDetailsState extends State<ReceivingDetails> {
   }
 
   @override
-  Widget build(BuildContext context) => paymentPage('Receiving details', [
+  Widget build(BuildContext context) => paymentPage(t('Receiving details'), [
         if (busy) const LinearProgressIndicator(color: SendohColors.teal),
         Text(
             data?['account_masked_phone'] ??
                 data?['destination']?['masked_phone'] ??
-                'Your Sendoh account number',
+                t('Your Sendoh account number'),
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        const Text('Receive on the number linked to your account.'),
+        Text(t('Receive on the number linked to your account.')),
         const SizedBox(height: 24),
         Wrap(
             spacing: 12,
             children: ['MTN', 'ORANGE']
                 .map((m) => ChoiceChip(
-                    label: Text(m == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
+                    label: Text(m == 'MTN' ? 'MTN MoMo' : t('Orange Money')),
                     selected: method == m,
                     onSelected: busy
                         ? null
@@ -269,7 +280,7 @@ class _ReceivingDetailsState extends State<ReceivingDetails> {
         const SizedBox(height: 20),
         CheckboxListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Receive payments on my account number'),
+            title: Text(t('Receive payments on my account number')),
             value: consent,
             onChanged:
                 busy ? null : (v) => setState(() => consent = v ?? false)),
@@ -278,9 +289,9 @@ class _ReceivingDetailsState extends State<ReceivingDetails> {
         const SizedBox(height: 24),
         FilledButton(
             onPressed: busy || !consent || data == null ? null : save,
-            child: const Text('Save details')),
+            child: Text(t('Save details'))),
         TextButton(
-            onPressed: busy ? null : load, child: const Text('Reload details')),
+            onPressed: busy ? null : load, child: Text(t('Reload details'))),
       ]);
 }
 
@@ -413,11 +424,11 @@ class _PersonCheckoutState extends State<PersonCheckout>
       initialized = true;
       outcomeUnknown = false;
     } on ApiException catch (e) {
-      const rejected = [
-        'Quote expired. Review a new quote.',
-        'Payment terms changed. Review a new quote.',
-        'Your phone identity changed. Review a new quote.',
-        'Receiving details changed. Review a new quote.'
+      final rejected = [
+        t('Quote expired. Review a new quote.'),
+        t('Payment terms changed. Review a new quote.'),
+        t('Your phone identity changed. Review a new quote.'),
+        t('Receiving details changed. Review a new quote.')
       ];
       // The order endpoint checks/replays existing orders under its user lock
       // before these definitive pre-creation rejections.
@@ -430,7 +441,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
         quote = null;
         initialized = true;
       }
-      error = e.message;
+      error = t(e.message);
     } catch (e) {
       error = '$e';
     } finally {
@@ -482,7 +493,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
       if (order == null) {
         final existing = await storage.read(key: slot!);
         if (existing != null) {
-          throw StateError('Resume the existing payment first.');
+          throw StateError(t('Resume the existing payment first.'));
         }
         // Persist before any network mutation. Storage failure prevents charge.
         pending = {
@@ -505,7 +516,7 @@ class _PersonCheckoutState extends State<PersonCheckout>
       }
       if (order!['status'] != 'READY' ||
           order!['execution_available'] != true) {
-        error = 'This payment cannot be started. Check its current status.';
+        error = t('This payment cannot be started. Check its current status.');
         return;
       }
       order = Map<String, dynamic>.from(await widget.api.request(
@@ -516,8 +527,8 @@ class _PersonCheckoutState extends State<PersonCheckout>
       }
     } catch (_) {
       outcomeUnknown = true;
-      error =
-          'We could not confirm the latest status. Check this payment before starting another.';
+      error = t(
+          'We could not confirm the latest status. Check this payment before starting another.');
     } finally {
       submitting = false;
       if (mounted) {
@@ -546,8 +557,8 @@ class _PersonCheckoutState extends State<PersonCheckout>
         await clearOwnPending();
       }
     } catch (_) {
-      error =
-          'Couldn’t update this payment. Its last known status is shown below.';
+      error = t(
+          'Couldn’t update this payment. Its last known status is shown below.');
     } finally {
       checking = false;
       if (mounted) {
@@ -602,7 +613,9 @@ class _PersonCheckoutState extends State<PersonCheckout>
         payee: payee,
         amount: personMoney(a['recipient_amount']));
     final title = ready && !isRecipient
-        ? (widget.nearby && q != null ? 'Pay $payee' : 'Review payment')
+        ? (widget.nearby && q != null
+            ? t('Pay {payee}', {'payee': payee})
+            : t('Review payment'))
         : copy.title;
     return paymentPage(title, [
       if (busy) const LinearProgressIndicator(color: SendohColors.teal),
@@ -631,43 +644,44 @@ class _PersonCheckoutState extends State<PersonCheckout>
         const SizedBox(height: 4),
         Text(
             isRecipient
-                ? 'From $payer'
+                ? t('From {payer}', {'payer': payer})
                 : delivered
-                    ? 'Delivered to $payee'
+                    ? t('Delivered to {payee}', {'payee': payee})
                     : ready
-                        ? '$payee receives'
-                        : 'To $payee',
+                        ? t('{payee} receives', {'payee': payee})
+                        : t('To {payee}', {'payee': payee}),
             style: SendohTextStyles.bodyMedium),
         if (q['reason'] != null)
-          Text('For ${q['reason']}', style: SendohTextStyles.caption),
+          Text(t('For {reason}', {'reason': q['reason']}),
+              style: SendohTextStyles.caption),
         const SizedBox(height: 28),
         if (ready && !isRecipient) ...[
           paymentSurface([
             paymentRow(
-                '$payee receives on',
+                t('{payee} receives on', {'payee': payee}),
                 '${walletLabel(q['receiving_method'])} ${q['receiving_masked'] ?? ''}'
                     .trim()),
             paymentRow(
-                'Fees',
+                t('Fees'),
                 personMoney((a['collection_fee'] as num) +
                     (a['delivery_fee'] as num) +
                     (a['sendoh_fee'] as num))),
             const Divider(height: 16),
-            paymentRow('Total', personMoney(a['total_debit'])),
+            paymentRow(t('Total'), personMoney(a['total_debit'])),
           ]),
           ExpansionTile(
               key: const ValueKey('fee-breakdown'),
               tilePadding: EdgeInsets.zero,
-              title: const Text('Fee breakdown'),
+              title: Text(t('Fee breakdown')),
               children: [
                 paymentRow(
-                    'Processing fee',
+                    t('Processing fee'),
                     personMoney((a['collection_fee'] as num) +
                         (a['delivery_fee'] as num))),
-                paymentRow('Sendoh fee', personMoney(a['sendoh_fee'])),
+                paymentRow(t('Sendoh fee'), personMoney(a['sendoh_fee'])),
               ]),
           const SizedBox(height: 16),
-          const Text('Pay with', style: SendohTextStyles.titleSmall),
+          Text(t('Pay with'), style: SendohTextStyles.titleSmall),
           const SizedBox(height: 12),
           if (order == null && pending == null)
             ...['MTN', 'ORANGE'].map((m) => Padding(
@@ -701,49 +715,53 @@ class _PersonCheckoutState extends State<PersonCheckout>
                           const SizedBox(width: 12),
                           Expanded(
                               child: Text(
-                                  m == 'MTN' ? 'MTN MoMo' : 'Orange Money',
+                                  m == 'MTN' ? 'MTN MoMo' : t('Orange Money'),
                                   style: SendohTextStyles.titleSmall)),
                         ]),
                       )),
                 ))
           else
-            paymentRow('Method',
-                q['payer_method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
+            paymentRow(t('Method'),
+                q['payer_method'] == 'MTN' ? 'MTN MoMo' : t('Orange Money')),
         ],
         if (!ready || isRecipient)
           Semantics(
               liveRegion: true,
               child: Text(copy.body, style: SendohTextStyles.bodyMedium)),
         if (!ready && !terminal && !isRecipient)
-          const Text('You can leave and come back; this payment will be here.',
+          Text(t('You can leave and come back; this payment will be here.'),
               style: SendohTextStyles.caption),
         if (order != null && !ready)
           ExpansionTile(
               key: const ValueKey('payment-details'),
               tilePadding: EdgeInsets.zero,
-              title: Text(delivered ? 'View receipt' : 'Payment details'),
+              title: Text(delivered ? t('View receipt') : t('Payment details')),
               children: [
-                paymentRow('From', payer),
+                paymentRow(t('From'), payer),
                 paymentRow('To', payee),
-                if (q['reason'] != null) paymentRow('For', '${q['reason']}'),
+                if (q['reason'] != null) paymentRow(t('For'), '${q['reason']}'),
                 paymentRow(
-                    'Received on',
+                    t('Received on'),
                     '${walletLabel(q['receiving_method'])} ${q['receiving_masked'] ?? ''}'
                         .trim()),
-                paymentRow('Payment collection',
+                paymentRow(t('Payment collection'),
                     paymentStatus(order!['collection_status'])),
-                paymentRow('Recipient delivery',
+                paymentRow(t('Recipient delivery'),
                     paymentStatus(order!['delivery_status'])),
                 paymentRow(
-                    'Processing fee',
+                    t('Processing fee'),
                     personMoney((a['collection_fee'] as num) +
                         (a['delivery_fee'] as num))),
-                paymentRow('Sendoh fee', personMoney(a['sendoh_fee'])),
-                paymentRow('Total', personMoney(a['total_debit'])),
-                paymentRow('Method',
-                    q['payer_method'] == 'MTN' ? 'MTN MoMo' : 'Orange Money'),
-                const Align(
-                    alignment: Alignment.centerLeft, child: Text('Reference')),
+                paymentRow(t('Sendoh fee'), personMoney(a['sendoh_fee'])),
+                paymentRow(t('Total'), personMoney(a['total_debit'])),
+                paymentRow(
+                    t('Method'),
+                    q['payer_method'] == 'MTN'
+                        ? 'MTN MoMo'
+                        : t('Orange Money')),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(t('Reference'))),
                 Align(
                     alignment: Alignment.centerLeft,
                     child: SelectableText('${order!['id']}')),
@@ -762,29 +780,31 @@ class _PersonCheckoutState extends State<PersonCheckout>
           initialized &&
           pending == null &&
           order == null) ...[
-        if (expired) const Text('Refresh the quote before confirming.'),
+        if (expired) Text(t('Refresh the quote before confirming.')),
         FilledButton(
             onPressed: busy || expired || q['execution_available'] != true
                 ? null
                 : confirm,
-            child: Text('Pay ${personMoney(a['total_debit'])}')),
+            child: Text(
+                t('Pay {amount}', {'amount': personMoney(a['total_debit'])}))),
         if (q['execution_available'] != true)
-          const Text(
-              'Payment is currently unavailable. No payment has been started.'),
+          Text(t(
+              'Payment is currently unavailable. No payment has been started.')),
         if (expired)
           TextButton(
               onPressed: busy ? null : newQuote,
-              child: const Text('Refresh quote')),
+              child: Text(t('Refresh quote'))),
       ] else if (status == 'READY') ...[
         FilledButton(
             onPressed:
                 busy || outcomeUnknown || order!['execution_available'] != true
                     ? null
                     : confirm,
-            child: Text('Pay ${personMoney(a['total_debit'])}')),
+            child: Text(
+                t('Pay {amount}', {'amount': personMoney(a['total_debit'])}))),
         TextButton(
             onPressed: busy ? null : cancelPrepared,
-            child: const Text('Cancel this payment')),
+            child: Text(t('Cancel this payment'))),
       ],
       if (quote == null &&
           initialized &&
@@ -792,19 +812,18 @@ class _PersonCheckoutState extends State<PersonCheckout>
           widget.target != null)
         FilledButton(
             onPressed: busy ? null : newQuote,
-            child: const Text('Review new quote')),
+            child: Text(t('Review new quote'))),
       if ((order != null && !terminal) || error != null)
         OutlinedButton(
-            onPressed: busy ? null : refresh,
-            child: const Text('Check status')),
+            onPressed: busy ? null : refresh, child: Text(t('Check status'))),
       if (widget.nearby && ready && order == null)
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Wrong person? Scan again'))
+            child: Text(t('Wrong person? Scan again')))
       else
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(delivered ? 'Done' : 'Back')),
+            child: Text(delivered ? t('Done') : t('Back'))),
     ]);
   }
 }
@@ -851,10 +870,10 @@ class _PersonPaymentHistoryState extends State<PersonPaymentHistory> {
   }
 
   @override
-  Widget build(BuildContext context) => paymentPage('Person payments', [
+  Widget build(BuildContext context) => paymentPage(t('Person payments'), [
         if (busy) const LinearProgressIndicator(color: SendohColors.teal),
         if (items?.isEmpty == true)
-          const Text('Your person payments will appear here.'),
+          Text(t('Your person payments will appear here.')),
         for (final item in items ?? [])
           ListTile(
               contentPadding: EdgeInsets.zero,
@@ -873,6 +892,6 @@ class _PersonPaymentHistoryState extends State<PersonPaymentHistory> {
                 }
               }),
         if (error != null) Text(error!),
-        TextButton(onPressed: busy ? null : load, child: const Text('Refresh')),
+        TextButton(onPressed: busy ? null : load, child: Text(t('Refresh'))),
       ]);
 }
