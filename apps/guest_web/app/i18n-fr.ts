@@ -386,4 +386,6 @@ export const FR:Record<string,string>={
  'FOR EVERY MOMENT':'POUR CHAQUE MOMENT',
  'BUILT IN CAMEROON, FOR CAMEROON':'CONÇU AU CAMEROUN, POUR LE CAMEROUN',
  'PARTNERS AND INVESTORS':'PARTENAIRES ET INVESTISSEURS',
+ 'Testing: your code is {code}':'Test : votre code est {code}',
+ 'Use it':'L’utiliser',
 };
