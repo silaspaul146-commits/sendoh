@@ -16,7 +16,7 @@ export default function GuestIdentity({onVerified}:{onVerified:()=>Promise<void>
  const {t}=useT();
  const [phone,setPhone]=useState(''), [code,setCode]=useState(''), [name,setName]=useState('');
  const [challenge,setChallenge]=useState(''), [step,setStep]=useState('phone');
- const [busy,setBusy]=useState(false), [error,setError]=useState(''), [delivery,setDelivery]=useState('');
+ const [busy,setBusy]=useState(false), [error,setError]=useState(''), [delivery,setDelivery]=useState(''), [testCode,setTestCode]=useState('');
  const [resendAt,setResendAt]=useState(0);
  async function submit(e:FormEvent) {
   e.preventDefault(); if(busy)return;
@@ -25,7 +25,7 @@ export default function GuestIdentity({onVerified}:{onVerified:()=>Promise<void>
    const normalized='+237'+phone.replace(/\s/g,'');
    if(step==='phone') {
     const data=await guestRequest({action:'code',phone:normalized});
-    setChallenge(data.challenge_id);setDelivery(data.delivery);setResendAt(Date.now()+data.resend_after*1000);setStep('code');
+    setChallenge(data.challenge_id);setDelivery(data.delivery);setTestCode(typeof data.test_code==='string'?data.test_code:'');setResendAt(Date.now()+data.resend_after*1000);setStep('code');
    } else if(step==='code') {
     const data=await guestRequest({action:'verify',phone:normalized,code,challenge_id:challenge});
     if(data.user.display_name) {setStep('ready');await onVerified();} else setStep('name');
@@ -40,7 +40,7 @@ export default function GuestIdentity({onVerified}:{onVerified:()=>Promise<void>
   <p>{t('Your verified number connects you to your invitation. No app installation is needed.')}</p>
   <p className="helper">{t('We keep a verified identity so the organizer can recognise you. You can complete a Sendoh profile later.')}</p>
   {step==='phone'&&<label className="field">{t('Phone number')}<span className="phone-input"><span>+237</span><input value={phone} onChange={e=>setPhone(e.target.value.replace(/[^0-9]/g,''))} pattern="[26][0-9]{8}" maxLength={9} inputMode="tel" autoComplete="tel-national" required disabled={busy}/></span></label>}
-  {step==='code'&&<><label className="field">{t('Verification code')}<input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9]/g,''))} pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" inputMode="numeric" required disabled={busy}/></label><p className="helper">{t(delivery==='sms'?'Check your SMS messages.':delivery==='staging-push'?'Check notifications on your previously signed-in Sendoh device.':'Testing mode: ask the test administrator for your code. SMS delivery is not active.')}</p><button type="button" className="text-button" disabled={busy} onClick={()=>{if(Date.now()<resendAt){setError(t('Please wait 60 seconds before requesting another code.'));return;}setStep('phone');setCode('');setError('');}}>{t('Change number or request another code')}</button></>}
+  {step==='code'&&<><label className="field">{t('Verification code')}<input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9]/g,''))} pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" inputMode="numeric" required disabled={busy}/></label>{testCode&&<p className="test-code">{t('Testing: your code is {code}',{code:testCode})} <button type="button" className="text-button" onClick={()=>setCode(testCode)}>{t('Use it')}</button></p>}<p className="helper">{t(delivery==='sms'?'Check your SMS messages.':delivery==='staging-push'?'Check notifications on your previously signed-in Sendoh device.':'Testing mode: ask the test administrator for your code. SMS delivery is not active.')}</p><button type="button" className="text-button" disabled={busy} onClick={()=>{if(Date.now()<resendAt){setError(t('Please wait 60 seconds before requesting another code.'));return;}setStep('phone');setCode('');setError('');}}>{t('Change number or request another code')}</button></>}
   {step==='name'&&<label className="field">{t('Your name')}<input value={name} onChange={e=>setName(e.target.value)} maxLength={120} required autoComplete="name" disabled={busy}/></label>}
   {step==='ready'&&<button type="button" className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{await guestRequest({action:'logout'});setStep('phone');setCode('');setError('');}catch{setError(t('Could not sign out. Please retry.'));}finally{setBusy(false);}}}>{t('Use another phone number')}</button>}
   {error&&<p className="error" role="alert">{error}</p>}
