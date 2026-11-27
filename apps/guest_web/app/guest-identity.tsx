@@ -1,9 +1,11 @@
 'use client';
 import {useState, type FormEvent} from 'react';
+import {useT} from './lang';
 
 export class GuestRequestError extends Error {
  constructor(message:string,public status:number){super(message);}
 }
+/** Messages come back in English; screens pass them through t() for the reader's language. */
 export async function guestRequest(input:Record<string,unknown>) {
  const response=await fetch('/api/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
  const data=await response.json().catch(()=>({}));
@@ -11,6 +13,7 @@ export async function guestRequest(input:Record<string,unknown>) {
  return data;
 }
 export default function GuestIdentity({onVerified}:{onVerified:()=>Promise<void>}) {
+ const {t}=useT();
  const [phone,setPhone]=useState(''), [code,setCode]=useState(''), [name,setName]=useState('');
  const [challenge,setChallenge]=useState(''), [step,setStep]=useState('phone');
  const [busy,setBusy]=useState(false), [error,setError]=useState(''), [delivery,setDelivery]=useState('');
@@ -29,18 +32,18 @@ export default function GuestIdentity({onVerified}:{onVerified:()=>Promise<void>
    } else if(step==='name') {
     await guestRequest({action:'name',name:name.trim()});setStep('ready');await onVerified();
    } else {await onVerified();}
-  } catch(e) {setError(e instanceof Error?e.message:'Please try again.');}
+  } catch(e) {setError(e instanceof Error?t(e.message):t('Please try again.'));}
   finally{setBusy(false);}
  }
  return <form onSubmit={submit}>
-  <h2 className="question">{step==='name'?'What should we call you?':step==='code'?'Verify your number':step==='ready'?'Your number is verified':'Continue with your phone'}</h2>
-  <p>Your verified number connects you to your invitation. No app installation is needed.</p>
-  <p className="helper">We keep a verified identity so the organizer can recognise you. You can complete a Sendoh profile later.</p>
-  {step==='phone'&&<label className="field">Phone number<span className="phone-input"><span>+237</span><input value={phone} onChange={e=>setPhone(e.target.value.replace(/[^0-9]/g,''))} pattern="[26][0-9]{8}" maxLength={9} inputMode="tel" autoComplete="tel-national" required disabled={busy}/></span></label>}
-  {step==='code'&&<><label className="field">Verification code<input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9]/g,''))} pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" inputMode="numeric" required disabled={busy}/></label><p className="helper">{delivery==='sms'?'Check your SMS messages.':delivery==='staging-push'?'Check notifications on your previously signed-in Sendoh device.':'Testing mode: ask the test administrator for your code. SMS delivery is not active.'}</p><button type="button" className="text-button" disabled={busy} onClick={()=>{if(Date.now()<resendAt){setError('Please wait 60 seconds before requesting another code.');return;}setStep('phone');setCode('');setError('');}}>Change number or request another code</button></>}
-  {step==='name'&&<label className="field">Your name<input value={name} onChange={e=>setName(e.target.value)} maxLength={120} required autoComplete="name" disabled={busy}/></label>}
-  {step==='ready'&&<button type="button" className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{await guestRequest({action:'logout'});setStep('phone');setCode('');setError('');}catch{setError('Could not sign out. Please retry.');}finally{setBusy(false);}}}>Use another phone number</button>}
+  <h2 className="question">{t(step==='name'?'What should we call you?':step==='code'?'Verify your number':step==='ready'?'Your number is verified':'Continue with your phone')}</h2>
+  <p>{t('Your verified number connects you to your invitation. No app installation is needed.')}</p>
+  <p className="helper">{t('We keep a verified identity so the organizer can recognise you. You can complete a Sendoh profile later.')}</p>
+  {step==='phone'&&<label className="field">{t('Phone number')}<span className="phone-input"><span>+237</span><input value={phone} onChange={e=>setPhone(e.target.value.replace(/[^0-9]/g,''))} pattern="[26][0-9]{8}" maxLength={9} inputMode="tel" autoComplete="tel-national" required disabled={busy}/></span></label>}
+  {step==='code'&&<><label className="field">{t('Verification code')}<input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9]/g,''))} pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" inputMode="numeric" required disabled={busy}/></label><p className="helper">{t(delivery==='sms'?'Check your SMS messages.':delivery==='staging-push'?'Check notifications on your previously signed-in Sendoh device.':'Testing mode: ask the test administrator for your code. SMS delivery is not active.')}</p><button type="button" className="text-button" disabled={busy} onClick={()=>{if(Date.now()<resendAt){setError(t('Please wait 60 seconds before requesting another code.'));return;}setStep('phone');setCode('');setError('');}}>{t('Change number or request another code')}</button></>}
+  {step==='name'&&<label className="field">{t('Your name')}<input value={name} onChange={e=>setName(e.target.value)} maxLength={120} required autoComplete="name" disabled={busy}/></label>}
+  {step==='ready'&&<button type="button" className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{await guestRequest({action:'logout'});setStep('phone');setCode('');setError('');}catch{setError(t('Could not sign out. Please retry.'));}finally{setBusy(false);}}}>{t('Use another phone number')}</button>}
   {error&&<p className="error" role="alert">{error}</p>}
-  <div className="screen-actions"><button className="button" disabled={busy}>{busy?'Please wait…':step==='phone'?'Get verification code':'Continue'}</button></div>
+  <div className="screen-actions"><button className="button" disabled={busy}>{busy?t('Please wait…'):step==='phone'?t('Get verification code'):t('Continue')}</button></div>
  </form>;
 }

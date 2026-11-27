@@ -1,15 +1,17 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {guestRequest} from './guest-identity';
-import {money,PaymentLogo,Row,Icon} from './components';
-import {FIRST_POLL_DELAY,nextPollDelay,SLOW_CONFIRMATION_SECONDS,personalContribution,pendingCopy,type ContributionSummary,type Phase} from './c/[token]/contribution-state';
+import {PaymentLogo,Row,Icon} from './components';
+import {useT} from './lang';
+import {FIRST_POLL_DELAY,nextPollDelay,SLOW_CONFIRMATION_SECONDS,personalContribution,pendingCopy,byRound,type ContributionSummary,type Phase} from './c/[token]/contribution-state';
 
-type Payment={id:string;reference:string;amount:number;method:'MTN'|'ORANGE';status:'PENDING'|'SUCCEEDED'|'FAILED'|'REFUNDED';phase?:Phase;payer_masked?:string|null;mode:string;created_at:number;updated_at:number};
+type Payment={id:string;round?:number;reference:string;amount:number;method:'MTN'|'ORANGE';status:'PENDING'|'SUCCEEDED'|'FAILED'|'REFUNDED';phase?:Phase;payer_masked?:string|null;mode:string;created_at:number;updated_at:number};
 /** The backend's review terms: nothing is created or charged by a quote. */
 type Quote={credited_to:{name:string;collection:string;organizer:string};method:'MTN'|'ORANGE';payer_masked:string;contribution:number;payer_fees:number;total:number;fees_from:string};
 type Stage='amount'|'review'|'pay'|'result'|'receipt'|'history';
 type Draft={action:'payment-create';token:string;amount:number;method:'MTN'|'ORANGE';payer_phone:string;request_key:string;id?:string};
-export default function ProviderCheckout({token,name,collection,expected,start,onBack}:{token:string;name:string;collection:string;expected:number|null;start?:'history';onBack:()=>void}) {
+export default function ProviderCheckout({token,name,collection,round,expected,start,onBack}:{token:string;name:string;collection:string;round?:number;expected:number|null;start?:'history';onBack:()=>void}) {
+ const {t,money,lang}=useT();
  const [stage,setStage]=useState<Stage>('amount');
  const [amount,setAmount]=useState(expected?.toString()??''),[phone,setPhone]=useState('');
  const [method,setMethod]=useState<'MTN'|'ORANGE'>('MTN');
@@ -20,7 +22,7 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
  const lock=useRef(false),draft=useRef<Draft|null>(null),storageKey=useRef<string|null>(null);
  const unresolvedId=useRef<string|null>(null);
  const alive=useRef(true),heading=useRef<HTMLHeadingElement>(null);
- const title={amount:'Contribute',review:'Review contribution',pay:'Payment status',result:'Payment result',receipt:'Contribution receipt',history:'Your contributions'}[stage];
+ const title=t({amount:'Contribute',review:'Review contribution',pay:'Payment status',result:'Payment result',receipt:'Contribution receipt',history:'Your contributions'}[stage]);
  const methodName=(m:string)=>m==='MTN'?'MTN MoMo':'Orange Money';
  useEffect(()=>{heading.current?.focus();},[stage]);
  function present(p:Payment,receipt=false) {
@@ -37,7 +39,7 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
    const d=await guestRequest({action:'context',token});
    const part=d.participant;if(!part||!alive.current)return;
    const s=personalContribution((part.contribution_summary??null) as ContributionSummary|null,part.expected_amount??null);
-   setStanding(s.fulfilled?'Your share is paid':s.remaining!==null&&s.remaining>0?`${money(s.remaining)} left`:`${money(s.paid+s.cash)} contributed`);
+   setStanding(s.fulfilled?t('Your share is paid'):s.remaining!==null&&s.remaining>0?t('{amount} left',{amount:money(s.remaining)}):t('{amount} contributed',{amount:money(s.paid+s.cash)}));
   }catch{/* The collection page shows it on return. */}
  }
  async function loadQuote(){
@@ -45,7 +47,7 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
  }
  async function run(action:()=>Promise<void>) {
   if(lock.current)return; lock.current=true;setBusy(true);setError('');
-  try {await action();} catch(e){if(alive.current)setError(e instanceof Error?e.message:'Please try again.');}
+  try {await action();} catch(e){if(alive.current)setError(e instanceof Error?t(e.message):t('Please try again.'));}
   finally{lock.current=false;if(alive.current)setBusy(false);}
  }
  async function restore() {
@@ -106,10 +108,10 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
  },[payment?.id,payment?.status,stage]);
  function review(){
   if(!/^\d+$/.test(amount)||!Number.isSafeInteger(Number(amount))||Number(amount)<=0||Number(amount)>1000000000){
-   setError('Enter a positive whole FCFA amount.');return;
+   setError(t('Enter a positive whole FCFA amount.'));return;
   }
   if(!/^(?:\+?237)?6[0-9]{8}$/.test(phone.trim())){
-   setError('Enter the Mobile Money number that will authorise this contribution.');return;
+   setError(t('Enter the Mobile Money number that will authorise this contribution.'));return;
   }
   setError('');
   void run(async()=>{await loadQuote();setStage('review');});
@@ -148,67 +150,70 @@ export default function ProviderCheckout({token,name,collection,expected,start,o
   draft.current=null;setLocked(false);setPayment(null);setError('');setStage('amount');
  }
  return <>
-  <header className="screen-header"><h1 ref={heading} tabIndex={-1}>{title}</h1><span className="badge">Sandbox</span></header>
+  <header className="screen-header"><h1 ref={heading} tabIndex={-1}>{title}</h1><span className="badge">{t('Sandbox')}</span></header>
   <div className="screen-content">
-   <div className="contribution-context"><span className="avatar" aria-hidden="true">{name.slice(0,1).toUpperCase()}</span><p><strong>{collection}</strong><br/>Contributing as {name}</p></div>
-   {busy&&<p role="status">Checking your contribution…</p>}
+   <div className="contribution-context"><span className="avatar" aria-hidden="true">{name.slice(0,1).toUpperCase()}</span><p><strong>{collection}</strong>{round?<> · {t('Round {round}',{round})}</>:null}<br/>{t('Contributing as {name}',{name})}</p></div>
+   {busy&&<p role="status">{t('Checking your contribution…')}</p>}
    {error&&<p className="error" role="alert">{error}</p>}
-   {!ready&&!busy&&<button className="button" onClick={()=>void restore()}>Reconnect</button>}
+   {!ready&&!busy&&<button className="button" onClick={()=>void restore()}>{t('Reconnect')}</button>}
    {stage==='amount'&&<>
-    <h2>Your contribution</h2>
-    {expected!==null&&<p>Suggested contribution: {money(expected)}</p>}
-    <label className="field">Amount (FCFA)<input inputMode="numeric" value={amount} disabled={busy||!ready} onChange={e=>setAmount(e.target.value)} maxLength={10}/></label>
-    <fieldset className="methods"><legend>Pay with Mobile Money</legend>{(['MTN','ORANGE'] as const).map(m=><label className={`method ${method===m?'chosen':''}`} key={m}><input type="radio" name="method" checked={method===m} disabled={busy||!ready} onChange={()=>setMethod(m)}/><PaymentLogo method={m}/><strong>{methodName(m)}</strong></label>)}</fieldset>
-    <label className="field">Mobile Money number<input inputMode="tel" autoComplete="tel" value={phone} disabled={busy||!ready} onChange={e=>setPhone(e.target.value)} placeholder="+237" maxLength={13}/></label>
-    <button className="button" disabled={busy||!ready} onClick={review}>Review contribution</button>
+    <h2>{t('Your contribution')}</h2>
+    {expected!==null&&<p>{t('Suggested contribution: {amount}',{amount:money(expected)})}</p>}
+    <label className="field">{t('Amount (FCFA)')}<input inputMode="numeric" value={amount} disabled={busy||!ready} onChange={e=>setAmount(e.target.value)} maxLength={10}/></label>
+    <fieldset className="methods"><legend>{t('Pay with Mobile Money')}</legend>{(['MTN','ORANGE'] as const).map(m=><label className={`method ${method===m?'chosen':''}`} key={m}><input type="radio" name="method" checked={method===m} disabled={busy||!ready} onChange={()=>setMethod(m)}/><PaymentLogo method={m}/><strong>{methodName(m)}</strong></label>)}</fieldset>
+    <label className="field">{t('Mobile Money number')}<input inputMode="tel" autoComplete="tel" value={phone} disabled={busy||!ready} onChange={e=>setPhone(e.target.value)} placeholder="+237" maxLength={13}/></label>
+    <button className="button" disabled={busy||!ready} onClick={review}>{t('Review contribution')}</button>
    </>}
    {stage==='review'&&<>
     {quote?<>
      <div className="review-amount">{money(quote.total)}</div>
      <div className="summary">
-      <Row label="Credited to">{quote.credited_to.name} · {quote.credited_to.collection}</Row>
-      <Row label="Organizer">{quote.credited_to.organizer}</Row>
-      <Row label="Pay with">{methodName(quote.method)} {quote.payer_masked}</Row>
-      <Row label="Contribution">{money(quote.contribution)}</Row>
-      <Row label="Fees">{money(quote.payer_fees)}</Row>
-      <Row label="Total to approve" strong>{money(quote.total)}</Row>
+      <Row label={t('Credited to')}>{quote.credited_to.name} · {quote.credited_to.collection}</Row>
+      <Row label={t('Organizer')}>{quote.credited_to.organizer}</Row>
+      <Row label={t('Pay with')}>{methodName(quote.method)} {quote.payer_masked}</Row>
+      <Row label={t('Contribution')}>{money(quote.contribution)}</Row>
+      <Row label={t('Fees')}>{money(quote.payer_fees)}</Row>
+      <Row label={t('Total to approve')} strong>{money(quote.total)}</Row>
      </div>
-     {quote.fees_from==='COLLECTION_PROCEEDS'&&<p className="helper">MeSomb’s processing fee is taken from the collection, not added to your total.</p>}
-    </>:<p role="status">Getting your payment details…</p>}
-    <button className="button" disabled={busy||!ready||!quote} onClick={submit}>{locked?'Recover this contribution':quote?`Approve ${money(quote.total)}`:'Approve'}</button>
-    {!locked&&<button className="text-button" disabled={busy} onClick={()=>setStage('amount')}>Edit details</button>}
+     {quote.fees_from==='COLLECTION_PROCEEDS'&&<p className="helper">{t('MeSomb’s processing fee is taken from the collection, not added to your total.')}</p>}
+    </>:<p role="status">{t('Getting your payment details…')}</p>}
+    <button className="button" disabled={busy||!ready||!quote} onClick={submit}>{locked?t('Recover this contribution'):quote?t('Approve {amount}',{amount:money(quote.total)}):t('Approve')}</button>
+    {!locked&&<button className="text-button" disabled={busy} onClick={()=>setStage('amount')}>{t('Edit details')}</button>}
    </>}
    {stage==='pay'&&payment&&<>
     {(()=>{const copy=pendingCopy(payment,methodName(payment.method));return <>
-     <div className="center" aria-live="polite"><Icon name="info" size={40}/><h2>{copy.title}</h2><p>{money(payment.amount)}{payment.payer_masked?` · ${methodName(payment.method)} ${payment.payer_masked}`:''}</p></div>
-     <p role="status">{copy.body}</p>
+     <div className="center" aria-live="polite"><Icon name="info" size={40}/><h2>{t(copy.title)}</h2><p>{money(payment.amount)}{payment.payer_masked?` · ${methodName(payment.method)} ${payment.payer_masked}`:''}</p></div>
+     <p role="status">{t(copy.body,{method:copy.method})}</p>
     </>;})()}
-    <p className="helper">You can return to this link to check your contribution.</p>
-    <button className="button" disabled={busy} onClick={()=>void run(async()=>present(await guestRequest({action:'payment-refresh',id:payment.id})))}>Check status</button>
+    <p className="helper">{t('You can return to this link to check your contribution.')}</p>
+    <button className="button" disabled={busy} onClick={()=>void run(async()=>present(await guestRequest({action:'payment-refresh',id:payment.id})))}>{t('Check status')}</button>
    </>}
    {stage==='result'&&payment&&<>
-    <div className="center"><Icon name={payment.status==='SUCCEEDED'?'check':'info'} size={48}/><h2>{payment.status==='SUCCEEDED'?'Contribution confirmed':payment.status==='REFUNDED'?'Contribution refunded':'Payment unsuccessful'}</h2><p>{money(payment.amount)}</p>{payment.status==='SUCCEEDED'&&standing&&<p><strong>{standing}</strong></p>}</div>
-    <p>{payment.status==='SUCCEEDED'?'Your contribution is recorded in the collection.':payment.status==='REFUNDED'?'This contribution no longer counts toward the collection.':'This attempt has not increased the collection total.'}</p>
-    {payment.status==='SUCCEEDED'?<button className="button" disabled={busy} onClick={()=>void detail(payment.id,true)}>View receipt</button>:<button className="button" disabled={busy} onClick={restart}>Make another contribution</button>}
-    {payment.status==='SUCCEEDED'&&<button className="text-button" disabled={busy} onClick={restart}>Make another contribution</button>}
+    <div className="center"><Icon name={payment.status==='SUCCEEDED'?'check':'info'} size={48}/><h2>{t(payment.status==='SUCCEEDED'?'Contribution confirmed':payment.status==='REFUNDED'?'Contribution refunded':'Payment unsuccessful')}</h2><p>{money(payment.amount)}</p>{payment.status==='SUCCEEDED'&&standing&&<p><strong>{standing}</strong></p>}</div>
+    <p>{t(payment.status==='SUCCEEDED'?'Your contribution is recorded in the collection.':payment.status==='REFUNDED'?'This contribution no longer counts toward the collection.':'This attempt has not increased the collection total.')}</p>
+    {payment.status==='SUCCEEDED'?<button className="button" disabled={busy} onClick={()=>void detail(payment.id,true)}>{t('View receipt')}</button>:<button className="button" disabled={busy} onClick={restart}>{t('Make another contribution')}</button>}
+    {payment.status==='SUCCEEDED'&&<button className="text-button" disabled={busy} onClick={restart}>{t('Make another contribution')}</button>}
    </>}
    {stage==='receipt'&&payment&&<>
     <h2>{money(payment.amount)}</h2>
-    <div className="summary"><Row label="Contributor">{name}</Row><Row label="Collection">{collection}</Row><Row label="Status">Confirmed</Row><Row label="Method">{methodName(payment.method)}{payment.payer_masked?` ${payment.payer_masked}`:''}</Row><Row label="Reference">{payment.reference}</Row><Row label="Last verified">{new Date(payment.updated_at*1000).toLocaleString()}</Row></div>
-    <p className="helper">Sandbox receipt</p>
-    <button className="button secondary" onClick={()=>window.print()}>Print / save receipt</button>
+    <div className="summary"><Row label={t('Contributor')}>{name}</Row><Row label={t('Collection')}>{collection}</Row><Row label={t('Status')}>{t('Confirmed')}</Row><Row label={t('Method')}>{methodName(payment.method)}{payment.payer_masked?` ${payment.payer_masked}`:''}</Row><Row label={t('Reference')}>{payment.reference}</Row><Row label={t('Last verified')}>{new Date(payment.updated_at*1000).toLocaleString(lang==='fr'?'fr-FR':'en-GB',{timeZone:'Africa/Douala'})}</Row></div>
+    <p className="helper">{t('Sandbox receipt')}</p>
+    <button className="button secondary" onClick={()=>window.print()}>{t('Print / save receipt')}</button>
    </>}
    {stage==='history'&&<>
-    {!rows.length&&<p>No contributions yet.</p>}
-    {rows.map(p=><button className="button secondary" key={p.id} disabled={busy} onClick={()=>void detail(p.id,p.status==='SUCCEEDED')}>{money(p.amount)} · {{PENDING:'Confirming',SUCCEEDED:'Confirmed',FAILED:'Unsuccessful',REFUNDED:'Refunded'}[p.status]} · {methodName(p.method)}</button>)}
-    {cursor&&<button className="text-button" disabled={busy} onClick={()=>void history(true)}>Load older contributions</button>}
-    {locked&&!payment&&<button className="button" disabled={busy} onClick={()=>setStage('review')}>Recover saved contribution</button>}
-    {payment&&payment.status!=='PENDING'&&<button className="text-button" disabled={busy} onClick={restart}>Make another contribution</button>}
-    {!payment&&!locked&&!rows.some(p=>p.status==='PENDING')&&<button className="text-button" disabled={busy||!ready} onClick={()=>setStage('amount')}>Make another contribution</button>}
+    {!rows.length&&<p>{t('No contributions yet.')}</p>}
+    {byRound(rows).map(g=><div className="round-group" key={g.round}>
+     {round&&<h3>{t('Round {round}',{round:g.round})}</h3>}
+     {g.items.map(p=><button className="button secondary" key={p.id} disabled={busy} onClick={()=>void detail(p.id,p.status==='SUCCEEDED')}>{money(p.amount)} · {t({PENDING:'Confirming',SUCCEEDED:'Confirmed',FAILED:'Unsuccessful',REFUNDED:'Refunded'}[p.status])} · {methodName(p.method)}</button>)}
+    </div>)}
+    {cursor&&<button className="text-button" disabled={busy} onClick={()=>void history(true)}>{t('Load older contributions')}</button>}
+    {locked&&!payment&&<button className="button" disabled={busy} onClick={()=>setStage('review')}>{t('Recover saved contribution')}</button>}
+    {payment&&payment.status!=='PENDING'&&<button className="text-button" disabled={busy} onClick={restart}>{t('Make another contribution')}</button>}
+    {!payment&&!locked&&!rows.some(p=>p.status==='PENDING')&&<button className="text-button" disabled={busy||!ready} onClick={()=>setStage('amount')}>{t('Make another contribution')}</button>}
    </>}
    <div className="screen-actions">
-    {stage!=='history'&&<button className="text-button" disabled={busy||!ready} onClick={()=>void history()}>Your contributions and receipts</button>}
-    <button className="button secondary" disabled={busy} onClick={onBack}>Back to collection</button>
+    {stage!=='history'&&<button className="text-button" disabled={busy||!ready} onClick={()=>void history()}>{t('Your contributions and receipts')}</button>}
+    <button className="button secondary" disabled={busy} onClick={onBack}>{t('Back to collection')}</button>
    </div>
   </div>
  </>;

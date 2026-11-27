@@ -35,9 +35,17 @@ export const FIRST_POLL_DELAY=5000;
 export const SLOW_CONFIRMATION_SECONDS=300;
 
 export type Phase='AWAITING_APPROVAL'|'CONFIRMING'|'CONFIRMED'|'FAILED'|'REFUNDED';
-/** What the payer is told; only the backend decides between approval and confirmation. */
+/** What the payer is told; only the backend decides between approval and confirmation.
+ * Copy is English source text for t(); {method} is filled in by the screen. */
 export function pendingCopy(p:{phase?:Phase;created_at:number},method:string,now=Date.now()/1000){
- if(now-p.created_at>SLOW_CONFIRMATION_SECONDS)return {title:'Confirming your payment',body:'This is taking longer than usual. Please don’t pay again: we keep checking, and this link will show the result.'};
- if(p.phase==='AWAITING_APPROVAL')return {title:'Approve on your phone',body:`Check your ${method} phone for the prompt and approve it there.`};
- return {title:'Confirming your payment',body:`We’re checking with ${method}. Please don’t pay again.`};
+ if(now-p.created_at>SLOW_CONFIRMATION_SECONDS)return {title:'Confirming your payment',body:'This is taking longer than usual. Please don’t pay again: we keep checking, and this link will show the result.',method};
+ if(p.phase==='AWAITING_APPROVAL')return {title:'Approve on your phone',body:'Check your {method} phone for the prompt and approve it there.',method};
+ return {title:'Confirming your payment',body:'We’re checking with {method}. Please don’t pay again.',method};
+}
+
+/** Payments grouped by round, newest round first; a one-round collection has one group. */
+export function byRound<T extends {round?:number}>(rows:T[]):{round:number;items:T[]}[]{
+ const groups=new Map<number,T[]>();
+ rows.forEach(r=>{const k=r.round??1;groups.set(k,(groups.get(k)??[]).concat([r]));});
+ return Array.from(groups.entries()).sort((a,b)=>b[0]-a[0]).map(([round,items])=>({round,items}));
 }

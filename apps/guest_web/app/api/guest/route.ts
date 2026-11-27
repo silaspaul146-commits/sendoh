@@ -62,6 +62,11 @@ export async function POST(request: NextRequest) {
       if (typeof token !== 'string') return new NextResponse(null,{status:400});
       path=`/me/provider-payments?payer_only=true&collection_token=${encodeURIComponent(token)}${typeof before === 'string' ? '&before='+encodeURIComponent(before) : ''}`; method='GET'; break;
     case 'logout': path='/auth/logout'; body={}; break;
+    case 'account-check': path='/me/account/deletion'; method='GET'; break;
+    case 'account-delete':
+      // Only the exact confirmation word deletes; the backend checks it again.
+      if (input.confirm !== 'DELETE') return new NextResponse(null,{status:400});
+      path='/me/account/delete'; body={confirm:'DELETE'}; break;
     default: return new NextResponse(null,{status:400});
   }
   try {
@@ -78,7 +83,7 @@ export async function POST(request: NextRequest) {
     if (action === 'verify' && upstream.ok) {
       result.cookies.set(cookie, data.access_token, {httpOnly:true,secure:request.nextUrl.protocol==='https:',sameSite:'strict',path:'/',maxAge:data.expires_in});
     }
-    if (action === 'logout' || upstream.status === 401) result.cookies.delete(cookie);
+    if (action === 'logout' || upstream.status === 401 || (action === 'account-delete' && upstream.ok)) result.cookies.delete(cookie);
     return result;
   } catch { return NextResponse.json({error:{message:'Sendoh is taking a little longer. Please try again.'}},{status:503}); }
 }
