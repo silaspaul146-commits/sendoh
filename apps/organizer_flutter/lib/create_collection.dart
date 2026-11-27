@@ -394,7 +394,7 @@ class _CreateCollectionState extends ConsumerState<CreateCollection> {
                                   Text(t('You will be the organizer.'),
                                       style: TextStyle(fontSize: 13)),
                                   const SizedBox(height: 10),
-                                  Text(t('Creating a collection is free. Participant names stay private. Payments are not available yet.'),
+                                  Text(t('Creating a collection is free. Participant names stay private.'),
                                       style: TextStyle(
                                           fontSize: 12,
                                           height: 1.7,

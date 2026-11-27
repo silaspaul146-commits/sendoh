@@ -1,7 +1,8 @@
 import type {Lang} from './i18n';
 
 /** Who runs Sendoh and how to reach them. Set on the host; nothing personal is hard-coded. */
-export const operator=process.env.NEXT_PUBLIC_LEGAL_ENTITY||'Sendoh';
+export const founder='Ihimbru Kanyimi';
+export const operator=process.env.NEXT_PUBLIC_LEGAL_ENTITY||founder;
 export const supportEmail=process.env.NEXT_PUBLIC_SUPPORT_EMAIL||'';
 export const supportWhatsApp=process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP||'';
 export const UPDATED='2026-11-27';
@@ -38,7 +39,7 @@ const privacy:Record<Lang,LegalDoc>={
    'You can choose English or French at any time.',
    'You can ask us what we hold about you, or ask for a correction, through the Help page.']},
   {heading:'Security',body:['Sign-in uses one-time codes; sessions can be ended from the app. Payments are only marked successful after the Mobile Money provider confirms them.']},
-  {heading:'Age',body:['Sendoh is for people aged 18 and over.']},
+  {heading:'Age',body:['Sendoh is for people aged 12 and over. If you are under 18, use Sendoh with the permission of a parent or guardian, and pay only with a Mobile Money number you are allowed to use.']},
   {heading:'Changes',body:['If we change this policy in a way that matters, we will tell you in the app before the change applies.']},
  ]},
  fr:{title:'Politique de confidentialité',intro:`Cette politique explique ce que ${operator} (« Sendoh », « nous ») collecte lorsque vous utilisez l’application et le site Sendoh, pourquoi, avec qui ces informations sont partagées et les choix dont vous disposez.`,sections:[
@@ -69,7 +70,7 @@ const privacy:Record<Lang,LegalDoc>={
    'Vous pouvez choisir le français ou l’anglais à tout moment.',
    'Vous pouvez nous demander quelles informations nous détenons sur vous, ou en demander la correction, via la page Aide.']},
   {heading:'Sécurité',body:['La connexion utilise des codes à usage unique ; les sessions peuvent être fermées depuis l’application. Un paiement n’est marqué réussi qu’après confirmation par l’opérateur Mobile Money.']},
-  {heading:'Âge',body:['Sendoh est destiné aux personnes âgées de 18 ans et plus.']},
+  {heading:'Âge',body:['Sendoh est destiné aux personnes âgées de 12 ans et plus. Si vous avez moins de 18 ans, utilisez Sendoh avec l’accord d’un parent ou tuteur, et payez uniquement avec un numéro Mobile Money que vous avez le droit d’utiliser.']},
   {heading:'Modifications',body:['Si nous modifions cette politique de manière importante, nous vous en informerons dans l’application avant que le changement ne s’applique.']},
  ]},
 };
@@ -77,11 +78,10 @@ const privacy:Record<Lang,LegalDoc>={
 const terms:Record<Lang,LegalDoc>={
  en:{title:'Terms of use',intro:`These terms apply when you use Sendoh, run by ${operator}. By using Sendoh you accept them.`,sections:[
   {heading:'What Sendoh is',body:[
-   'Sendoh helps people organize money together: group collections, recurring rounds such as a njangi, money requests and person-to-person payments.',
+   'Sendoh helps people coordinate money, individually, in person and in groups: money requests, payments between people, group collections and recurring rounds. Sendoh is not a wallet: it does not keep a balance for you.',
    'Sendoh is not a bank. Mobile Money payments are processed by our payment partner MeSomb with MTN Mobile Money and Orange Money. Contributions to a collection are held through MeSomb until the organizer closes the collection and the payout is sent.']},
-  {heading:'Early access',body:['During the pilot, payments run in test mode: no real money moves. We will tell you in the app and on this website before real payments open.']},
   {heading:'Your account',body:[
-   'You sign in with your own phone number and keep access to it. You are responsible for what is done with your account.',
+   'Your account is you: your name and @username. You sign in with a phone number you control, and you can manage the Mobile Money numbers you pay and receive with. You are responsible for what is done with your account.',
    'Use your real name, so the people you organize money with can recognise you.']},
   {heading:'Fees',body:['Any fee is shown before you approve a payment or close a collection. You never pay a fee you were not shown first. There is no fee on cash an organizer records.']},
   {heading:'Payments',body:[
@@ -97,11 +97,10 @@ const terms:Record<Lang,LegalDoc>={
  ]},
  fr:{title:'Conditions d’utilisation',intro:`Ces conditions s’appliquent lorsque vous utilisez Sendoh, exploité par ${operator}. En utilisant Sendoh, vous les acceptez.`,sections:[
   {heading:'Ce qu’est Sendoh',body:[
-   'Sendoh aide les gens à organiser l’argent ensemble : collectes de groupe, tours récurrents comme une njangi ou une tontine, demandes d’argent et paiements entre personnes.',
+   'Sendoh aide à coordonner l’argent, individuellement, en personne et en groupe : demandes d’argent, paiements entre personnes, collectes de groupe et tours récurrents. Sendoh n’est pas un portefeuille : il ne conserve pas de solde pour vous.',
    'Sendoh n’est pas une banque. Les paiements Mobile Money sont traités par notre partenaire de paiement MeSomb avec MTN Mobile Money et Orange Money. Les contributions à une collecte sont détenues via MeSomb jusqu’à ce que l’organisateur clôture la collecte et que le versement soit envoyé.']},
-  {heading:'Accès anticipé',body:['Pendant la phase pilote, les paiements fonctionnent en mode test : aucun argent réel ne circule. Nous vous préviendrons dans l’application et sur ce site avant l’ouverture des paiements réels.']},
   {heading:'Votre compte',body:[
-   'Vous vous connectez avec votre propre numéro de téléphone et en gardez l’accès. Vous êtes responsable de l’utilisation de votre compte.',
+   'Votre compte, c’est vous : votre nom et votre @nom d’utilisateur. Vous vous connectez avec un numéro que vous contrôlez, et vous gérez les numéros Mobile Money avec lesquels vous payez et recevez. Vous êtes responsable de l’utilisation de votre compte.',
    'Utilisez votre vrai nom, afin que les personnes avec qui vous organisez de l’argent puissent vous reconnaître.']},
   {heading:'Frais',body:['Tous les frais sont affichés avant que vous approuviez un paiement ou clôturiez une collecte. Vous ne payez jamais de frais qui ne vous ont pas été montrés d’abord. Aucun frais sur les espèces enregistrées par un organisateur.']},
   {heading:'Paiements',body:[
