@@ -1,4 +1,5 @@
 import 'i18n.dart';
+import 'money_numbers.dart';
 import 'config.dart';
 import 'dart:math';
 import 'dart:async';
@@ -377,23 +378,19 @@ class _ContributionCheckoutState extends State<ContributionCheckout> {
           SummaryRow(t('Your contribution'),
               coordinationMoney(int.tryParse(amount.text))),
           const SizedBox(height: 12),
-          ...['MTN', 'ORANGE'].map((value) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: OutlinedButton.icon(
-                  onPressed: busy || submission != null
-                      ? null
-                      : () => setState(() => method = value),
-                  icon: Icon(method == value
-                      ? Icons.check_circle
-                      : Icons.circle_outlined),
-                  label: Text(value == 'MTN'
-                      ? t('MTN Mobile Money')
-                      : t('Orange Money'))))),
-          TextField(
-              controller: phone,
-              enabled: !busy && submission == null,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(labelText: t('Mobile Money number'))),
+          if (submission == null)
+            // Pick a verified number; typing one is the exception.
+            PayWithPicker(
+                api: widget.api,
+                enabled: !busy,
+                onChanged: (id, number, network) => setState(() {
+                      phone.text = number;
+                      if (network != null) method = network;
+                    }))
+          else ...[
+            Text('${methodLabel(method)} · ${phone.text}',
+                style: SendohTextStyles.bodyMedium),
+          ],
           const SizedBox(height: 16),
           FilledButton(
               onPressed: busy || !ready ? null : reviewQuote,

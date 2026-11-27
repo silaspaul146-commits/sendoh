@@ -324,7 +324,8 @@ def router(database, actor, sessions, config):
             raise HTTPException(409, 'Payment preparation expired or was cancelled.')
         if policy is None or policy.fingerprint != q.policy_hash or q.application_hash != config.application_hash:
             raise HTTPException(409, 'Payment terms changed. Review a new quote.')
-        if identity_phone(db, user.id) != q.payer_phone or not destination_current(db,d) or d.id != q.destination_id:
+        from .money_numbers import can_pay_with
+        if not can_pay_with(db, user.id, q.payer_phone) or not destination_current(db,d) or d.id != q.destination_id:
             raise HTTPException(409, 'Payment identities changed. Review a new quote.')
         if q.payer_phone not in config.test_phones or d.phone not in config.test_phones:
             raise HTTPException(409, 'Use authorized sandbox payment identities.')

@@ -21,6 +21,8 @@ from .person_execution_state import request_execution, enabled
 
 class QuoteInput(Preflight):
     payer_method: Literal['MTN', 'ORANGE']
+    # One of the payer's verified Mobile Money numbers; omitted: their pay default, else sign-in number.
+    payer_number_id: str | None = Field(default=None, min_length=36, max_length=36)
 
 
 class AcceptQuote(BaseModel):
@@ -96,6 +98,10 @@ def router(database, actor, config):
         phone = identity_phone(db, user.id)
         if not phone or not user.username or not user.display_name:
             raise HTTPException(409, 'Complete your phone identity and profile first.')
+        from .money_numbers import payer
+        chosen_phone, chosen_method = payer(db, user.id, data.payer_number_id)
+        payer_method = chosen_method or data.payer_method
+        phone = chosen_phone or phone
         r = payable(db, data.request_id, user.id) if data.request_id else None
         beneficiary_id = r.requester_id if r else data.recipient_id
         amount = r.amount if r else data.amount
@@ -122,7 +128,7 @@ def router(database, actor, config):
             request_id=r.id if r else None, destination_id=d.id,
             application_hash=config.application_hash, policy_hash=p.fingerprint,
             policy=p.model_dump(), amounts=amounts, payer_phone=phone,
-            payer_method=data.payer_method, created_at=now,
+            payer_method=payer_method, created_at=now,
             expires_at=min(now + 300, r.expires_at) if r and r.expires_at else now + 300)
         db.add(q)
         db.commit()
@@ -163,7 +169,8 @@ def router(database, actor, config):
             raise HTTPException(409, 'Quote expired. Review a new quote.')
         if q.policy_hash != p.fingerprint or q.application_hash != config.application_hash:
             raise HTTPException(409, 'Payment terms changed. Review a new quote.')
-        if identity_phone(db, user.id) != q.payer_phone:
+        from .money_numbers import can_pay_with
+        if not can_pay_with(db, user.id, q.payer_phone):
             raise HTTPException(409, 'Your phone identity changed. Review a new quote.')
         d = current_destination(db, q.beneficiary_id)
         if not destination_current(db, d) or d.id != q.destination_id:

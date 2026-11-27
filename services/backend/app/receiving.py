@@ -57,7 +57,12 @@ def identity_phone(db, user_id):
 
 
 def destination_current(db, destination):
-    return destination is not None and identity_phone(db, destination.user_id) == destination.phone
+    """Still the person's: their sign-in number, or a verified Mobile Money number they keep."""
+    if destination is None:
+        return False
+    from .money_numbers import verified_phones
+    return (identity_phone(db, destination.user_id) == destination.phone
+            or destination.phone in verified_phones(db, destination.user_id))
 
 
 def own_view(db, user_id):

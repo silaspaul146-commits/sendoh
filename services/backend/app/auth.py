@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from .models import User, PhoneIdentity, OtpChallenge, AuthSession, RefreshSession, PushDevice, uid
 from .avatars import sanitize_avatar
 from .config import Settings
-from .otp import deliver_otp, otp_directory
+from .otp import deliver_otp, otp_directory, test_code
 
 
 
@@ -127,8 +127,9 @@ def router(database, actor, bearer, settings: Settings, push_sender=None):
             ).values(expires_at=0, sent_at=now - 60))
             db.commit()
             raise HTTPException(503, 'The verification message could not be sent. Please try again.')
+        shown = test_code(settings, code)
         return {'challenge_id': challenge_id, 'expires_in': 300, 'resend_after': 60,
-                'delivery': delivery,
+                'delivery': delivery, **({'test_code': shown} if shown else {}),
                 'message': 'Verification code requested.'}
 
     @routes.post('/auth/verify')
